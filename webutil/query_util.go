@@ -258,7 +258,7 @@ func (g GeneralJSON) Value() (driver.Value, error) {
 func (g *GeneralJSON) Scan(src interface{}) error {
 	source, ok := src.([]byte)
 	if !ok {
-		return errors.New("type assertion .([]byte) failed.")
+		return errors.New("type assertion .([]byte) failed")
 	}
 
 	var i interface{}
@@ -684,19 +684,19 @@ func getValueResults(
 	return allValues, nil
 }
 
+// GetQueriedAndCountResults is a wrapper function for GetQueriedResults()
+// and GetCountResults() functions and simply returns the values for both
 func GetQueriedAndCountResults(
 	query *string,
 	countQuery *string,
-	//prependVars []interface{},
 	fields DbFields,
 	req FormRequest,
 	db Querier,
 	paramConf ParamConfig,
 	queryConf QueryConfig,
-) (*sqlx.Rows, int, error) {
+) (*sql.Rows, int, error) {
 	rower, err := GetQueriedResults(
 		query,
-		//prependVars,
 		fields,
 		req,
 		db,
@@ -710,7 +710,6 @@ func GetQueriedAndCountResults(
 
 	count, err := GetCountResults(
 		countQuery,
-		//prependVars,
 		fields,
 		req,
 		db,
@@ -725,9 +724,11 @@ func GetQueriedAndCountResults(
 	return rower, count, nil
 }
 
+// GetCountResults should take in count query that will return
+// single row and column with total count of results with all
+// the filters applied to query
 func GetCountResults(
 	countQuery *string,
-	//prependVars []interface{},
 	fields DbFields,
 	req FormRequest,
 	db Querier,
@@ -736,17 +737,6 @@ func GetCountResults(
 ) (int, error) {
 	var results []interface{}
 	var err error
-
-	// if results, err = getReplacementResults(
-	// 	nil,
-	// 	countQuery,
-	// 	r,
-	// 	paramConf,
-	// 	queryConf,
-	// 	fields,
-	// ); err != nil {
-	// 	return 0, errors.Wrap(err, "")
-	// }
 
 	if results, err = getValueResults(
 		countQuery,
@@ -783,22 +773,12 @@ func GetCountResults(
 	}
 
 	return totalCount, nil
-
-	// return getCountResults(
-	// 	countQuery,
-	// 	db,
-	// 	queryConf,
-	// 	//prependVars,
-	// 	results,
-	// 	nil,
-	// )
 }
 
 // GetPreQueryResults gathers all of the replacement values and
 // appends all the neccessary clauses to query but doesn't execute
 func GetPreQueryResults(
 	query *string,
-	////prependVars []interface{},
 	fields DbFields,
 	req FormRequest,
 	paramConf ParamConfig,
@@ -823,21 +803,21 @@ func GetPreQueryResults(
 
 // GetQueriedResults dynamically adds filters, sorts and groups to query
 // based on query params passed given from url and returns queried results
+//
+// This is a wrapper function for GetPreQueryResults() function that
+// executes the query and returns results
 func GetQueriedResults(
 	query *string,
-	//prependVars []interface{},
 	fields DbFields,
 	req FormRequest,
 	db Querier,
 	paramConf ParamConfig,
 	queryConf QueryConfig,
-) (*sqlx.Rows, error) {
+) (*sql.Rows, error) {
 	values, err := GetPreQueryResults(
 		query,
-		//prependVars,
 		fields,
 		req,
-		//db,
 		paramConf,
 		queryConf,
 	)

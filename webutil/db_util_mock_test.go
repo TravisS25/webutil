@@ -7,7 +7,6 @@ package webutil
 import (
 	sql "database/sql"
 	gomock "github.com/golang/mock/gomock"
-	sqlx "github.com/jmoiron/sqlx"
 	reflect "reflect"
 )
 
@@ -35,14 +34,14 @@ func (m *MockQuerier) EXPECT() *MockQuerierMockRecorder {
 }
 
 // QueryRow mocks base method
-func (m *MockQuerier) QueryRow(query string, args ...interface{}) *sqlx.Row {
+func (m *MockQuerier) QueryRow(query string, args ...interface{}) *sql.Row {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryRow", varargs...)
-	ret0, _ := ret[0].(*sqlx.Row)
+	ret0, _ := ret[0].(*sql.Row)
 	return ret0
 }
 
@@ -54,14 +53,14 @@ func (mr *MockQuerierMockRecorder) QueryRow(query interface{}, args ...interface
 }
 
 // Query mocks base method
-func (m *MockQuerier) Query(query string, args ...interface{}) (*sqlx.Rows, error) {
+func (m *MockQuerier) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Query", varargs...)
-	ret0, _ := ret[0].(*sqlx.Rows)
+	ret0, _ := ret[0].(*sql.Rows)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -208,14 +207,14 @@ func (m *MockTx) EXPECT() *MockTxMockRecorder {
 }
 
 // QueryRow mocks base method
-func (m *MockTx) QueryRow(query string, args ...interface{}) *sqlx.Row {
+func (m *MockTx) QueryRow(query string, args ...interface{}) *sql.Row {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryRow", varargs...)
-	ret0, _ := ret[0].(*sqlx.Row)
+	ret0, _ := ret[0].(*sql.Row)
 	return ret0
 }
 
@@ -227,14 +226,14 @@ func (mr *MockTxMockRecorder) QueryRow(query interface{}, args ...interface{}) *
 }
 
 // Query mocks base method
-func (m *MockTx) Query(query string, args ...interface{}) (*sqlx.Rows, error) {
+func (m *MockTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Query", varargs...)
-	ret0, _ := ret[0].(*sqlx.Rows)
+	ret0, _ := ret[0].(*sql.Rows)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -356,10 +355,10 @@ func (m *MockTransaction) EXPECT() *MockTransactionMockRecorder {
 }
 
 // Begin mocks base method
-func (m *MockTransaction) Begin() (*sqlx.Tx, error) {
+func (m *MockTransaction) Begin() (*sql.Tx, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Begin")
-	ret0, _ := ret[0].(*sqlx.Tx)
+	ret0, _ := ret[0].(*sql.Tx)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -371,7 +370,7 @@ func (mr *MockTransactionMockRecorder) Begin() *gomock.Call {
 }
 
 // Commit mocks base method
-func (m *MockTransaction) Commit(tx *sqlx.Tx) error {
+func (m *MockTransaction) Commit(tx *sql.Tx) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", tx)
 	ret0, _ := ret[0].(error)
@@ -408,10 +407,10 @@ func (m *MockQueryTransaction) EXPECT() *MockQueryTransactionMockRecorder {
 }
 
 // Begin mocks base method
-func (m *MockQueryTransaction) Begin() (*sqlx.Tx, error) {
+func (m *MockQueryTransaction) Begin() (*sql.Tx, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Begin")
-	ret0, _ := ret[0].(*sqlx.Tx)
+	ret0, _ := ret[0].(*sql.Tx)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -423,7 +422,7 @@ func (mr *MockQueryTransactionMockRecorder) Begin() *gomock.Call {
 }
 
 // Commit mocks base method
-func (m *MockQueryTransaction) Commit(tx *sqlx.Tx) error {
+func (m *MockQueryTransaction) Commit(tx *sql.Tx) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", tx)
 	ret0, _ := ret[0].(error)
@@ -437,14 +436,14 @@ func (mr *MockQueryTransactionMockRecorder) Commit(tx interface{}) *gomock.Call 
 }
 
 // QueryRow mocks base method
-func (m *MockQueryTransaction) QueryRow(query string, args ...interface{}) *sqlx.Row {
+func (m *MockQueryTransaction) QueryRow(query string, args ...interface{}) *sql.Row {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryRow", varargs...)
-	ret0, _ := ret[0].(*sqlx.Row)
+	ret0, _ := ret[0].(*sql.Row)
 	return ret0
 }
 
@@ -456,14 +455,14 @@ func (mr *MockQueryTransactionMockRecorder) QueryRow(query interface{}, args ...
 }
 
 // Query mocks base method
-func (m *MockQueryTransaction) Query(query string, args ...interface{}) (*sqlx.Rows, error) {
+func (m *MockQueryTransaction) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Query", varargs...)
-	ret0, _ := ret[0].(*sqlx.Rows)
+	ret0, _ := ret[0].(*sql.Rows)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -499,14 +498,14 @@ func (m *MockXODB) EXPECT() *MockXODBMockRecorder {
 }
 
 // QueryRow mocks base method
-func (m *MockXODB) QueryRow(query string, args ...interface{}) *sqlx.Row {
+func (m *MockXODB) QueryRow(query string, args ...interface{}) *sql.Row {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryRow", varargs...)
-	ret0, _ := ret[0].(*sqlx.Row)
+	ret0, _ := ret[0].(*sql.Row)
 	return ret0
 }
 
@@ -518,14 +517,14 @@ func (mr *MockXODBMockRecorder) QueryRow(query interface{}, args ...interface{})
 }
 
 // Query mocks base method
-func (m *MockXODB) Query(query string, args ...interface{}) (*sqlx.Rows, error) {
+func (m *MockXODB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Query", varargs...)
-	ret0, _ := ret[0].(*sqlx.Rows)
+	ret0, _ := ret[0].(*sql.Rows)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -642,14 +641,14 @@ func (m *MockEntity) EXPECT() *MockEntityMockRecorder {
 }
 
 // QueryRow mocks base method
-func (m *MockEntity) QueryRow(query string, args ...interface{}) *sqlx.Row {
+func (m *MockEntity) QueryRow(query string, args ...interface{}) *sql.Row {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryRow", varargs...)
-	ret0, _ := ret[0].(*sqlx.Row)
+	ret0, _ := ret[0].(*sql.Row)
 	return ret0
 }
 
@@ -661,14 +660,14 @@ func (mr *MockEntityMockRecorder) QueryRow(query interface{}, args ...interface{
 }
 
 // Query mocks base method
-func (m *MockEntity) Query(query string, args ...interface{}) (*sqlx.Rows, error) {
+func (m *MockEntity) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Query", varargs...)
-	ret0, _ := ret[0].(*sqlx.Rows)
+	ret0, _ := ret[0].(*sql.Rows)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -762,14 +761,14 @@ func (m *MockDBInterface) EXPECT() *MockDBInterfaceMockRecorder {
 }
 
 // QueryRow mocks base method
-func (m *MockDBInterface) QueryRow(query string, args ...interface{}) *sqlx.Row {
+func (m *MockDBInterface) QueryRow(query string, args ...interface{}) *sql.Row {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryRow", varargs...)
-	ret0, _ := ret[0].(*sqlx.Row)
+	ret0, _ := ret[0].(*sql.Row)
 	return ret0
 }
 
@@ -781,14 +780,14 @@ func (mr *MockDBInterfaceMockRecorder) QueryRow(query interface{}, args ...inter
 }
 
 // Query mocks base method
-func (m *MockDBInterface) Query(query string, args ...interface{}) (*sqlx.Rows, error) {
+func (m *MockDBInterface) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Query", varargs...)
-	ret0, _ := ret[0].(*sqlx.Rows)
+	ret0, _ := ret[0].(*sql.Rows)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -859,10 +858,10 @@ func (mr *MockDBInterfaceMockRecorder) Select(dest, query interface{}, args ...i
 }
 
 // Begin mocks base method
-func (m *MockDBInterface) Begin() (*sqlx.Tx, error) {
+func (m *MockDBInterface) Begin() (*sql.Tx, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Begin")
-	ret0, _ := ret[0].(*sqlx.Tx)
+	ret0, _ := ret[0].(*sql.Tx)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -874,7 +873,7 @@ func (mr *MockDBInterfaceMockRecorder) Begin() *gomock.Call {
 }
 
 // Commit mocks base method
-func (m *MockDBInterface) Commit(tx *sqlx.Tx) error {
+func (m *MockDBInterface) Commit(tx *sql.Tx) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", tx)
 	ret0, _ := ret[0].(error)
@@ -964,14 +963,14 @@ func (m *MockRecoverQuerier) EXPECT() *MockRecoverQuerierMockRecorder {
 }
 
 // QueryRow mocks base method
-func (m *MockRecoverQuerier) QueryRow(query string, args ...interface{}) *sqlx.Row {
+func (m *MockRecoverQuerier) QueryRow(query string, args ...interface{}) *sql.Row {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryRow", varargs...)
-	ret0, _ := ret[0].(*sqlx.Row)
+	ret0, _ := ret[0].(*sql.Row)
 	return ret0
 }
 
@@ -983,14 +982,14 @@ func (mr *MockRecoverQuerierMockRecorder) QueryRow(query interface{}, args ...in
 }
 
 // Query mocks base method
-func (m *MockRecoverQuerier) Query(query string, args ...interface{}) (*sqlx.Rows, error) {
+func (m *MockRecoverQuerier) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Query", varargs...)
-	ret0, _ := ret[0].(*sqlx.Rows)
+	ret0, _ := ret[0].(*sql.Rows)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

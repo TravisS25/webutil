@@ -74,8 +74,8 @@ var (
 
 // Querier implementation is basic querying of a db
 type Querier interface {
-	QueryRow(query string, args ...interface{}) *sqlx.Row
-	Query(query string, args ...interface{}) (*sqlx.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Query(query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // Scanner will scan row returned from database
@@ -101,8 +101,8 @@ type Tx interface {
 
 // Transaction is for ability to create database transaction
 type Transaction interface {
-	Begin() (tx *sqlx.Tx, err error)
-	Commit(tx *sqlx.Tx) error
+	Begin() (tx *sql.Tx, err error)
+	Commit(tx *sql.Tx) error
 }
 
 // QueryTransaction is used for basic querying but also

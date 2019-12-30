@@ -14,6 +14,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	pkgerrors "github.com/pkg/errors"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -21,7 +22,7 @@ import (
 // REPLACEMENT FUNCTION TESTS
 ////////////////////////////////////////////////////////////
 
-func TestGetValueResultsAndGetPreQueryResultsUnitTest(t *testing.T) {
+func TestQueryFunctionsUnitTest(t *testing.T) {
 	var err error
 
 	mockCtrl := gomock.NewController(t)
@@ -91,13 +92,7 @@ func TestGetValueResultsAndGetPreQueryResultsUnitTest(t *testing.T) {
 	skipParam := "skip"
 	take := "20"
 	skip := "0"
-	defaultQuery :=
-		`
-	select
-		foo.id
-	from
-		foo
-	`
+	defaultQuery := "select foo.id from foo"
 	query := defaultQuery
 
 	filterFields := map[string]FieldConfig{
@@ -337,9 +332,6 @@ func TestGetValueResultsAndGetPreQueryResultsUnitTest(t *testing.T) {
 	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
 	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
 	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	// mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	// mockRequest.EXPECT().FormValue(takeParam).Return(take)
-	// mockRequest.EXPECT().FormValue(skipParam).Return(skip)
 
 	if _, err = GetPreQueryResults(
 		&query,
@@ -371,6 +363,83 @@ func TestGetValueResultsAndGetPreQueryResultsUnitTest(t *testing.T) {
 		&query,
 		filterFields,
 		mockRequest,
+		ParamConfig{},
+		QueryConfig{},
+	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+
+	mockQuerier := NewMockQuerier(mockCtrl)
+
+	if _, err = GetQueriedResults(
+		&query,
+		invalidSortFields,
+		mockRequest,
+		mockQuerier,
+		ParamConfig{},
+		QueryConfig{},
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err, ok := pkgerrors.Cause(err).(*SortError); ok {
+			if !err.IsOperationError() {
+				t.Errorf("should be operation error\n")
+			}
+		} else {
+			t.Errorf("should have &SortError{} instance\n")
+		}
+	}
+
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(takeParam).Return(take)
+	mockRequest.EXPECT().FormValue(skipParam).Return(skip)
+
+	mockQuerier.EXPECT().Query(gomock.Any(), gomock.Any())
+
+	if _, err = GetQueriedResults(
+		&query,
+		filterFields,
+		mockRequest,
+		mockQuerier,
+		ParamConfig{},
+		QueryConfig{},
+	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+
+	matcher := sqlmock.QueryMatcherFunc(func(expectedSQL, actualSQL string) error {
+		return nil
+	})
+
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(matcher))
+
+	if err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
+
+	rows := sqlmock.NewRows([]string{"total"}).AddRow(20)
+	mock.ExpectQuery("select").WillReturnRows(rows)
+
+	if _, err = GetCountResults(
+		&query,
+		filterFields,
+		mockRequest,
+		db,
 		ParamConfig{},
 		QueryConfig{},
 	); err != nil {
