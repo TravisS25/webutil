@@ -30,6 +30,10 @@ import (
 const (
 	// Select string for queries
 	Select = "select "
+
+	sort   = "sort"
+	group  = "group"
+	filter = "filter"
 )
 
 //////////////////////////////////////////////////////////////////
@@ -75,159 +79,171 @@ type FormRequest interface {
 }
 
 //////////////////////////////////////////////////////////////////
+//-------------------------- TYPES --------------------------
+//////////////////////////////////////////////////////////////////
+
+// DbFields is type used in various querying functions
+// The key value should be fields that will be sent in a
+// url query and the value is the configuration of each field
+// allowing a user the flexibility to determine if a certain field
+// can be filtered, sortable, and/or groupable and will return
+// appropriate error if settings don't match
+type DbFields map[string]FieldConfig
+
+//////////////////////////////////////////////////////////////////
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
 
-type FilterError struct {
+type queryError struct {
+	isInvalidField     bool
 	isInvalidOperation bool
-	isInvalidFilter    bool
-	isInvalidValue     bool
 
-	invalidField string
+	invalidField     string
+	invalidOperation string
+}
+
+func (q *queryError) Error() string {
+	if q.isInvalidField {
+		return fmt.Sprintf("invalid field: '%s'", q.invalidField)
+	}
+	if q.isInvalidOperation {
+		return fmt.Sprintf("invalid operation (%s) for field: '%s'", q.invalidOperation, q.invalidField)
+	}
+
+	return ""
+}
+
+// IsFieldError returns whether a given field name does not
+// match a key in DbFields type
+func (q *queryError) IsFieldError() bool {
+	return q.isInvalidField
+}
+
+// IsOperationError returns whether an operation was tried
+// on a given field that was not allowed
+//
+// This will be thrown if OperationConf within the FieldConfig type
+// is set not to be filterable, sortable, or groupable and
+// a client tries to do one of these actions
+func (q *queryError) IsOperationError() bool {
+	return q.isInvalidOperation
+}
+
+func (q *queryError) setInvalidField(field string) {
+	q.invalidField = field
+	q.isInvalidField = true
+}
+
+func (q *queryError) setInvalidOperation(field string, operation string) {
+	q.invalidField = field
+	q.invalidOperation = operation
+	q.isInvalidOperation = true
+}
+
+// FilterError is error struct used when an error occurs when trying
+// to perform a filter action on a field
+type FilterError struct {
+	*queryError
+
+	isInvalidValue bool
+
 	invalidValue interface{}
 }
 
 func (f *FilterError) Error() string {
-	if f.isInvalidFilter {
-		return fmt.Sprintf("invalid filter field: '%s'", f.invalidField)
+	if f.queryError.Error() != "" {
+		return f.queryError.Error()
 	}
 	if f.isInvalidValue {
-		return fmt.Sprintf("invalid value (%v) for filter '%s'", f.invalidValue, f.invalidField)
-	}
-	if f.isInvalidOperation {
-		return fmt.Sprintf("invalid filter operation (%s) for field: '%s'", f.invalidValue, f.invalidField)
+		return fmt.Sprintf("invalid value (%v) for field '%s'", f.invalidValue, f.invalidField)
 	}
 
 	return ""
 }
 
-func (f *FilterError) IsFilterError() bool {
-	return f.isInvalidFilter
-}
-
+// IsValueError returns whether an invalid value was given to field
 func (f *FilterError) IsValueError() bool {
 	return f.isInvalidValue
 }
 
-func (f *FilterError) IsOperationError() bool {
-	return f.isInvalidOperation
-}
-
-func (f *FilterError) setInvalidFilterError(field string) {
-	f.invalidField = field
-	f.isInvalidFilter = true
-}
-
 func (f *FilterError) setInvalidValueError(field string, value interface{}) {
-	f.setInvalids(field, value)
+	f.invalidField = field
+	f.invalidValue = value
 	f.isInvalidValue = true
 }
 
-func (f *FilterError) setInvalidOperationError(field string, value interface{}) {
-	f.setInvalids(field, value)
-	f.isInvalidOperation = true
-}
-
-func (f *FilterError) setInvalids(field string, dataType interface{}) {
-	f.invalidField = field
-	f.invalidValue = dataType
-}
-
+// SortError is error struct used when an error occurs when trying
+// to perform a sort action on a field
 type SortError struct {
-	isInvalidOperation bool
-	isInvalidField     bool
-	isInvalidDir       bool
+	*queryError
 
-	field string
-	value interface{}
+	isInvalidDir bool
+
+	invalidValue interface{}
 }
 
 func (s *SortError) Error() string {
-	if s.isInvalidField {
-		return fmt.Sprintf("invalid sort field: '%s'", s.field)
+	if s.queryError.Error() != "" {
+		return s.queryError.Error()
 	}
 	if s.isInvalidDir {
-		return fmt.Sprintf("invalid sort dir '%s' for field '%s'", s.value, s.field)
-	}
-	if s.isInvalidOperation {
-		return fmt.Sprintf("invalid sort operation on field: '%s'", s.field)
+		return fmt.Sprintf("invalid sort dir (%s) for field '%s'", s.invalidValue, s.invalidField)
 	}
 
 	return ""
 }
 
-func (s *SortError) isSortError() bool {
-	return s.isInvalidField
-}
-
-func (s *SortError) isDirError() bool {
+// IsDirError returns whether given dir value for sort field
+// was either "asc" or "desc"
+func (s *SortError) IsDirError() bool {
 	return s.isInvalidDir
 }
 
-func (s *SortError) isOperationError() bool {
-	return s.isInvalidOperation
-}
-
-func (s *SortError) setInvalidFieldError(field string) {
-	s.field = field
-	s.isInvalidField = true
-}
-
 func (s *SortError) setInvalidDirError(field, dir string) {
-	s.field = field
-	s.value = dir
+	s.invalidField = field
+	s.invalidField = dir
 	s.isInvalidDir = true
 }
 
-func (s *SortError) setInvalidOperationError(field string) {
-	s.field = field
-	s.isInvalidOperation = true
-}
-
+// GroupError is error struct used when an error occurs when trying
+// to perform a group action on a field
 type GroupError struct {
-	invalidField bool
-
-	field string
+	*queryError
 }
 
-func (s *GroupError) Error() string {
-	if s.invalidField {
-		return fmt.Sprintf("invalid group field: '%s'", s.field)
+func (g *GroupError) Error() string {
+	if g.queryError.Error() != "" {
+		return g.queryError.Error()
 	}
 
 	return ""
 }
 
-func (s *GroupError) isGroupError() bool {
-	return s.invalidField
-}
-
-func (s *GroupError) setInvalidGroupError(field string) {
-	s.field = field
-	s.invalidField = true
-}
-
+// SliceError is error struct used when an error occurs when trying
+// to perform a group action on a field
 type SliceError struct {
 	invalidSlice bool
 
-	fieldType string
-	field     string
+	fieldType    string
+	invalidField string
 }
 
 func (s *SliceError) Error() string {
 	if s.invalidSlice {
-		return fmt.Sprintf("invalid type (%s) within array for field: '%s'", s.fieldType, s.field)
+		return fmt.Sprintf("invalid type (%s) within array for field: '%s'", s.fieldType, s.invalidField)
 	}
 
 	return ""
 }
 
+// IsSliceError returns whether a slice error occured which
+// happens if any value within a slice is not a primitive type
 func (s *SliceError) IsSliceError() bool {
 	return s.invalidSlice
 }
 
 func (s *SliceError) setInvalidSliceError(field, fieldType string) {
-	s.field = field
+	s.invalidField = field
 	s.fieldType = fieldType
 	s.invalidSlice = true
 }
@@ -510,7 +526,7 @@ func getValueResults(
 	req FormRequest,
 	paramConf ParamConfig,
 	queryConf QueryConfig,
-	fields map[string]FieldConfig,
+	fields DbFields,
 ) ([]interface{}, error) {
 	var allValues []interface{}
 	var sorts []Sort
@@ -588,11 +604,7 @@ func getValueResults(
 
 			for _, v := range sorts {
 				hasGroupInSort := false
-				conf, ok := fields[v.Field]
-
-				// If sort field is contained within fields map, continue
-				// Else throw SortError{}
-				if ok {
+				if conf, ok := fields[v.Field]; ok {
 					// Check that we allow for the field to be sorted
 					// If not, throw SortError{}
 					if conf.OperationConf.CanSortBy {
@@ -608,13 +620,13 @@ func getValueResults(
 							groupFields = append(groupFields, fields[v.Field].DBField)
 						}
 					} else {
-						sortErr := &SortError{}
-						sortErr.setInvalidOperationError(v.Field)
+						sortErr := &SortError{queryError: &queryError{}}
+						sortErr.setInvalidOperation(v.Field, sort)
 						return nil, sortErr
 					}
 				} else {
-					sortErr := &SortError{}
-					sortErr.setInvalidFieldError(v.Field)
+					sortErr := &SortError{queryError: &queryError{}}
+					sortErr.setInvalidField(v.Field)
 					return nil, sortErr
 				}
 			}
@@ -676,7 +688,7 @@ func GetQueriedAndCountResults(
 	query *string,
 	countQuery *string,
 	//prependVars []interface{},
-	fields map[string]FieldConfig,
+	fields DbFields,
 	req FormRequest,
 	db Querier,
 	paramConf ParamConfig,
@@ -716,7 +728,7 @@ func GetQueriedAndCountResults(
 func GetCountResults(
 	countQuery *string,
 	//prependVars []interface{},
-	fields map[string]FieldConfig,
+	fields DbFields,
 	req FormRequest,
 	db Querier,
 	paramConf ParamConfig,
@@ -787,13 +799,11 @@ func GetCountResults(
 func GetPreQueryResults(
 	query *string,
 	////prependVars []interface{},
-	fields map[string]FieldConfig,
+	fields DbFields,
 	req FormRequest,
 	paramConf ParamConfig,
 	queryConf QueryConfig,
 ) ([]interface{}, error) {
-	// var results *resultValues
-	// var limitOffsetValues []interface{}
 	var results []interface{}
 	var err error
 
@@ -808,30 +818,6 @@ func GetPreQueryResults(
 		return nil, errors.Wrap(err, "")
 	}
 
-	// if !queryConf.ExcludeLimitWithOffset {
-	// 	if limitOffsetValues, err = GetLimitWithOffsetValues(
-	// 		req,
-	// 		query,
-	// 		*paramConf.Take,
-	// 		*paramConf.Skip,
-	// 		*queryConf.TakeLimit,
-	// 	); err != nil {
-	// 		return nil, errors.Wrap(err, "")
-	// 	}
-	// }
-
-	// valResults, err := getSliceValuesFromResults(
-	// 	query,
-	// 	*queryConf.SQLBindVar,
-	// 	prependVars,
-	// 	results,
-	// 	limitOffsetValues,
-	// )
-
-	// if err != nil {
-	// 	return nil, err
-	// }
-
 	return results, nil
 }
 
@@ -840,7 +826,7 @@ func GetPreQueryResults(
 func GetQueriedResults(
 	query *string,
 	//prependVars []interface{},
-	fields map[string]FieldConfig,
+	fields DbFields,
 	req FormRequest,
 	db Querier,
 	paramConf ParamConfig,
@@ -878,7 +864,7 @@ func GetFilterReplacements(
 	query *string,
 	paramName string,
 	queryConf QueryConfig,
-	fields map[string]FieldConfig,
+	fields DbFields,
 ) ([]Filter, []interface{}, error) {
 	var err error
 	var allFilters, filters []Filter
@@ -954,7 +940,7 @@ func GetSortReplacements(
 	query *string,
 	paramName string,
 	queryConf QueryConfig,
-	fields map[string]FieldConfig,
+	fields DbFields,
 ) ([]Sort, error) {
 	var allSorts, sortSlice []Sort
 	var err error
@@ -1021,7 +1007,7 @@ func GetGroupReplacements(
 	query *string,
 	paramName string,
 	queryConf QueryConfig,
-	fields map[string]FieldConfig,
+	fields DbFields,
 ) ([]Group, error) {
 	var allGroups, groupSlice []Group
 	var err error
@@ -1129,14 +1115,14 @@ func GetLimitWithOffsetValues(
 // If paramName is not found in FormRequest, error will be thrown
 // Will also throw error if can't properly decode
 func DecodeFilters(req FormRequest, paramName string) ([]Filter, error) {
-	var filterArray []Filter
+	var filterSlice []Filter
 	var err error
 
-	if err = decodeQueryParams(req, paramName, &filterArray); err != nil {
+	if err = decodeQueryParams(req, paramName, &filterSlice); err != nil {
 		return nil, errors.Wrap(err, "")
 	}
 
-	return filterArray, nil
+	return filterSlice, nil
 }
 
 // DecodeSorts will use passed paramName parameter to extract json encoded
@@ -1144,14 +1130,14 @@ func DecodeFilters(req FormRequest, paramName string) ([]Filter, error) {
 // If paramName is not found in FormRequest, error will be thrown
 // Will also throw error if can't properly decode
 func DecodeSorts(req FormRequest, paramName string) ([]Sort, error) {
-	var sortArray []Sort
+	var sortSlice []Sort
 	var err error
 
-	if err = decodeQueryParams(req, paramName, &sortArray); err != nil {
+	if err = decodeQueryParams(req, paramName, &sortSlice); err != nil {
 		return nil, errors.Wrap(err, "")
 	}
 
-	return sortArray, nil
+	return sortSlice, nil
 }
 
 // DecodeGroups will use passed paramName parameter to extract json encoded
@@ -1197,13 +1183,12 @@ func decodeQueryParams(req FormRequest, paramName string, val interface{}) error
 // along with verifying that they have right values and applying changes to query
 // This function does not apply "where" string for query so one must do it before
 // passing query
-func ReplaceFilterFields(query *string, filters []Filter, fields map[string]FieldConfig) ([]interface{}, error) {
+func ReplaceFilterFields(query *string, filters []Filter, fields DbFields) ([]interface{}, error) {
 	var err error
 	replacements := make([]interface{}, 0, len(filters))
 
 	for i, v := range filters {
 		var r interface{}
-		containsField := false
 
 		// Check if current filter is within our fields map
 		// If it is, check that it is allowed to be filtered
@@ -1212,13 +1197,10 @@ func ReplaceFilterFields(query *string, filters []Filter, fields map[string]Fiel
 		// Else throw error
 		if conf, ok := fields[v.Field]; ok {
 			if !conf.OperationConf.CanFilterBy {
-				filterErr := &FilterError{}
-				filterErr.setInvalidOperationError(v.Field, v.Value)
+				filterErr := &FilterError{queryError: &queryError{}}
+				filterErr.setInvalidOperation(v.Field, filter)
 				return nil, errors.Wrap(filterErr, "")
 			}
-
-			//replacements = append(replacements, conf.DBField)
-			containsField = true
 
 			if r, err = FilterCheck(v); err != nil {
 				return nil, errors.Wrap(err, "")
@@ -1233,11 +1215,9 @@ func ReplaceFilterFields(query *string, filters []Filter, fields map[string]Fiel
 
 			v.Field = conf.DBField
 			ApplyFilter(query, v, applyAnd)
-		}
-
-		if !containsField {
-			filterErr := &FilterError{}
-			filterErr.setInvalidFilterError(v.Field)
+		} else {
+			filterErr := &FilterError{queryError: &queryError{}}
+			filterErr.setInvalidField(v.Field)
 			return nil, errors.Wrap(filterErr, "")
 		}
 	}
@@ -1249,12 +1229,10 @@ func ReplaceFilterFields(query *string, filters []Filter, fields map[string]Fiel
 // along with verifying that they have right values and applying changes to query
 // This function does not apply "order by" string for query so one must do it before
 // passing query
-func ReplaceSortFields(query *string, sorts []Sort, fields map[string]FieldConfig) error {
+func ReplaceSortFields(query *string, sorts []Sort, fields DbFields) error {
 	var err error
 
 	for i, v := range sorts {
-		containsField := false
-
 		// Check if current sort is within our fields map
 		// If it is, check that it is allowed to be sorted
 		// by and then check if given parameters are valid
@@ -1262,8 +1240,8 @@ func ReplaceSortFields(query *string, sorts []Sort, fields map[string]FieldConfi
 		// Else throw error
 		if conf, ok := fields[v.Field]; ok {
 			if !conf.OperationConf.CanSortBy {
-				sortErr := &SortError{}
-				sortErr.setInvalidFieldError(v.Field)
+				sortErr := &SortError{queryError: &queryError{}}
+				sortErr.setInvalidOperation(v.Field, sort)
 				return errors.Wrap(sortErr, "")
 			}
 
@@ -1279,12 +1257,9 @@ func ReplaceSortFields(query *string, sorts []Sort, fields map[string]FieldConfi
 
 			v.Field = conf.DBField
 			ApplySort(query, v, addComma)
-			containsField = true
-		}
-
-		if !containsField {
-			sortErr := &SortError{}
-			sortErr.setInvalidFieldError(v.Field)
+		} else {
+			sortErr := &SortError{queryError: &queryError{}}
+			sortErr.setInvalidField(v.Field)
 			return errors.Wrap(sortErr, "")
 		}
 	}
@@ -1294,10 +1269,8 @@ func ReplaceSortFields(query *string, sorts []Sort, fields map[string]FieldConfi
 
 // ReplaceGroupFields is used to replace query field names and values from slice of groups
 // along with verifying that they have right values and applying changes to query
-func ReplaceGroupFields(query *string, groups []Group, fields map[string]FieldConfig) error {
+func ReplaceGroupFields(query *string, groups []Group, fields DbFields) error {
 	for i, v := range groups {
-		containsField := false
-
 		// Check if current sort is within our fields map
 		// If it is, check that it is allowed to be grouped
 		// by and then check if given parameters are valid
@@ -1305,8 +1278,8 @@ func ReplaceGroupFields(query *string, groups []Group, fields map[string]FieldCo
 		// Else throw error
 		if conf, ok := fields[v.Field]; ok {
 			if !conf.OperationConf.CanGroupBy {
-				groupErr := &GroupError{}
-				groupErr.setInvalidGroupError(v.Field)
+				groupErr := &GroupError{queryError: &queryError{}}
+				groupErr.setInvalidOperation(v.Field, group)
 				return errors.Wrap(groupErr, "")
 			}
 
@@ -1318,12 +1291,9 @@ func ReplaceGroupFields(query *string, groups []Group, fields map[string]FieldCo
 
 			v.Field = conf.DBField
 			ApplyGroup(query, v, addComma)
-			containsField = true
-		}
-
-		if !containsField {
-			groupErr := &GroupError{}
-			groupErr.setInvalidGroupError(v.Field)
+		} else {
+			groupErr := &GroupError{queryError: &queryError{}}
+			groupErr.setInvalidField(v.Field)
 			return errors.Wrap(groupErr, "")
 		}
 	}
@@ -1429,7 +1399,7 @@ func ApplyOrdering(query *string, sort *Sort) {
 // It also adds the field to the replacements parameter passed
 func SortCheck(s Sort) error {
 	if s.Dir != "asc" && s.Dir != "desc" {
-		sortErr := &SortError{}
+		sortErr := &SortError{queryError: &queryError{}}
 		sortErr.setInvalidDirError(s.Field, s.Dir)
 		return sortErr
 	}
@@ -1477,7 +1447,7 @@ func FilterCheck(f Filter) (interface{}, error) {
 			validTypes = append(validTypes, "bool")
 
 			if f.Value == nil {
-				filterErr := &FilterError{}
+				filterErr := &FilterError{queryError: &queryError{}}
 				filterErr.setInvalidValueError(f.Field, f.Value)
 				return nil, filterErr
 			}
@@ -1492,7 +1462,7 @@ func FilterCheck(f Filter) (interface{}, error) {
 			}
 
 			if !hasValidType {
-				filterErr := &FilterError{}
+				filterErr := &FilterError{queryError: &queryError{}}
 				filterErr.setInvalidValueError(f.Field, someType)
 				return nil, filterErr
 			}
@@ -1595,7 +1565,7 @@ func SetRowerResults(
 			if snaker.IsInitialism(columns[i]) {
 				columnName = strings.ToLower(columns[i])
 			} else {
-				camelCaseJSON := snaker.SnakeToCamelJSON(columns[i])
+				camelCaseJSON := snaker.ForceLowerCamelIdentifier(columns[i])
 				firstLetter := strings.ToLower(string(camelCaseJSON[0]))
 				columnName = firstLetter + camelCaseJSON[1:]
 			}

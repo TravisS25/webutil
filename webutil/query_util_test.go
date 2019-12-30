@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	reflect "reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ import (
 // REPLACEMENT FUNCTION TESTS
 ////////////////////////////////////////////////////////////
 
-func TestGetValueResultsUnitTest(t *testing.T) {
+func TestGetValueResultsAndGetPreQueryResultsUnitTest(t *testing.T) {
 	var err error
 
 	mockCtrl := gomock.NewController(t)
@@ -51,12 +52,12 @@ func TestGetValueResultsUnitTest(t *testing.T) {
 		},
 	}
 
-	// invalidSorts := []Sort{
-	// 	{
-	// 		Field: "invalid field",
-	// 		Dir:   "asc",
-	// 	},
-	// }
+	invalidSorts := []Sort{
+		{
+			Field: idField,
+			Dir:   "invalid",
+		},
+	}
 
 	fBytes, err := json.Marshal(&filters)
 
@@ -76,11 +77,11 @@ func TestGetValueResultsUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	// invalidSortBytes, err := json.Marshal(&invalidSorts)
+	invalidSortBytes, err := json.Marshal(&invalidSorts)
 
-	// if err != nil {
-	// 	t.Fatalf("err: %s\n", err.Error())
-	// }
+	if err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
 
 	invalidJSONDecoding := "{ id: 1 }"
 	filtersParam := "filters"
@@ -98,14 +99,6 @@ func TestGetValueResultsUnitTest(t *testing.T) {
 		foo
 	`
 	query := defaultQuery
-	// defaultCountQuery :=
-	// 	`
-	// select
-	// 	count(foo.id)
-	// from
-	// 	foo
-	// `
-	//countQuery := defaultCountQuery
 
 	filterFields := map[string]FieldConfig{
 		idField: FieldConfig{
@@ -256,50 +249,134 @@ func TestGetValueResultsUnitTest(t *testing.T) {
 	); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err, ok := err.(*SortError); !ok {
+		if cErr, ok := pkgerrors.Cause(err).(*SortError); !ok {
 			t.Errorf("should have SortError{} instance error\n")
+			t.Errorf("err type: %s\n", reflect.TypeOf(err))
 		} else {
-			if !err.isSortError() {
-				t.Errorf("should be field sort error\n")
+			if !cErr.IsOperationError() {
+				t.Errorf("should be operation error\n")
 			}
 		}
 	}
 
-	// query = defaultQuery
-	// mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	// mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	// mockRequest.EXPECT().FormValue(sortsParam).Return(string(invalidSortBytes))
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(invalidSortBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(invalidSortBytes))
 
-	// if _, err = getValueResults(
-	// 	&query,
-	// 	true,
-	// 	mockRequest,
-	// 	ParamConfig{},
-	// 	QueryConfig{},
-	// 	filterFields,
-	// ); err == nil {
-	// 	t.Errorf("should have error\n")
-	// } else {
-	// 	if _, ok := err.(*SortError); !ok {
-	// 		t.Errorf("should have SortError{} instance error\n")
-	// 	}
-	// }
+	if _, err = getValueResults(
+		&query,
+		true,
+		mockRequest,
+		ParamConfig{},
+		QueryConfig{},
+		filterFields,
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if cErr, ok := pkgerrors.Cause(err).(*SortError); !ok {
+			t.Errorf("should have &SortError{} instance error\n")
+			t.Errorf("err type: %s\n", reflect.TypeOf(err))
+		} else {
+			if !cErr.IsDirError() {
+				t.Errorf("should be dir error\n")
+			}
+		}
+	}
 
-	// query = defaultQuery
-	// mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	// mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(takeParam).Return("invalid")
+	mockRequest.EXPECT().FormValue(skipParam).Return(skip)
 
-	// if _, err = getValueResults(
-	// 	&countQuery,
-	// 	false,
-	// 	mockRequest,
-	// 	ParamConfig{},
-	// 	QueryConfig{},
-	// 	filterFields,
-	// ); err != nil {
-	// 	t.Errorf("should have error\n")
-	// 	t.Errorf("err: %s\n", err.Error())
-	// }
+	if _, err = getValueResults(
+		&query,
+		true,
+		mockRequest,
+		ParamConfig{},
+		QueryConfig{},
+		filterFields,
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if _, ok := pkgerrors.Cause(err).(*strconv.NumError); !ok {
+			t.Errorf("should have &strconv.NumError{} instance error\n")
+			t.Errorf("err type: %s\n", reflect.TypeOf(err))
+		}
+	}
+
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(takeParam).Return(take)
+	mockRequest.EXPECT().FormValue(skipParam).Return("invalid")
+
+	if _, err = getValueResults(
+		&query,
+		true,
+		mockRequest,
+		ParamConfig{},
+		QueryConfig{},
+		filterFields,
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if _, ok := pkgerrors.Cause(err).(*strconv.NumError); !ok {
+			t.Errorf("should have &strconv.NumError{} instance error\n")
+			t.Errorf("err type: %s\n", reflect.TypeOf(err))
+		}
+	}
+
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	// mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	// mockRequest.EXPECT().FormValue(takeParam).Return(take)
+	// mockRequest.EXPECT().FormValue(skipParam).Return(skip)
+
+	if _, err = GetPreQueryResults(
+		&query,
+		invalidSortFields,
+		mockRequest,
+		ParamConfig{},
+		QueryConfig{},
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if cErr, ok := pkgerrors.Cause(err).(*SortError); !ok {
+			t.Errorf("should have &SortError{} instance error\n")
+		} else {
+			if !cErr.IsOperationError() {
+				t.Errorf("should be operation error\n")
+			}
+		}
+	}
+
+	query = defaultQuery
+	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
+	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest.EXPECT().FormValue(takeParam).Return(take)
+	mockRequest.EXPECT().FormValue(skipParam).Return(skip)
+
+	if _, err = GetPreQueryResults(
+		&query,
+		filterFields,
+		mockRequest,
+		ParamConfig{},
+		QueryConfig{},
+	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
 }
 
 func TestGetLimitWithOffsetValuesUnitTest(t *testing.T) {
