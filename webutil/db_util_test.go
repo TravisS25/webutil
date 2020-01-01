@@ -45,7 +45,7 @@ func (m *channel) Get() <-chan struct{} {
 
 func TestHasDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
-	conf := ErrorResponse{}
+	conf := ServerErrorConfig{}
 
 	if HasDBError(rr, nil, conf) {
 		t.Errorf("should not have db error\n")
@@ -74,7 +74,7 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 
 func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
-	conf := ErrorResponse{}
+	conf := ServerAndClientErrorConfig{}
 
 	if HasNoRowsOrDBError(rr, nil, conf) {
 		t.Errorf("should not have db error\n")

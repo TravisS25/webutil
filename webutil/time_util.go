@@ -2,8 +2,9 @@ package webutil
 
 import (
 	"fmt"
-	"strconv"
 	"time"
+
+	pkgerrors "github.com/pkg/errors"
 )
 
 // ConvertTimeToLocalDateTime is used to convert the date string passed
@@ -12,27 +13,27 @@ func ConvertTimeToLocalDateTime(dateString, timezone string) (time.Time, error) 
 	location, err := time.LoadLocation(timezone)
 
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, pkgerrors.Wrap(err, "")
 	}
 
 	parsedTime, err := time.Parse(PostgresDateLayout, dateString)
 
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, pkgerrors.Wrap(err, "")
 	}
 
 	return parsedTime.In(location), nil
 }
 
-func GetCurrentDateTimeInUTC() time.Time {
-	currentDate := time.Now()
-	year := strconv.Itoa(currentDate.Year())
-	month := fmt.Sprintf("%02d", currentDate.Month())
-	day := fmt.Sprintf("%02d", currentDate.Day())
-	currentDateString := year + "-" + month + "-" + day
-	currentUTCDate, _ := time.Parse(DateLayout, currentDateString)
-	return currentUTCDate
-}
+// func GetCurrentDateTimeInUTC() time.Time {
+// 	currentDate := time.Now()
+// 	year := strconv.Itoa(currentDate.Year())
+// 	month := fmt.Sprintf("%02d", currentDate.Month())
+// 	day := fmt.Sprintf("%02d", currentDate.Day())
+// 	currentDateString := year + "-" + month + "-" + day
+// 	currentUTCDate, _ := time.Parse(DateLayout, currentDateString)
+// 	return currentUTCDate
+// }
 
 // GetCurrentLocalDateTimeInUTC will return the local date and time based on
 // the time zone passed
@@ -51,13 +52,14 @@ func getUTC(timezone string, includeTime bool) (time.Time, error) {
 	location, err := time.LoadLocation(timezone)
 
 	if err != nil {
-		return time.Time{}, err
+		fmt.Printf("foo err: %s\n", err.Error())
+		return time.Time{}, pkgerrors.Wrap(err, "")
 	}
 
 	utc, err := time.LoadLocation("UTC")
 
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, pkgerrors.Wrap(err, "")
 	}
 
 	localTime := time.Now().In(location)

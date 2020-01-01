@@ -421,104 +421,9 @@ type LimitOffset struct {
 	Skip int `json:"skip"`
 }
 
-// type resultValues struct {
-// 	// Filters      []Filter
-// 	// Sorts        []Sort
-// 	// Groups       []Group
-// 	LimitOffset  *LimitOffset
-// 	FilterValues []interface{}
-// }
-
 //////////////////////////////////////////////////////////////////
 //----------------------- FUNCTIONS -------------------------
 //////////////////////////////////////////////////////////////////
-
-// func getSliceValuesFromResults(
-// 	query *string,
-// 	sqlBindVar int,
-// 	prependValues []interface{},
-// 	filterValues []interface{},
-// 	limitOffsetValues []interface{},
-// ) ([]interface{}, error) {
-// 	var allValues []interface{}
-// 	var err error
-
-// 	totalReplacements := len(filterValues)
-// 	totalReplacements += len(prependValues)
-// 	totalReplacements += len(limitOffsetValues)
-// 	allValues = make([]interface{}, 0, totalReplacements)
-
-// 	if prependValues != nil {
-// 		for _, v := range prependValues {
-// 			allValues = append(allValues, v)
-// 		}
-// 	}
-
-// 	for _, v := range filterValues {
-// 		allValues = append(allValues, v)
-// 	}
-
-// 	if limitOffsetValues != nil {
-// 		for _, v := range limitOffsetValues {
-// 			allValues = append(allValues, v)
-// 		}
-// 	}
-
-// 	if *query, allValues, err = InQueryRebind(
-// 		sqlBindVar, *query, allValues...,
-// 	); err != nil {
-// 		return nil, errors.Wrap(err, "")
-// 	}
-
-// 	return allValues, nil
-// }
-
-// func getCountResults(
-// 	query *string,
-// 	db Querier,
-// 	queryConf QueryConfig,
-// 	//prependVars []interface{},
-// 	filterValues []interface{},
-// 	limitOffsetValues []interface{},
-// ) (int, error) {
-// 	replacements, err := getSliceValuesFromResults(
-// 		query,
-// 		//db,
-// 		*queryConf.SQLBindVar,
-// 		//prependVars,
-// 		filterValues,
-// 		limitOffsetValues,
-// 	)
-
-// 	if err != nil {
-// 		return 0, err
-// 	}
-
-// 	rower, err := db.Query(*query, replacements...)
-
-// 	if err != nil {
-// 		return 0, err
-// 	}
-
-// 	totalCount := 0
-
-// 	for rower.Next() {
-// 		var count int
-// 		err = rower.Scan(&count)
-
-// 		if err != nil {
-// 			if err == sql.ErrNoRows {
-// 				return 0, nil
-// 			}
-
-// 			return 0, err
-// 		}
-
-// 		totalCount += count
-// 	}
-
-// 	return totalCount, nil
-// }
 
 func getValueResults(
 	query *string,
@@ -1376,7 +1281,6 @@ func ApplyOrdering(query *string, sort *Sort) {
 
 // SortCheck checks to make sure that the "dir" field either has value "asc" or "desc"
 // and if it doesn't, throw error
-// It also adds the field to the replacements parameter passed
 func SortCheck(s Sort) error {
 	if s.Dir != "asc" && s.Dir != "desc" {
 		sortErr := &SortError{queryError: &queryError{}}
@@ -1389,7 +1293,7 @@ func SortCheck(s Sort) error {
 
 // FilterCheck checks to make sure that the values passed to each filter is valid
 // The types passed should be primitive types
-// It also adds the field to the replacements parameter passed
+// Returns the "Value" property of Filter type if all checks pass
 func FilterCheck(f Filter) (interface{}, error) {
 	var r interface{}
 
@@ -1607,7 +1511,7 @@ func SetRowerResults(
 
 // HasFilterOrServerError determines if passed error is a filter based error
 // or a server type error and writes appropriate response to client
-func HasFilterOrServerError(w http.ResponseWriter, err error, errResp ErrorResponse) bool {
+func HasFilterOrServerError(w http.ResponseWriter, err error, errResp ServerAndClientErrorConfig) bool {
 	if err != nil {
 		SetHTTPResponseDefaults(&errResp.ClientErrorConf, http.StatusNotAcceptable, []byte(err.Error()))
 		SetHTTPResponseDefaults(&errResp.ServerErrorConf, http.StatusInternalServerError, []byte(ErrServer.Error()))

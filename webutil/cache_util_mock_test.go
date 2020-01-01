@@ -78,21 +78,6 @@ func (mr *MockCacheStoreMockRecorder) Del(keys ...interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Del", reflect.TypeOf((*MockCacheStore)(nil).Del), keys...)
 }
 
-// HasKey mocks base method
-func (m *MockCacheStore) HasKey(key string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasKey", key)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HasKey indicates an expected call of HasKey
-func (mr *MockCacheStoreMockRecorder) HasKey(key interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasKey", reflect.TypeOf((*MockCacheStore)(nil).HasKey), key)
-}
-
 // MockSessionStore is a mock of SessionStore interface
 type MockSessionStore struct {
 	ctrl     *gomock.Controller

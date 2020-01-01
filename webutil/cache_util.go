@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/garyburd/redigo/redis"
 	"github.com/gorilla/sessions"
 	redistore "gopkg.in/boj/redistore.v1"
 )
@@ -31,7 +32,8 @@ type CacheStore interface {
 	Get(key string) ([]byte, error)
 	Set(key string, value interface{}, expiration time.Duration)
 	Del(keys ...string)
-	HasKey(key string) (bool, error)
+	//HasKey(key string) (bool, error)
+	//HasKey(key string) error
 }
 
 // SessionStore is interface used to implement server side sessions in an
@@ -127,15 +129,15 @@ func NewRedisCache(client CacheStore) *RedisCache {
 	return &RedisCache{client}
 }
 
-// HasKey takes key value and determines if that key is in cache
-func (c *RedisCache) HasKey(key string) (bool, error) {
-	_, err := c.Get(key)
+// Get takes key value and determines if that key is in cache
+func (c *RedisCache) Get(key string) ([]byte, error) {
+	bytes, err := c.CacheStore.Get(key)
 
-	if err != nil {
-		return false, err
+	if err == redis.ErrNil {
+		return nil, ErrCacheNil
 	}
 
-	return true, nil
+	return bytes, err
 }
 
 // RedisSession is used for storing session variables

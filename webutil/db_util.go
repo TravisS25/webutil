@@ -293,8 +293,12 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*DB, error) {
 
 // HasDBError takes passed error and determines what to write
 // back to client depending on settings set in config
-func HasDBError(w http.ResponseWriter, err error, config ErrorResponse) bool {
-	defaultDBErrors(&config)
+func HasDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
+	SetHTTPResponseDefaults(
+		&config.ServerErrorConf,
+		http.StatusInternalServerError,
+		[]byte(ErrServer.Error()),
+	)
 	return dbError(w, err, config)
 }
 
@@ -303,7 +307,7 @@ func HasDBError(w http.ResponseWriter, err error, config ErrorResponse) bool {
 //
 // If error is "sql.ErrNoRows", then another response is written
 // to client based on config passed
-func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ErrorResponse) bool {
+func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerAndClientErrorConfig) bool {
 	defaultDBErrors(&config)
 
 	if err == sql.ErrNoRows {
@@ -312,7 +316,7 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ErrorResponse) 
 		return true
 	}
 
-	return dbError(w, err, config)
+	return dbError(w, err, config.ServerErrorConfig)
 }
 
 // QueryCount is used for queries that consist of count in select statement
@@ -322,7 +326,7 @@ func QueryCount(db SqlxDB, query string, args ...interface{}) (*Count, error) {
 	return &dest, err
 }
 
-func defaultDBErrors(config *ErrorResponse) {
+func defaultDBErrors(config *ServerAndClientErrorConfig) {
 	SetHTTPResponseDefaults(&config.ClientErrorConf, http.StatusNotFound, []byte("Not Found"))
 	SetHTTPResponseDefaults(
 		&config.ServerErrorConf,
@@ -331,7 +335,7 @@ func defaultDBErrors(config *ErrorResponse) {
 	)
 }
 
-func dbError(w http.ResponseWriter, err error, config ErrorResponse) bool {
+func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
 			if err = config.RecoverDB(err); err != nil {

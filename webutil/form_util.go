@@ -111,7 +111,7 @@ type PathRegex func(r *http.Request) (string, error)
 //////////////////////////////////////////////////////////////////
 
 // RequestValidator should implement validating fields sent from
-// request and return form or error is one occurs validating
+// request and return form or error if one occurs
 type RequestValidator interface {
 	Validate(req *http.Request, instance interface{}) (interface{}, error)
 }
@@ -122,25 +122,31 @@ type RequestValidator interface {
 
 // FormSelectionConfig is config struct used for GetFormSelections function
 type FormSelectionConfig struct {
-	CacheConfig         CacheConfig
-	RecoverDB           RecoverDB
-	ServerErrorResponse HTTPResponseConfig
+	ServerErrorConfig
+	CacheConfig CacheConfig
+	// RecoverDB           RecoverDB
+	// ServerErrorResponse HTTPResponseConfig
 }
 
 // FormErrorConfig is config struct used for HasFormErrors function
 type FormErrorConfig struct {
-	InvalidHTTPStatus   *int
-	ServerErrorResponse HTTPResponseConfig
+	ServerErrorConfig
+	InvalidHTTPStatus *int
 }
 
 //////////////////////////////////////////////////////////////////
 //------------------------- STRUCTS ---------------------------
 //////////////////////////////////////////////////////////////////
 
+// Boolean is used to be able interpret string bool values
 type Boolean struct {
 	value bool
 }
 
+// UnmarshalJSON takes in value and interprets it as a
+// string and parses it to determine its value
+// This is used so if user sends invalid bool value
+// we don't panic when trying to process
 func (c *Boolean) UnmarshalJSON(data []byte) error {
 	asString := string(data)
 	convertedBool, err := strconv.ParseBool(asString)
@@ -154,16 +160,26 @@ func (c *Boolean) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Value returns given bool value
 func (c Boolean) Value() bool {
 	return c.value
 }
 
+// Int64 is mainly used for slice of id values from forms
 type Int64 int64
 
+// MarshalJSON takes int64 value and returns byte value
 func (i Int64) MarshalJSON() ([]byte, error) {
-	return json.Marshal(strconv.FormatInt(int64(i), 10))
+	return json.Marshal(strconv.FormatInt(int64(i), IntBase))
 }
 
+// UnmarshalJSON first tries to convert given bytes
+// to string because values are being passed from a
+// web frontend client using javascript, javascript is not
+// capable of int64 so it must send in string format
+// and we convert it from string to int64
+//
+// Else fall back to trying to unmarshal an int64
 func (i *Int64) UnmarshalJSON(b []byte) error {
 	// Try string first
 	var s string
@@ -173,7 +189,7 @@ func (i *Int64) UnmarshalJSON(b []byte) error {
 			return nil
 		}
 
-		value, err := strconv.ParseInt(s, 10, IntBitSize)
+		value, err := strconv.ParseInt(s, IntBase, IntBitSize)
 		if err != nil {
 			return err
 		}
@@ -185,6 +201,7 @@ func (i *Int64) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(b, (*int64)(i))
 }
 
+// Value returns given int64 value
 func (i Int64) Value() int64 {
 	return int64(i)
 }
@@ -196,17 +213,16 @@ type FormSelection struct {
 }
 
 // FormValidation is the main struct that other structs will
-// embed to validate json data.  It is also the struct that
-// implements SetQuerier and SetCache of Form interface
+// embed to validate json data
 type FormValidation struct {
 	entity Entity
 	cache  CacheStore
 }
 
+// NewFormValidation returns *FormValidation instance
 func NewFormValidation(entity Entity) *FormValidation {
 	return &FormValidation{
 		entity: entity,
-		//cache:  cache,
 	}
 }
 
@@ -220,14 +236,18 @@ func (f *FormValidation) IsValid(isValid bool) *validRule {
 
 // ValidateDate verifies whether a date string matches the passed in
 // layout format
+//
 // If a user wishes, they can also verify whether the given date is
 // allowed to be a past or future date of the current time
+//
 // The timezone parameter converts given time to compare to current
 // time if you choose to
 // If no timezone is passed, UTC is used by default
 // If user does not want to compare time, both bool parameters
 // should be true
-// Will raise validation.InternalError if both bool parameters are false
+//
+// Will raise ErrFutureAndPastDateInternal error which will be wrapped
+// in validation.InternalError if both bool parameters are false
 func (f *FormValidation) ValidateDate(
 	layout,
 	timezone string,
@@ -242,17 +262,22 @@ func (f *FormValidation) ValidateDate(
 	}
 }
 
-// ValidateIDs takes a list of arguments and queries against the querier type given and returns an validateIDsRule instance
-// to indicate whether the ids are valid or not
-// If the only placeholder parameter within your query is the ids validating against, then the args paramter of ValidateIDs
-// can be nil
-// Note of caution, the ids we are validating against should be the first placeholder parameters within the query passed
+// ValidateIDs takes a list of arguments and queries against the querier type
+// given and returns an validateIDsRule instance to indicate whether the ids
+// are valid or not
 //
-// If the ids passed happen to be type formutil#Int64, it will extract the values so it can be used against the query properly
+// If the only placeholder parameter within your query is the ids validating against,
+// then the args parameter of ValidateIDs can be nil
+//
+// Note of caution, the ids we are validating against should be the first placeholder
+// parameters within the query passed
+//
+// If the ids passed happen to be type formutil#Int64, it will extract the values so it
+// can be used against the query properly
 //
 // The cacheConfig parameter can be nil if you do not need/have a cache backend
 func (f *FormValidation) ValidateIDs(
-	cacheConfig *CacheConfig,
+	cacheConfig CacheConfig,
 	placeHolderPosition,
 	bindVar int,
 	query string,
@@ -274,7 +299,7 @@ func (f *FormValidation) ValidateIDs(
 // ValidateUniqueness determines whether passed field is unique
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
-	cacheConfig *CacheConfig,
+	cacheConfig CacheConfig,
 	instanceValue interface{},
 	placeHolderPosition,
 	bindVar int,
@@ -299,7 +324,7 @@ func (f *FormValidation) ValidateUniqueness(
 // within database or cache if set
 func (f *FormValidation) ValidateExists(
 	querier Querier,
-	cacheConfig *CacheConfig,
+	cacheConfig CacheConfig,
 	placeHolderPosition,
 	bindVar int,
 	query string,
@@ -340,12 +365,12 @@ func (f *FormValidation) SetCache(cache CacheStore) {
 
 type validator struct {
 	querier             Querier
-	cacheConfig         *CacheConfig
 	args                []interface{}
 	query               string
 	bindVar             int
 	placeHolderPosition int
 	err                 error
+	cacheConfig         CacheConfig
 }
 
 type validateRequiredRule struct {
@@ -353,24 +378,31 @@ type validateRequiredRule struct {
 }
 
 func (v *validateRequiredRule) Validate(value interface{}) error {
-	var val string
 	var err error
+
+	checkValue := func(val string) error {
+		val = strings.TrimSpace(val)
+
+		if len(val) == 0 {
+			return ErrRequiredValidator
+		}
+
+		return nil
+	}
 
 	if isNilValue(value) {
 		return ErrRequiredValidator
 	}
 
-	if val, err = getStringFromValue(value); err != nil {
-		return err
+	switch value.(type) {
+	case string:
+		err = checkValue(value.(string))
+	case *string:
+		temp := value.(*string)
+		err = checkValue(*temp)
 	}
 
-	val = strings.TrimSpace(val)
-
-	if len(val) == 0 {
-		return validation.NewInternalError(ErrRequiredValidator)
-	}
-
-	return nil
+	return err
 }
 
 func (v *validateRequiredRule) Error(message string) *validateRequiredRule {
@@ -427,11 +459,7 @@ func (v *validateDateRule) Validate(value interface{}) error {
 		err = validation.NewInternalError(ErrFutureAndPastDateInternal)
 	}
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (v *validateDateRule) Error(message string) *validateDateRule {
@@ -463,7 +491,7 @@ type validateExistsRule struct {
 }
 
 func (v *validateExistsRule) Validate(value interface{}) error {
-	return checkCacheIfExists(v.validator, value, true)
+	return checkIfExists(v.validator, value, true)
 }
 
 func (v *validateExistsRule) Error(message string) *validateExistsRule {
@@ -483,7 +511,7 @@ func (v *validateUniquenessRule) Validate(value interface{}) error {
 		return nil
 	}
 
-	return checkCacheIfExists(v.validator, value, false)
+	return checkIfExists(v.validator, value, false)
 }
 
 func (v *validateUniquenessRule) Error(message string) *validateUniquenessRule {
@@ -569,17 +597,19 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		return nil
 	}
 
-	if v.cacheConfig != nil {
-		var validID bool
+	if v.cacheConfig.Cache != nil {
+		//var validID bool
 		var singleID bool
 		var cacheBytes []byte
 
 		if !isSlice {
 			singleID = true
-			validID, err = v.cacheConfig.Cache.HasKey(v.cacheConfig.Key)
+			// validID, err = v.cacheConfig.Cache.HasKey(v.cacheConfig.Key)
 		} else {
-			cacheBytes, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
+			// cacheBytes, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
 		}
+
+		cacheBytes, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
 
 		if err != nil {
 			if err == ErrCacheNil {
@@ -590,11 +620,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 				err = queryFunc()
 			}
 		} else {
-			if singleID {
-				if !validID {
-					err = v.err
-				}
-			} else {
+			if !singleID {
 				var cacheIDs []interface{}
 				err = json.Unmarshal(cacheBytes, &cacheIDs)
 
@@ -616,6 +642,33 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 					err = v.err
 				}
 			}
+
+			// if singleID {
+			// 	if !validID {
+			// 		err = v.err
+			// 	}
+			// } else {
+			// 	var cacheIDs []interface{}
+			// 	err = json.Unmarshal(cacheBytes, &cacheIDs)
+
+			// 	if err != nil {
+			// 		return validation.NewInternalError(err)
+			// 	}
+
+			// 	count := 0
+
+			// 	for _, v := range ids {
+			// 		for _, t := range cacheIDs {
+			// 			if v == t {
+			// 				count++
+			// 			}
+			// 		}
+			// 	}
+
+			// 	if count != len(ids) {
+			// 		err = v.err
+			// 	}
+			// }
 		}
 	} else {
 		err = queryFunc()
@@ -633,16 +686,15 @@ func (v *validateIDsRule) Error(message string) *validateIDsRule {
 //----------------------- FUNCTIONS -------------------------
 //////////////////////////////////////////////////////////////////
 
-func StandardizeSpaces(s string) string {
-	return strings.Join(strings.Fields(s), " ")
-}
+// func StandardizeSpaces(s string) string {
+// 	return strings.Join(strings.Fields(s), " ")
+// }
 
 // HasFormErrors determines what type of form error is passed and
 // sends appropriate error message to client
 func HasFormErrors(
 	w http.ResponseWriter,
 	err error,
-	db DBInterface,
 	config FormErrorConfig,
 ) bool {
 	if err != nil {
@@ -652,11 +704,11 @@ func HasFormErrors(
 		if config.InvalidHTTPStatus == nil {
 			config.InvalidHTTPStatus = &invalidStatus
 		}
-		if config.ServerErrorResponse.HTTPStatus == nil {
-			config.ServerErrorResponse.HTTPStatus = &serverError
+		if config.ServerErrorConfig.ServerErrorConf.HTTPStatus == nil {
+			config.ServerErrorConfig.ServerErrorConf.HTTPStatus = &serverError
 		}
-		if config.ServerErrorResponse.HTTPResponse == nil {
-			config.ServerErrorResponse.HTTPResponse = []byte(ErrServer.Error())
+		if config.ServerErrorConfig.ServerErrorConf.HTTPResponse == nil {
+			config.ServerErrorConfig.ServerErrorConf.HTTPResponse = []byte(ErrServer.Error())
 		}
 
 		switch err {
@@ -672,8 +724,8 @@ func HasFormErrors(
 				jsonString, _ := json.Marshal(payload)
 				w.Write(jsonString)
 			} else {
-				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-				w.Write(config.ServerErrorResponse.HTTPResponse)
+				w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
+				w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
 			}
 		}
 
@@ -697,11 +749,11 @@ func GetFormSelections(
 
 	defaultStatus := 500
 
-	if config.ServerErrorResponse.HTTPStatus == nil {
-		config.ServerErrorResponse.HTTPStatus = &defaultStatus
+	if config.ServerErrorConf.HTTPStatus == nil {
+		config.ServerErrorConfig.ServerErrorConf.HTTPStatus = &defaultStatus
 	}
-	if config.ServerErrorResponse.HTTPResponse == nil {
-		config.ServerErrorResponse.HTTPResponse = []byte(ErrServer.Error())
+	if config.ServerErrorConf.HTTPResponse == nil {
+		config.ServerErrorConfig.ServerErrorConf.HTTPResponse = []byte(ErrServer.Error())
 	}
 
 	getFormSelectionsFromDB := func() ([]FormSelection, error) {
@@ -713,10 +765,18 @@ func GetFormSelections(
 
 		rower, err := db.Query(query, args...)
 
-		if err = config.RecoverDB(err); err != nil {
-			w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-			w.Write(config.ServerErrorResponse.HTTPResponse)
-			return nil, err
+		if err != nil {
+			if config.RecoverDB != nil {
+				if err = config.RecoverDB(err); err != nil {
+					w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
+					w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
+					return nil, err
+				}
+			} else {
+				w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
+				w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
+				return nil, err
+			}
 		}
 
 		forms := make([]FormSelection, 0)
@@ -748,8 +808,8 @@ func GetFormSelections(
 			return getFormSelectionsFromDB()
 		}
 
-		w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-		w.Write(config.ServerErrorResponse.HTTPResponse)
+		w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
+		w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
 		return nil, err
 	}
 
@@ -767,7 +827,7 @@ func GetFormSelections(
 // to the passed struct
 //
 // The excludeMethods parameter allows user to pass certain http methods
-// that skip decoding the request body if nil
+// that skip decoding the request body if nil else will throw ErrBodyRequired error
 func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...string) error {
 	canSkip := false
 
@@ -778,12 +838,10 @@ func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...s
 		}
 	}
 
-	if req.Body != nil {
+	if req.Body != nil && req.Body != http.NoBody {
 		dec := json.NewDecoder(req.Body)
-		err := dec.Decode(&form)
 
-		if err != nil {
-			fmt.Printf(err.Error())
+		if err := dec.Decode(&form); err != nil {
 			return ErrInvalidJSON
 		}
 	} else {
@@ -795,9 +853,9 @@ func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...s
 	return nil
 }
 
-// checkCacheIfExists determines whether the passed query returns any
+// checkIfExists determines whether the passed query returns any
 // results and returns error depending on the wantExists parameter
-func checkCacheIfExists(v validator, value interface{}, wantExists bool) error {
+func checkIfExists(v validator, value interface{}, wantExists bool) error {
 	var filler interface{}
 	var err error
 	var q string
@@ -839,8 +897,8 @@ func checkCacheIfExists(v validator, value interface{}, wantExists bool) error {
 		return nil
 	}
 
-	if v.cacheConfig != nil {
-		exists, err := v.cacheConfig.Cache.HasKey(v.cacheConfig.Key)
+	if v.cacheConfig.Cache != nil {
+		_, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
 
 		if err != nil {
 			if err != ErrCacheNil {
@@ -855,14 +913,8 @@ func checkCacheIfExists(v validator, value interface{}, wantExists bool) error {
 				}
 			}
 		} else {
-			if wantExists {
-				if !exists {
-					return v.err
-				}
-			} else {
-				if exists {
-					return v.err
-				}
+			if !wantExists {
+				return v.err
 			}
 		}
 	}

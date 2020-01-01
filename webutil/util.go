@@ -6,11 +6,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ErrorResponse is a generic config struct to use
+// ServerErrorConfig is a generic config struct to use
 // with various functions to give default responses if error occurs
-type ErrorResponse struct {
-	ClientErrorConf HTTPResponseConfig
-
+type ServerErrorConfig struct {
+	// ServerErrorConf is used to give response header and text
+	// of when a server error occurs
 	ServerErrorConf HTTPResponseConfig
 
 	// RecoverDB is optional parameter used to try to recover
@@ -18,6 +18,17 @@ type ErrorResponse struct {
 	//
 	// Allowed to be nil
 	RecoverDB RecoverDB
+}
+
+// ServerAndClientErrorConfig is wrapper struct for ServerErrorConfig
+// with extra config field for setting response if error is
+// a client error
+type ServerAndClientErrorConfig struct {
+	ServerErrorConfig
+
+	// ClientErrorConf is used to give response header and text
+	// of when a client error occurs
+	ClientErrorConf HTTPResponseConfig
 }
 
 // CheckError simply prints given error in verbose to stdout

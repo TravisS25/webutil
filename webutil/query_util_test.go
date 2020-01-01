@@ -422,11 +422,7 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
 	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
 
-	matcher := sqlmock.QueryMatcherFunc(func(expectedSQL, actualSQL string) error {
-		return nil
-	})
-
-	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(matcher))
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
 
 	if err != nil {
 		t.Fatalf("fatal err: %s\n", err.Error())
@@ -1294,7 +1290,7 @@ func TestSetRowerResultsUnitTest(t *testing.T) {
 func TestHasFilterErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	err := errors.New("error")
-	conf := ErrorResponse{}
+	conf := ServerAndClientErrorConfig{}
 
 	if HasFilterOrServerError(rr, nil, conf) {
 		t.Errorf("should not have error\n")

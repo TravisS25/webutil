@@ -1,0 +1,406 @@
+package webutil
+
+import (
+	"bytes"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	validation "github.com/go-ozzo/ozzo-validation"
+	gomock "github.com/golang/mock/gomock"
+	"github.com/jmoiron/sqlx"
+	pkgerrors "github.com/pkg/errors"
+)
+
+func TestValidateRequiredRuleUnitTest(t *testing.T) {
+	var err error
+
+	rule := &validateRequiredRule{err: ErrRequiredValidator}
+
+	if err = rule.Validate(nil); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err != ErrRequiredValidator {
+			t.Errorf("should have returned required error\n")
+		}
+	}
+
+	if err = rule.Validate(""); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err != ErrRequiredValidator {
+			t.Errorf("should have ErrRequiredValidator error\n")
+		}
+	}
+
+	strVal := "val"
+
+	if err = rule.Validate(strVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	if err = rule.Validate(&strVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+}
+
+func TestValidateDateRuleUnitTest(t *testing.T) {
+	var err error
+
+	futureDateStr := time.Now().AddDate(0, 0, 1).Format(DateTimeLayout)
+	pastDateStr := time.Now().AddDate(0, 0, -1).Format(DateTimeLayout)
+	rule := &validateDateRule{timezone: "invalid"}
+
+	if err = rule.Validate(nil); err != nil {
+		t.Errorf("should not have error\n")
+	}
+
+	if err = rule.Validate(""); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	if err = rule.Validate("invalid"); err == nil {
+		t.Errorf("should have error\n")
+	}
+
+	rule.timezone = ""
+
+	if err = rule.Validate("invalid"); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if pkgerrors.Cause(err) != ErrInvalidFormatValidator {
+			t.Errorf("should have ErrInvalidFormatValidator error\n")
+		}
+	}
+
+	rule.layout = DateTimeLayout
+
+	if err = rule.Validate(pastDateStr); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if pkgerrors.Cause(err).Error() != ErrFutureAndPastDateInternal.Error() {
+			t.Errorf("should have ErrFutureAndPastDateInternal error\n")
+			t.Errorf("got err: %s\n", pkgerrors.Cause(err))
+		}
+	}
+
+	rule.canBeFuture = true
+	rule.canBePast = true
+
+	if err = rule.Validate(pastDateStr); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	rule.canBePast = false
+
+	if err = rule.Validate(pastDateStr); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err != ErrInvalidPastDateValidator {
+			t.Errorf("should have ErrInvalidPastDateValidator error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	rule.canBePast = true
+	rule.canBeFuture = false
+
+	if err = rule.Validate(futureDateStr); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err != ErrInvalidFutureDateValidator {
+			t.Errorf("should have ErrInvalidFutureDateValidator error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+}
+
+func TestCheckIfExistsUnitTest(t *testing.T) {
+	var err error
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+	if err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
+
+	mockCacheStore := NewMockCacheStore(mockCtrl)
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return([]byte("foo"), nil)
+
+	rule := validator{
+		querier: db,
+		cacheConfig: CacheConfig{
+			Cache:          mockCacheStore,
+			IgnoreCacheNil: true,
+		},
+		args: []interface{}{1},
+		err:  ErrDoesNotExistValidator,
+	}
+
+	if err = checkIfExists(rule, "foo", false); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err != ErrDoesNotExistValidator {
+			t.Errorf("should have ErrDoesNotExistValidator error\n")
+		}
+	}
+
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
+	mock.ExpectQuery("select").WillReturnError(ErrServer)
+
+	if err = checkIfExists(rule, "foo", false); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != ErrServer.Error() {
+			t.Errorf("should have ErrServer error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
+	mock.ExpectQuery("select").WillReturnError(sql.ErrNoRows)
+
+	if err = checkIfExists(rule, "foo", true); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != ErrDoesNotExistValidator.Error() {
+			t.Errorf("should have ErrServer error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
+	mock.ExpectQuery("select").WillReturnError(ErrServer)
+
+	if err = checkIfExists(rule, "foo", true); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != ErrServer.Error() {
+			t.Errorf("should have ErrServer error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrServer)
+	mock.ExpectQuery("select").WillReturnError(ErrServer)
+
+	if err = checkIfExists(rule, "foo", true); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != ErrServer.Error() {
+			t.Errorf("should have ErrServer error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+}
+
+func TestHasFormErrorsUnitTest(t *testing.T) {
+	rr := httptest.NewRecorder()
+
+	if !HasFormErrors(rr, ErrBodyRequired, FormErrorConfig{}) {
+		t.Errorf("should have form error\n")
+	}
+	if rr.Result().StatusCode != http.StatusNotAcceptable {
+		t.Errorf("returned status should be 406\n")
+	}
+
+	buf := &bytes.Buffer{}
+	buf.ReadFrom(rr.Result().Body)
+	rr.Result().Body.Close()
+
+	if buf.String() != ErrBodyRequired.Error() {
+		t.Errorf("error response should be %s\n", ErrBodyRequired.Error())
+	}
+	if rr.Result().StatusCode != http.StatusNotAcceptable {
+		t.Errorf("returned status should be 406\n")
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	HasFormErrors(rr, ErrInvalidJSON, FormErrorConfig{})
+	buf.ReadFrom(rr.Result().Body)
+	rr.Result().Body.Close()
+
+	if buf.String() != ErrInvalidJSON.Error() {
+		t.Errorf("error response should be %s\n", ErrInvalidJSON.Error())
+	}
+	if rr.Result().StatusCode != http.StatusNotAcceptable {
+		t.Errorf("returned status should be 406\n")
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	vErr := validation.Errors{
+		"id": errors.New("field error"),
+	}
+
+	HasFormErrors(rr, vErr, FormErrorConfig{})
+	buf.ReadFrom(rr.Result().Body)
+	rr.Result().Body.Close()
+
+	vBytes, err := json.Marshal(vErr)
+
+	if err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	if buf.String() != string(vBytes) {
+		t.Errorf("error response should be %s\n", string(vBytes))
+		t.Errorf("err: %s\n", string(vBytes))
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	HasFormErrors(rr, errors.New("errors"), FormErrorConfig{})
+	buf.ReadFrom(rr.Result().Body)
+
+	if rr.Result().StatusCode != http.StatusInternalServerError {
+		t.Errorf("returned status should be 500\n")
+	}
+	if buf.String() != ErrServer.Error() {
+		t.Errorf("error response should be %s\n", ErrServer.Error())
+		t.Errorf("err: %s\n", buf.String())
+	}
+}
+
+func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
+	var err error
+
+	type foo struct {
+		ID   int64
+		Name string
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/url", nil)
+	exMethods := []string{http.MethodPost}
+
+	f := foo{}
+
+	if err = CheckBodyAndDecode(req, f); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != ErrBodyRequired.Error() {
+			t.Errorf("should have ErrBodyRequired error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	if err = CheckBodyAndDecode(req, f, exMethods...); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	buf := &bytes.Buffer{}
+	req = httptest.NewRequest(http.MethodPost, "/url", buf)
+
+	if err = CheckBodyAndDecode(req, errors.New("error")); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != ErrInvalidJSON.Error() {
+			t.Errorf("should have ErrInvalidJSON error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+}
+
+func TestGetFormSelectionsUnitTest(t *testing.T) {
+	var err error
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	rr := httptest.NewRecorder()
+	buf := &bytes.Buffer{}
+	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+	if err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
+
+	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
+	config := FormSelectionConfig{
+		ServerErrorConfig: ServerErrorConfig{
+			RecoverDB: func(err error) error {
+				return ErrServer
+			},
+		},
+	}
+
+	if _, err = GetFormSelections(
+		rr,
+		config,
+		db,
+		sqlx.DOLLAR,
+		"",
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		buf.ReadFrom(rr.Result().Body)
+		if rr.Result().StatusCode != http.StatusInternalServerError {
+			t.Errorf("should have 500 error\n")
+		}
+		if buf.String() != ErrServer.Error() {
+			t.Errorf("should have ErrServer error\n")
+		}
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	config.ServerErrorConfig.RecoverDB = nil
+	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
+
+	if _, err = GetFormSelections(
+		rr,
+		config,
+		db,
+		sqlx.DOLLAR,
+		"",
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		buf.ReadFrom(rr.Result().Body)
+		if rr.Result().StatusCode != http.StatusInternalServerError {
+			t.Errorf("should have 500 error\n")
+		}
+		if buf.String() != ErrServer.Error() {
+			t.Errorf("should have ErrServer error\n")
+		}
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	rows := sqlmock.NewRows([]string{"value", "text"}).
+		AddRow(1, "foo").
+		AddRow(2, "bar")
+	mockDB.ExpectQuery("").WillReturnRows(rows)
+
+	if _, err = GetFormSelections(
+		rr,
+		config,
+		db,
+		sqlx.DOLLAR,
+		"",
+	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	config.CacheConfig.IgnoreCacheNil = true
+	mockCacheStore := NewMockCacheStore(mockCtrl)
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrServer)
+
+}
