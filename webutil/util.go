@@ -1,17 +1,11 @@
 package webutil
 
-import (
-	"fmt"
-
-	"github.com/pkg/errors"
-)
-
 // ServerErrorConfig is a generic config struct to use
 // with various functions to give default responses if error occurs
 type ServerErrorConfig struct {
-	// ServerErrorConf is used to give response header and text
+	// ServerErrorResponse is used to give response header and text
 	// of when a server error occurs
-	ServerErrorConf HTTPResponseConfig
+	ServerErrorResponse HTTPResponseConfig
 
 	// RecoverDB is optional parameter used to try to recover
 	// from error if one occurs
@@ -26,16 +20,16 @@ type ServerErrorConfig struct {
 type ServerAndClientErrorConfig struct {
 	ServerErrorConfig
 
-	// ClientErrorConf is used to give response header and text
+	// ClientErrorResponse is used to give response header and text
 	// of when a client error occurs
-	ClientErrorConf HTTPResponseConfig
+	ClientErrorResponse HTTPResponseConfig
 }
 
-// CheckError simply prints given error in verbose to stdout
-func CheckError(err error, customMessage string) {
-	err = errors.Wrap(err, customMessage)
-	fmt.Printf("%+v\n", err)
-}
+// // CheckError simply prints given error in verbose to stdout
+// func CheckError(err error, customMessage string) {
+// 	err = errors.Wrap(err, customMessage)
+// 	fmt.Printf("%+v\n", err)
+// }
 
 // InsertAt is util function to insert passed value into passed slice
 // at passed index

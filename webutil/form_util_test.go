@@ -122,6 +122,17 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 			t.Errorf("err: %s\n", err.Error())
 		}
 	}
+
+	rule.canBePast = false
+
+	if err = rule.Validate(futureDateStr); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if pkgerrors.Cause(err).Error() != ErrFutureAndPastDateInternal.Error() {
+			t.Errorf("should have ErrFutureAndPastDateInternal error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
 }
 
 func TestCheckIfExistsUnitTest(t *testing.T) {
@@ -209,7 +220,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 func TestHasFormErrorsUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 
-	if !HasFormErrors(rr, ErrBodyRequired, FormErrorConfig{}) {
+	if !HasFormErrors(rr, ErrBodyRequired, ServerAndClientErrorConfig{}) {
 		t.Errorf("should have form error\n")
 	}
 	if rr.Result().StatusCode != http.StatusNotAcceptable {
@@ -229,7 +240,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, ErrInvalidJSON, FormErrorConfig{})
+	HasFormErrors(rr, ErrInvalidJSON, ServerAndClientErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
@@ -246,7 +257,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 		"id": errors.New("field error"),
 	}
 
-	HasFormErrors(rr, vErr, FormErrorConfig{})
+	HasFormErrors(rr, vErr, ServerAndClientErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
@@ -263,7 +274,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, errors.New("errors"), FormErrorConfig{})
+	HasFormErrors(rr, errors.New("errors"), ServerAndClientErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 
 	if rr.Result().StatusCode != http.StatusInternalServerError {
@@ -399,8 +410,82 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	config.CacheConfig.IgnoreCacheNil = true
 	mockCacheStore := NewMockCacheStore(mockCtrl)
+	config.CacheConfig.Cache = mockCacheStore
 	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrServer)
+	mockDB.ExpectQuery("").WillReturnRows(rows)
 
+	if _, err = GetFormSelections(
+		rr,
+		config,
+		db,
+		sqlx.DOLLAR,
+		"",
+	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	config.CacheConfig.IgnoreCacheNil = true
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
+	mockDB.ExpectQuery("").WillReturnRows(rows)
+
+	if _, err = GetFormSelections(
+		rr,
+		config,
+		db,
+		sqlx.DOLLAR,
+		"",
+	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	config.CacheConfig.IgnoreCacheNil = false
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
+
+	if _, err = GetFormSelections(
+		rr,
+		config,
+		db,
+		sqlx.DOLLAR,
+		"",
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if rr.Result().StatusCode != http.StatusInternalServerError {
+			t.Errorf("should have StatusInternalServerError error\n")
+		}
+	}
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	form := []FormSelection{
+		{
+			Value: 1, Text: "foo",
+		},
+	}
+
+	formBytes, err := json.Marshal(&form)
+
+	if err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	mockCacheStore.EXPECT().Get(gomock.Any()).Return(formBytes, nil)
+
+	if _, err = GetFormSelections(
+		rr,
+		config,
+		db,
+		sqlx.DOLLAR,
+		"",
+	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
 }

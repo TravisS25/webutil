@@ -1,9 +1,7 @@
 package webutil
 
 import (
-	"bytes"
 	"context"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,7 +13,8 @@ import (
 )
 
 const (
-	cookieName = "user"
+	cookieName   = "user"
+	statusErrTxt = "Status should be %d; got %d"
 )
 
 var (
@@ -102,22 +101,22 @@ func TestGetMiddlewareUserUnitTest(t *testing.T) {
 	}
 }
 
-func TestHasBodyErrorUnitTest(t *testing.T) {
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/url", nil)
+// func TestHasBodyErrorUnitTest(t *testing.T) {
+// 	rr := httptest.NewRecorder()
+// 	req := httptest.NewRequest(http.MethodGet, "/url", nil)
 
-	if !HasBodyError(rr, req, HTTPResponseConfig{}) {
-		t.Fatalf("should have body error\n")
-	}
+// 	if !HasBodyError(rr, req, HTTPResponseConfig{}) {
+// 		t.Fatalf("should have body error\n")
+// 	}
 
-	buf := &bytes.Buffer{}
-	r := ioutil.NopCloser(buf)
-	req.Body = r
+// 	buf := &bytes.Buffer{}
+// 	r := ioutil.NopCloser(buf)
+// 	req.Body = r
 
-	if HasBodyError(rr, req, HTTPResponseConfig{}) {
-		t.Fatalf("should not have body error\n")
-	}
-}
+// 	if HasBodyError(rr, req, HTTPResponseConfig{}) {
+// 		t.Fatalf("should not have body error\n")
+// 	}
+// }
 
 func TestSendPayloadUnitTest(t *testing.T) {
 	var err error

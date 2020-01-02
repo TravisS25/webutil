@@ -123,16 +123,14 @@ type RequestValidator interface {
 // FormSelectionConfig is config struct used for GetFormSelections function
 type FormSelectionConfig struct {
 	ServerErrorConfig
-	CacheConfig CacheConfig
-	// RecoverDB           RecoverDB
-	// ServerErrorResponse HTTPResponseConfig
+	CacheConfig
 }
 
 // FormErrorConfig is config struct used for HasFormErrors function
-type FormErrorConfig struct {
-	ServerErrorConfig
-	InvalidHTTPStatus *int
-}
+// type FormErrorConfig struct {
+// 	ServerErrorConfig
+// 	InvalidHTTPStatus *int
+// }
 
 //////////////////////////////////////////////////////////////////
 //------------------------- STRUCTS ---------------------------
@@ -323,7 +321,6 @@ func (f *FormValidation) ValidateUniqueness(
 // ValidateExists determines whether passed field exists
 // within database or cache if set
 func (f *FormValidation) ValidateExists(
-	querier Querier,
 	cacheConfig CacheConfig,
 	placeHolderPosition,
 	bindVar int,
@@ -332,7 +329,7 @@ func (f *FormValidation) ValidateExists(
 ) *validateExistsRule {
 	return &validateExistsRule{
 		validator: validator{
-			querier:             querier,
+			querier:             f.entity,
 			cacheConfig:         cacheConfig,
 			placeHolderPosition: placeHolderPosition,
 			bindVar:             bindVar,
@@ -695,37 +692,33 @@ func (v *validateIDsRule) Error(message string) *validateIDsRule {
 func HasFormErrors(
 	w http.ResponseWriter,
 	err error,
-	config FormErrorConfig,
+	config ServerAndClientErrorConfig,
 ) bool {
 	if err != nil {
-		invalidStatus := 406
-		serverError := 500
-
-		if config.InvalidHTTPStatus == nil {
-			config.InvalidHTTPStatus = &invalidStatus
-		}
-		if config.ServerErrorConfig.ServerErrorConf.HTTPStatus == nil {
-			config.ServerErrorConfig.ServerErrorConf.HTTPStatus = &serverError
-		}
-		if config.ServerErrorConfig.ServerErrorConf.HTTPResponse == nil {
-			config.ServerErrorConfig.ServerErrorConf.HTTPResponse = []byte(ErrServer.Error())
-		}
+		SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(ErrServer.Error()))
+		SetHTTPResponseDefaults(&config.ClientErrorResponse, 406, nil)
 
 		switch err {
 		case ErrBodyRequired:
-			w.WriteHeader(*config.InvalidHTTPStatus)
+			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
 			w.Write([]byte(ErrBodyRequired.Error()))
 		case ErrInvalidJSON:
-			w.WriteHeader(*config.InvalidHTTPStatus)
+			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
 			w.Write([]byte(ErrInvalidJSON.Error()))
 		default:
 			if payload, ok := err.(validation.Errors); ok {
-				w.WriteHeader(*config.InvalidHTTPStatus)
+				w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
 				jsonString, _ := json.Marshal(payload)
 				w.Write(jsonString)
 			} else {
-				w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
-				w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
+				if config.RecoverDB != nil {
+					if err = config.RecoverDB(err); err == nil {
+						return false
+					}
+				}
+
+				w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
+				w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
 			}
 		}
 
@@ -749,17 +742,16 @@ func GetFormSelections(
 
 	defaultStatus := 500
 
-	if config.ServerErrorConf.HTTPStatus == nil {
-		config.ServerErrorConfig.ServerErrorConf.HTTPStatus = &defaultStatus
+	if config.ServerErrorResponse.HTTPStatus == nil {
+		config.ServerErrorConfig.ServerErrorResponse.HTTPStatus = &defaultStatus
 	}
-	if config.ServerErrorConf.HTTPResponse == nil {
-		config.ServerErrorConfig.ServerErrorConf.HTTPResponse = []byte(ErrServer.Error())
+	if config.ServerErrorResponse.HTTPResponse == nil {
+		config.ServerErrorConfig.ServerErrorResponse.HTTPResponse = []byte(ErrServer.Error())
 	}
 
 	getFormSelectionsFromDB := func() ([]FormSelection, error) {
-		query, args, err = InQueryRebind(bindVar, query, args...)
-
-		if HasServerError(w, err, "") {
+		if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
+			http.Error(w, ErrServer.Error(), http.StatusInternalServerError)
 			return nil, err
 		}
 
@@ -768,13 +760,13 @@ func GetFormSelections(
 		if err != nil {
 			if config.RecoverDB != nil {
 				if err = config.RecoverDB(err); err != nil {
-					w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
-					w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
+					w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
+					w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
 					return nil, err
 				}
 			} else {
-				w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
-				w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
+				w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
+				w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
 				return nil, err
 			}
 		}
@@ -808,15 +800,14 @@ func GetFormSelections(
 			return getFormSelectionsFromDB()
 		}
 
-		w.WriteHeader(*config.ServerErrorConfig.ServerErrorConf.HTTPStatus)
-		w.Write(config.ServerErrorConfig.ServerErrorConf.HTTPResponse)
+		w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
+		w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
 		return nil, err
 	}
 
 	forms := make([]FormSelection, 0)
-	err = json.Unmarshal(jsonBytes, &forms)
-
-	if HasServerError(w, err, "") {
+	if err = json.Unmarshal(jsonBytes, &forms); err != nil {
+		http.Error(w, ErrServer.Error(), http.StatusInternalServerError)
 		return nil, err
 	}
 

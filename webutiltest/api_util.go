@@ -834,7 +834,7 @@ func LoginUser(url string, loginForm interface{}) (string, error) {
 
 	token := res.Header.Get(webutil.TokenHeader)
 	csrf := res.Header.Get(webutil.SetCookieHeader)
-	buffer := webutil.GetJSONBuffer(loginForm)
+	buffer, _ := webutil.GetJSONBuffer(loginForm)
 	req, err = http.NewRequest(http.MethodPost, url, &buffer)
 
 	if err != nil {

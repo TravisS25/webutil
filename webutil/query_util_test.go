@@ -1296,7 +1296,9 @@ func TestHasFilterErrorUnitTest(t *testing.T) {
 		t.Errorf("should not have error\n")
 	}
 
-	filterErr := &FilterError{}
+	filterErr := &FilterError{
+		queryError: &queryError{},
+	}
 	rr = httptest.NewRecorder()
 
 	if !HasFilterOrServerError(rr, filterErr, conf) {

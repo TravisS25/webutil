@@ -170,21 +170,6 @@ type Count struct {
 	Total int `json:"total"`
 }
 
-// DBErrorConfig is config struct used for DBError functions
-type DBErrorConfig struct {
-	// RecoverDB is func used to try to recover from a database failure
-	// This is meant distrubted databases like CockroachDB
-	//
-	// Allowed to be nil
-	RecoverDB RecoverDB
-
-	// NotFoundResponse is response set if err is "sql.ErrNoRows"
-	NotFoundResponse HTTPResponseConfig
-
-	// ServerErrorResponse is used for all other errors
-	ServerErrorResponse HTTPResponseConfig
-}
-
 //////////////////////////////////////////////////////////////////
 //-------------------------- STRUCTS ---------------------------
 //////////////////////////////////////////////////////////////////
@@ -295,7 +280,7 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*DB, error) {
 // back to client depending on settings set in config
 func HasDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	SetHTTPResponseDefaults(
-		&config.ServerErrorConf,
+		&config.ServerErrorResponse,
 		http.StatusInternalServerError,
 		[]byte(ErrServer.Error()),
 	)
@@ -311,8 +296,8 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerAndClient
 	defaultDBErrors(&config)
 
 	if err == sql.ErrNoRows {
-		w.WriteHeader(*config.ClientErrorConf.HTTPStatus)
-		w.Write(config.ClientErrorConf.HTTPResponse)
+		w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
+		w.Write(config.ClientErrorResponse.HTTPResponse)
 		return true
 	}
 
@@ -327,9 +312,9 @@ func QueryCount(db SqlxDB, query string, args ...interface{}) (*Count, error) {
 }
 
 func defaultDBErrors(config *ServerAndClientErrorConfig) {
-	SetHTTPResponseDefaults(&config.ClientErrorConf, http.StatusNotFound, []byte("Not Found"))
+	SetHTTPResponseDefaults(&config.ClientErrorResponse, http.StatusNotFound, []byte("Not Found"))
 	SetHTTPResponseDefaults(
-		&config.ServerErrorConf,
+		&config.ServerErrorResponse,
 		http.StatusInternalServerError,
 		[]byte(ErrServer.Error()),
 	)
@@ -339,8 +324,8 @@ func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
 			if err = config.RecoverDB(err); err != nil {
-				w.WriteHeader(*config.ServerErrorConf.HTTPStatus)
-				w.Write(config.ServerErrorConf.HTTPResponse)
+				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
+				w.Write(config.ServerErrorResponse.HTTPResponse)
 				return true
 			}
 		} else {

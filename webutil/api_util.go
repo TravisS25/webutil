@@ -1,17 +1,22 @@
 package webutil
 
+//go:generate mockgen -source=api_util.go -destination=../webutilmock/api_util_mock.go -package=webutilmock
+//go:generate mockgen -source=api_util.go -destination=api_util_mock_test.go -package=webutil
+
 import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"github.com/pkg/errors"
-	"github.com/urfave/negroni"
 )
+
+//////////////////////////////////////////////////////////////////
+//-------------------------- CONSTS ---------------------------
+//////////////////////////////////////////////////////////////////
 
 const (
 	// TokenHeader is key string for "X-CSRF-TOKEN" header
@@ -50,48 +55,63 @@ const (
 	ContentTypePNG = "image/png"
 )
 
-var (
-	// NonSafeOperations is slice of http methods that are not safe
-	NonSafeOperations = []string{http.MethodPost, http.MethodPut, http.MethodDelete}
+//////////////////////////////////////////////////////////////////
+//---------------------- CUSTOM ERRORS ------------------------
+//////////////////////////////////////////////////////////////////
 
+var (
 	// ErrBodyRequired is used for when a post/put request does not contain a body in request
-	ErrBodyRequired = errors.New("request must have body")
+	ErrBodyRequired = errors.New("webutil: request must have body")
 
 	// ErrInvalidJSON is used when there is an error unmarshalling a struct
-	ErrInvalidJSON = errors.New("invalid json")
+	ErrInvalidJSON = errors.New("webutil: invalid json")
 
 	// ErrServer is used when there is a server error
-	ErrServer = errors.New("server error, please try again later")
+	ErrServer = errors.New("webutil: server error, please try again later")
 )
+
+//////////////////////////////////////////////////////////////////
+//------------------------ INTERFACES --------------------------
+//////////////////////////////////////////////////////////////////
+
+// CookieError is wrapper interface for securecookie.Error
+// to be able to generate mocks
+type cookieError interface {
+	securecookie.Error
+}
+
+//////////////////////////////////////////////////////////////////
+//------------------------- FUNCTIONS --------------------------
+//////////////////////////////////////////////////////////////////
 
 // SetToken is wrapper function for setting csrf token header
 func SetToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(TokenHeader, csrf.Token(r))
 }
 
-// ServerError takes given err along with customMessage and writes back to client
-// then logs the error given the logFile
-func ServerError(w http.ResponseWriter, err error, customMessage string) {
-	w.WriteHeader(http.StatusInternalServerError)
+// // ServerError takes given err along with customMessage and writes back to client
+// // then logs the error given the logFile
+// func ServerError(w http.ResponseWriter, err error, customMessage string) {
+// 	w.WriteHeader(http.StatusInternalServerError)
 
-	if customMessage != "" {
-		w.Write([]byte(customMessage))
-	} else {
-		w.Write([]byte(ErrServer.Error()))
-	}
-}
+// 	if customMessage != "" {
+// 		w.Write([]byte(customMessage))
+// 	} else {
+// 		w.Write([]byte(ErrServer.Error()))
+// 	}
+// }
 
-// HasServerError is wrapper for ServerError that returns if error passed
-// is nil or not.  Point of function is simply to reduce code lines by
-// a caller function
-func HasServerError(w http.ResponseWriter, err error, customMessage string) bool {
-	if err != nil {
-		ServerError(w, err, customMessage)
-		return true
-	}
+// // HasServerError is wrapper for ServerError that returns if error passed
+// // is nil or not.  Point of function is simply to reduce code lines by
+// // a caller function
+// func HasServerError(w http.ResponseWriter, err error, customMessage string) bool {
+// 	if err != nil {
+// 		ServerError(w, err, customMessage)
+// 		return true
+// 	}
 
-	return false
-}
+// 	return false
+// }
 
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
@@ -127,20 +147,20 @@ func GetMiddlewareUser(r *http.Request) *middlewareUser {
 	return r.Context().Value(MiddlewareUserCtxKey).(*middlewareUser)
 }
 
-// HasBodyError checks if the "Body" field of the request parameter is nil or not
-// If nil, we write to client with error message, 406 status and return true
-// Else return false
-func HasBodyError(w http.ResponseWriter, r *http.Request, bodyRespConfig HTTPResponseConfig) bool {
-	SetHTTPResponseDefaults(&bodyRespConfig, http.StatusNotAcceptable, []byte(ErrBodyRequired.Error()))
+// // HasBodyError checks if the "Body" field of the request parameter is nil or not
+// // If nil, we write to client with error message, 406 status and return true
+// // Else return false
+// func HasBodyError(w http.ResponseWriter, r *http.Request, bodyRespConfig HTTPResponseConfig) bool {
+// 	SetHTTPResponseDefaults(&bodyRespConfig, http.StatusNotAcceptable, []byte(ErrBodyRequired.Error()))
 
-	if r.Body == nil || r.Body == http.NoBody {
-		w.WriteHeader(*bodyRespConfig.HTTPStatus)
-		w.Write(bodyRespConfig.HTTPResponse)
-		return true
-	}
+// 	if r.Body == nil || r.Body == http.NoBody {
+// 		w.WriteHeader(*bodyRespConfig.HTTPStatus)
+// 		w.Write(bodyRespConfig.HTTPResponse)
+// 		return true
+// 	}
 
-	return false
-}
+// 	return false
+// }
 
 // LogoutUser deletes user session based on session object passed along with userSession parameter
 // If userSession is empty string, then string "user" will be used to delete from session object
@@ -212,46 +232,46 @@ func HasGroup(r *http.Request, searchGroups ...string) bool {
 // 		to only display that library(s) in the message.  This is just
 //		to help reduce the clutter of a stacktrace that you don't
 //		care about
-func PanicHandlerFunc(to []string, from, subject string, subSearchStrings []string, mail SendMessage) func(*negroni.PanicInformation) {
-	return func(info *negroni.PanicInformation) {
-		var stack string
-		ss := strings.Fields(info.StackAsString())
+// func PanicHandlerFunc(to []string, from, subject string, subSearchStrings []string, mail SendMessage) func(*negroni.PanicInformation) {
+// 	return func(info *negroni.PanicInformation) {
+// 		var stack string
+// 		ss := strings.Fields(info.StackAsString())
 
-		if subSearchStrings == nil {
-			for _, v := range ss {
-				stack += v + "<br />"
-			}
-		} else {
-			if len(subSearchStrings) == 0 {
-				for _, v := range ss {
-					stack += v + "<br />"
-				}
-			} else {
-				for _, v := range ss {
-					for _, t := range subSearchStrings {
-						if strings.Contains(v, t) {
-							stack += v + "<br />"
-						}
-					}
-				}
-			}
-		}
+// 		if subSearchStrings == nil {
+// 			for _, v := range ss {
+// 				stack += v + "<br />"
+// 			}
+// 		} else {
+// 			if len(subSearchStrings) == 0 {
+// 				for _, v := range ss {
+// 					stack += v + "<br />"
+// 				}
+// 			} else {
+// 				for _, v := range ss {
+// 					for _, t := range subSearchStrings {
+// 						if strings.Contains(v, t) {
+// 							stack += v + "<br />"
+// 						}
+// 					}
+// 				}
+// 			}
+// 		}
 
-		html := info.RequestDescription() + "<br /><br />" + stack
-		err := SendEmail(
-			to,
-			from,
-			subject,
-			nil,
-			[]byte(html),
-			mail,
-		)
+// 		html := info.RequestDescription() + "<br /><br />" + stack
+// 		err := SendEmail(
+// 			to,
+// 			from,
+// 			subject,
+// 			nil,
+// 			[]byte(html),
+// 			mail,
+// 		)
 
-		if err != nil {
-			panic("sending mail error: " + err.Error())
-		}
-	}
-}
+// 		if err != nil {
+// 			panic("sending mail error: " + err.Error())
+// 		}
+// 	}
+// }
 
 // DecodeCookie takes in a cookie name which value should be encoded and then takes the
 // authKey and encryptKey variables passed to decode the value of the cookie
@@ -296,3 +316,11 @@ func SetSecureCookie(w http.ResponseWriter, session *sessions.Session, keyPairs 
 	http.SetCookie(w, sessions.NewCookie(session.Name(), encoded, session.Options))
 	return nil
 }
+
+// func WriteError(w http.ResponseWriter, res HTTPResponseConfig) {
+// 	http.Error(
+// 		w,
+// 		string(res.HTTPResponse),
+// 		*res.HTTPStatus,
+// 	)
+// }
