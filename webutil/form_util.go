@@ -117,22 +117,6 @@ type RequestValidator interface {
 }
 
 //////////////////////////////////////////////////////////////////
-//----------------------- CONFIG STRUCTS -----------------------
-//////////////////////////////////////////////////////////////////
-
-// FormSelectionConfig is config struct used for GetFormSelections function
-type FormSelectionConfig struct {
-	ServerErrorConfig
-	CacheConfig
-}
-
-// FormErrorConfig is config struct used for HasFormErrors function
-// type FormErrorConfig struct {
-// 	ServerErrorConfig
-// 	InvalidHTTPStatus *int
-// }
-
-//////////////////////////////////////////////////////////////////
 //------------------------- STRUCTS ---------------------------
 //////////////////////////////////////////////////////////////////
 
@@ -639,33 +623,6 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 					err = v.err
 				}
 			}
-
-			// if singleID {
-			// 	if !validID {
-			// 		err = v.err
-			// 	}
-			// } else {
-			// 	var cacheIDs []interface{}
-			// 	err = json.Unmarshal(cacheBytes, &cacheIDs)
-
-			// 	if err != nil {
-			// 		return validation.NewInternalError(err)
-			// 	}
-
-			// 	count := 0
-
-			// 	for _, v := range ids {
-			// 		for _, t := range cacheIDs {
-			// 			if v == t {
-			// 				count++
-			// 			}
-			// 		}
-			// 	}
-
-			// 	if count != len(ids) {
-			// 		err = v.err
-			// 	}
-			// }
 		}
 	} else {
 		err = queryFunc()
@@ -692,7 +649,7 @@ func (v *validateIDsRule) Error(message string) *validateIDsRule {
 func HasFormErrors(
 	w http.ResponseWriter,
 	err error,
-	config ServerAndClientErrorConfig,
+	config ServerErrorConfig,
 ) bool {
 	if err != nil {
 		SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(ErrServer.Error()))
@@ -717,8 +674,8 @@ func HasFormErrors(
 					}
 				}
 
-				w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
-				w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
+				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
+				w.Write(config.ServerErrorResponse.HTTPResponse)
 			}
 		}
 
@@ -732,7 +689,7 @@ func HasFormErrors(
 // FormSelection of result
 func GetFormSelections(
 	w http.ResponseWriter,
-	config FormSelectionConfig,
+	config ServerErrorCacheConfig,
 	db Querier,
 	bindVar int,
 	query string,
@@ -740,14 +697,7 @@ func GetFormSelections(
 ) ([]FormSelection, error) {
 	var err error
 
-	defaultStatus := 500
-
-	if config.ServerErrorResponse.HTTPStatus == nil {
-		config.ServerErrorConfig.ServerErrorResponse.HTTPStatus = &defaultStatus
-	}
-	if config.ServerErrorResponse.HTTPResponse == nil {
-		config.ServerErrorConfig.ServerErrorResponse.HTTPResponse = []byte(ErrServer.Error())
-	}
+	SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(ErrServer.Error()))
 
 	getFormSelectionsFromDB := func() ([]FormSelection, error) {
 		if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
@@ -790,7 +740,7 @@ func GetFormSelections(
 		return getFormSelectionsFromDB()
 	}
 
-	jsonBytes, err := config.CacheConfig.Cache.Get(config.CacheConfig.Key)
+	jsonBytes, err := config.CacheConfig.Cache.Get(config.Key)
 
 	if err != nil {
 		if err != ErrCacheNil {

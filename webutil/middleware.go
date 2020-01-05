@@ -49,8 +49,17 @@ var (
 	// MiddlewareUserCtxKey is variable used as context key in middleware
 	// functions to get a subset of user information of current
 	// logged in user
-	MiddlewareUserCtxKey = MiddlewareKey{KeyName: "middlewareUser"}
+	MiddlewareUserCtxKey = MiddlewareKey{KeyName: "MiddlewareUser"}
 )
+
+//////////////////////////////////////////////////////////////////
+//------------------------ INTERFACES ---------------------------
+//////////////////////////////////////////////////////////////////
+
+// type MiddlewareAuth interface {
+// 	GetID() string
+// 	GetEmail() string
+// }
 
 //////////////////////////////////////////////////////////////////
 //----------------------- CONFIG STRUCTS -----------------------
@@ -91,7 +100,7 @@ type SessionKeys struct {
 // like a different session store besides a database, these should
 // be set
 type AuthHandlerConfig struct {
-	ServerAndClientErrorConfig
+	ServerErrorConfig
 
 	// SessionStore is used to implement a backend to store sessions
 	// besides a database like file system or in-memory database
@@ -112,7 +121,7 @@ type AuthHandlerConfig struct {
 	//
 	// This is bascially a recovery method if implementing SessionStore ever
 	// goes down or some how gets its values flushed
-	QueryForSession func(w http.ResponseWriter, db Querier, userID string) (sessionID string, err error)
+	QueryForSession func(db Querier, userID string) (sessionID string, err error)
 
 	// // DecodeCookieErrResponse is config used to respond to user if decoding
 	// // a cookie is invalid
@@ -134,58 +143,58 @@ type AuthHandlerConfig struct {
 // The settings don't have to be set but if programmer wants to
 // be able to store user group information in cache instead
 // of database, this can be achieved by implementing CacheStore
-type GroupHandlerConfig struct {
-	ServerErrorConfig
+// type GroupHandlerConfig struct {
+// 	ServerErrorConfig
 
-	// CacheStore is used for retrieving results from a in-memory
-	// database like Redis
-	CacheStore CacheStore
+// 	// CacheStore is used for retrieving results from a in-memory
+// 	// database like Redis
+// 	CacheStore CacheStore
 
-	// IgnoreCacheNil will query database for group information
-	// even if cache returns nil
-	// CacheStore must be initialized to use this
-	IgnoreCacheNil bool
+// 	// IgnoreCacheNil will query database for group information
+// 	// even if cache returns nil
+// 	// CacheStore must be initialized to use this
+// 	IgnoreCacheNil bool
 
-	// // ServerErrResponse is config used to respond to user if some type
-	// // of server error occurs
-	// //
-	// // Default status value is http.StatusInternalServerError
-	// // Default response value is []byte("Server error")
-	// ServerErrResponse HTTPResponseConfig
-}
+// 	// // ServerErrResponse is config used to respond to user if some type
+// 	// // of server error occurs
+// 	// //
+// 	// // Default status value is http.StatusInternalServerError
+// 	// // Default response value is []byte("Server error")
+// 	// ServerErrResponse HTTPResponseConfig
+// }
 
 // RoutingHandlerConfig is config struct for RoutingHandler
 // These settings don't have to be set but if user wishes
 // to use caching for routing paths
-type RoutingHandlerConfig struct {
-	ServerAndClientErrorConfig
+// type RoutingHandlerConfig struct {
+// 	ServerErrorConfig
 
-	// CacheStore is used for retrieving results from a in-memory
-	// database like Redis
-	CacheStore CacheStore
+// 	// CacheStore is used for retrieving results from a in-memory
+// 	// database like Redis
+// 	CacheStore CacheStore
 
-	// IgnoreCacheNil will query database for routing information
-	// even if cache returns nil
-	// CacheStore must be initialized for this to activate
-	IgnoreCacheNil bool
+// 	// IgnoreCacheNil will query database for routing information
+// 	// even if cache returns nil
+// 	// CacheStore must be initialized for this to activate
+// 	IgnoreCacheNil bool
 
-	// // ServerErrResponse is config used to respond to user if some type
-	// // of server error occurs
-	// //
-	// // Default status value is http.StatusInternalServerError
-	// // Default response value is []byte("Server Error")
-	// ServerErrResponse HTTPResponseConfig
+// 	// // ServerErrResponse is config used to respond to user if some type
+// 	// // of server error occurs
+// 	// //
+// 	// // Default status value is http.StatusInternalServerError
+// 	// // Default response value is []byte("Server Error")
+// 	// ServerErrResponse HTTPResponseConfig
 
-	// // UnauthorizedErrResponse is config used to respond to user if none
-	// // of the nonUserURLs keys or queried urls match the apis
-	// // a user is allowed to access
-	// //
-	// // Default status value is http.StatusForbidden
-	// // Default response value is []byte("Forbidden to access url")
-	// ForbiddenURLErrResponse HTTPResponseConfig
-}
+// 	// // UnauthorizedErrResponse is config used to respond to user if none
+// 	// // of the nonUserURLs keys or queried urls match the apis
+// 	// // a user is allowed to access
+// 	// //
+// 	// // Default status value is http.StatusForbidden
+// 	// // Default response value is []byte("Forbidden to access url")
+// 	// ForbiddenURLErrResponse HTTPResponseConfig
+// }
 
-type middlewareUser struct {
+type MiddlewareUser struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 }
@@ -196,7 +205,7 @@ type middlewareUser struct {
 
 // QueryDB should implement querying a database and returning
 // results in bytes
-type QueryDB func(w http.ResponseWriter, res *http.Request, db Querier) ([]byte, error)
+type QueryDB func(req *http.Request, db Querier) ([]byte, error)
 
 //////////////////////////////////////////////////////////////////
 //-------------------------- STRUCTS --------------------------
@@ -223,7 +232,7 @@ func NewAuthHandler(
 func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var userBytes []byte
-		var middlewareUser middlewareUser
+		var middlewareUser MiddlewareUser
 		var session *sessions.Session
 		var err error
 
@@ -240,7 +249,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 		)
 
 		setUser := func() error {
-			userBytes, err = a.queryForUser(w, r, a.db)
+			userBytes, err = a.queryForUser(r, a.db)
 
 			if err != nil {
 				canRecover := false
@@ -269,17 +278,23 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 						if a.config.RecoverDB != nil {
 							if err = a.config.RecoverDB(err); err == nil {
 								canRecover = true
-								userBytes, _ = a.queryForUser(w, r, a.db)
+								userBytes, err = a.queryForUser(r, a.db)
+
+								if err == sql.ErrNoRows {
+									next.ServeHTTP(w, r)
+									return err
+								}
+
 								break
 							}
 						}
-					}
 
-					http.Error(
-						w,
-						string(a.config.ServerErrorResponse.HTTPResponse),
-						*a.config.ServerErrorResponse.HTTPStatus,
-					)
+						http.Error(
+							w,
+							string(a.config.ServerErrorResponse.HTTPResponse),
+							*a.config.ServerErrorResponse.HTTPStatus,
+						)
+					}
 				}
 
 				if !canRecover {
@@ -330,6 +345,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 				// If they are, try retrieving from db if AuthHandler#queryForUser is set
 				// Else, continue to next handler
 				if _, err = r.Cookie(a.config.SessionConfig.SessionName); err == nil {
+					fmt.Printf("has cookie\n")
 					//fmt.Printf("has cookie but not found in store\n")
 					if err = setUser(); err != nil {
 						//fmt.Printf("within user\n")
@@ -343,53 +359,18 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					// database and set it to session backend and use that instead of database
 					// for future requests
 					if err = a.config.SessionStore.Ping(); err == nil && a.config.QueryForSession != nil {
-						canRecover := false
-						sessionStr, err := a.config.QueryForSession(w, a.db, middlewareUser.ID)
+						//canRecover := false
+						sessionStr, err := a.config.QueryForSession(a.db, middlewareUser.ID)
 
-						if err != nil {
-							if err == sql.ErrNoRows {
-								next.ServeHTTP(w, r)
-								return
-							}
-							if a.config.RecoverDB != nil {
-								if err = a.config.RecoverDB(err); err == nil {
-									canRecover = true
-									sessionStr, err = a.config.QueryForSession(w, a.db, middlewareUser.ID)
-
-									if err == sql.ErrNoRows {
-										next.ServeHTTP(w, r)
-										return
-									}
-								}
-							}
-						} else {
-							canRecover = true
-						}
-
-						if canRecover {
+						if err == nil {
 							session, err = a.config.SessionStore.New(r, a.config.SessionConfig.SessionName)
 
-							if err != nil {
-								fmt.Printf("within new session\n")
-								http.Error(
-									w,
-									string(a.config.ServerErrorResponse.HTTPResponse),
-									*a.config.ServerErrorResponse.HTTPStatus,
-								)
-								return
+							if err == nil {
+								session.ID = sessionStr
+								fmt.Printf("session id: %s\n", session.ID)
+								session.Values[a.config.SessionConfig.Keys.UserKey] = userBytes
+								session.Save(r, w)
 							}
-
-							session.ID = sessionStr
-							fmt.Printf("session id: %s\n", session.ID)
-							session.Values[a.config.SessionConfig.Keys.UserKey] = userBytes
-							session.Save(r, w)
-						} else {
-							http.Error(
-								w,
-								string(a.config.ServerErrorResponse.HTTPResponse),
-								*a.config.ServerErrorResponse.HTTPStatus,
-							)
-							return
 						}
 					}
 				} else {
@@ -432,13 +413,13 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 type GroupHandler struct {
 	db             Querier
 	queryForGroups QueryDB
-	config         GroupHandlerConfig
+	config         ServerErrorCacheConfig
 }
 
 func NewGroupHandler(
 	db Querier,
 	queryForGroups QueryDB,
-	config GroupHandlerConfig,
+	config ServerErrorCacheConfig,
 ) *GroupHandler {
 	return &GroupHandler{
 		config:         config,
@@ -457,32 +438,56 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var groupBytes []byte
 
 			// Setting up default values from passed configs if none are set
-			SetHTTPResponseDefaults(&g.config.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
-			user := user.(middlewareUser)
+			SetHTTPResponseDefaults(
+				&g.config.ServerErrorResponse,
+				http.StatusInternalServerError,
+				[]byte(serverErrTxt),
+			)
+			user := user.(MiddlewareUser)
 			groups := fmt.Sprintf(GroupKey, user.Email)
 
 			setGroupFromDB := func() error {
-				fmt.Printf("group middlware query db\n")
-				groupBytes, err = g.queryForGroups(w, r, g.db)
+				fmt.Printf("group middleware query db\n")
+				groupBytes, err = g.queryForGroups(r, g.db)
 
 				if err != nil {
+					isValid := false
+
 					if err == sql.ErrNoRows {
+						isValid = true
 						next.ServeHTTP(w, r)
-						return err
+					} else {
+						if g.config.RecoverDB != nil {
+							if err = g.config.RecoverDB(err); err == nil {
+								isValid = true
+								groupBytes, err = g.queryForGroups(r, g.db)
+
+								if err == sql.ErrNoRows {
+									next.ServeHTTP(w, r)
+								}
+							}
+						}
 					}
 
-					w.WriteHeader(*g.config.ServerErrorResponse.HTTPStatus)
-					w.Write(g.config.ServerErrorResponse.HTTPResponse)
-					//w.Write([]byte("err from db"))
+					if !isValid {
+						http.Error(
+							w,
+							string(g.config.ServerErrorResponse.HTTPResponse),
+							*g.config.ServerErrorResponse.HTTPStatus,
+						)
+					}
+
 					return err
 				}
 
 				err = json.Unmarshal(groupBytes, &groupMap)
 
 				if err != nil {
-					w.WriteHeader(*g.config.ServerErrorResponse.HTTPStatus)
-					w.Write(g.config.ServerErrorResponse.HTTPResponse)
-					//w.Write([]byte("json err from set group"))
+					http.Error(
+						w,
+						string(g.config.ServerErrorResponse.HTTPResponse),
+						*g.config.ServerErrorResponse.HTTPStatus,
+					)
 					return err
 				}
 
@@ -491,8 +496,8 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 
 			// If cache is set, try to get group info from cache
 			// Else query from db
-			if g.config.CacheStore != nil {
-				groupBytes, err = g.config.CacheStore.Get(groups)
+			if g.config.Cache != nil {
+				groupBytes, err = g.config.Cache.Get(groups)
 
 				if err != nil {
 					// If err occurs and is not a nil err,
@@ -518,8 +523,11 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					err = json.Unmarshal(groupBytes, &groupMap)
 
 					if err != nil {
-						w.WriteHeader(*g.config.ServerErrorResponse.HTTPStatus)
-						w.Write(g.config.ServerErrorResponse.HTTPResponse)
+						http.Error(
+							w,
+							string(g.config.ServerErrorResponse.HTTPResponse),
+							*g.config.ServerErrorResponse.HTTPStatus,
+						)
 						return
 					}
 				}
@@ -539,22 +547,22 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 
 type RoutingHandler struct {
 	db          Querier
-	queryDB     QueryDB
+	queryRoutes QueryDB
 	pathRegex   PathRegex
 	nonUserURLs map[string]bool
-	config      RoutingHandlerConfig
+	config      ServerErrorCacheConfig
 }
 
 func NewRoutingHandler(
 	db Querier,
-	queryDB QueryDB,
+	queryRoutes QueryDB,
 	pathRegex PathRegex,
 	nonUserURLs map[string]bool,
-	config RoutingHandlerConfig,
+	config ServerErrorCacheConfig,
 ) *RoutingHandler {
 	return &RoutingHandler{
 		db:          db,
-		queryDB:     queryDB,
+		queryRoutes: queryRoutes,
 		pathRegex:   pathRegex,
 		nonUserURLs: nonUserURLs,
 		config:      config,
@@ -569,30 +577,71 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var urls map[string]bool
 			var err error
 
-			SetHTTPResponseDefaults(&routing.config.ClientErrorResponse, http.StatusForbidden, []byte(forbiddenURLTxt))
-			SetHTTPResponseDefaults(&routing.config.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
+			SetHTTPResponseDefaults(
+				&routing.config.ClientErrorResponse,
+				http.StatusForbidden,
+				[]byte(forbiddenURLTxt),
+			)
+			SetHTTPResponseDefaults(
+				&routing.config.ServerErrorResponse,
+				http.StatusInternalServerError,
+				[]byte(serverErrTxt),
+			)
 
 			// Queries from db and sets the bytes returned to url map
 			setURLsFromDB := func() error {
-				urlBytes, err = routing.queryDB(w, r, routing.db)
+				urlBytes, err = routing.queryRoutes(r, routing.db)
 
 				if err != nil {
+					isValid := false
+
 					if err == sql.ErrNoRows {
-						w.WriteHeader(*routing.config.ClientErrorResponse.HTTPStatus)
-						w.Write(routing.config.ClientErrorResponse.HTTPResponse)
+						http.Error(
+							w,
+							string(routing.config.ClientErrorResponse.HTTPResponse),
+							*routing.config.ClientErrorResponse.HTTPStatus,
+						)
 						return err
 					}
 
-					w.WriteHeader(*routing.config.ServerErrorResponse.HTTPStatus)
-					w.Write(routing.config.ServerErrorResponse.HTTPResponse)
+					if routing.config.RecoverDB != nil {
+						if err = routing.config.RecoverDB(err); err == nil {
+							urlBytes, err = routing.queryRoutes(r, routing.db)
+
+							if err == nil {
+								isValid = true
+							} else {
+								if err == sql.ErrNoRows {
+									http.Error(
+										w,
+										string(routing.config.ClientErrorResponse.HTTPResponse),
+										*routing.config.ClientErrorResponse.HTTPStatus,
+									)
+									return err
+								}
+							}
+						}
+					}
+
+					if !isValid {
+						http.Error(
+							w,
+							string(routing.config.ServerErrorResponse.HTTPResponse),
+							*routing.config.ServerErrorResponse.HTTPStatus,
+						)
+					}
+
 					return err
 				}
 
 				err = json.Unmarshal(urlBytes, &urls)
 
 				if err != nil {
-					w.WriteHeader(*routing.config.ServerErrorResponse.HTTPStatus)
-					w.Write(routing.config.ServerErrorResponse.HTTPResponse)
+					http.Error(
+						w,
+						string(routing.config.ServerErrorResponse.HTTPResponse),
+						*routing.config.ServerErrorResponse.HTTPStatus,
+					)
 					return err
 				}
 
@@ -602,8 +651,11 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			pathExp, err := routing.pathRegex(r)
 
 			if err != nil {
-				w.WriteHeader(*routing.config.ServerErrorResponse.HTTPStatus)
-				w.Write(routing.config.ServerErrorResponse.HTTPResponse)
+				http.Error(
+					w,
+					string(routing.config.ServerErrorResponse.HTTPResponse),
+					*routing.config.ServerErrorResponse.HTTPStatus,
+				)
 				return
 			}
 
@@ -612,11 +664,11 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 
 			if user != nil {
 				//fmt.Printf("routing user\n")
-				user := user.(middlewareUser)
+				user := user.(MiddlewareUser)
 				key := fmt.Sprintf(URLKey, user.Email)
 
-				if routing.config.CacheStore != nil {
-					urlBytes, err = routing.config.CacheStore.Get(key)
+				if routing.config.Cache != nil {
+					urlBytes, err = routing.config.Cache.Get(key)
 
 					if err != nil {
 						if err != ErrCacheNil {
@@ -634,8 +686,11 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 									return
 								}
 							} else {
-								w.WriteHeader(*routing.config.ClientErrorResponse.HTTPStatus)
-								w.Write(routing.config.ClientErrorResponse.HTTPResponse)
+								http.Error(
+									w,
+									string(routing.config.ClientErrorResponse.HTTPResponse),
+									*routing.config.ClientErrorResponse.HTTPStatus,
+								)
 								return
 							}
 						}
@@ -643,8 +698,11 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 						err = json.Unmarshal(urlBytes, &urls)
 
 						if err != nil {
-							w.WriteHeader(*routing.config.ServerErrorResponse.HTTPStatus)
-							w.Write(routing.config.ServerErrorResponse.HTTPResponse)
+							http.Error(
+								w,
+								string(routing.config.ServerErrorResponse.HTTPResponse),
+								*routing.config.ServerErrorResponse.HTTPStatus,
+							)
 							return
 						}
 					}
@@ -662,8 +720,6 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					}
 				}
 			} else {
-				//fmt.Printf("non user\n")
-				//fmt.Printf("non user urls: %v\n", routing.nonUserURLs)
 				if _, ok := routing.nonUserURLs[pathExp]; ok {
 					allowedPath = true
 				}
@@ -672,8 +728,11 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			// If returned urls do not match any urls user is allowed to
 			// access, return with error response
 			if !allowedPath {
-				w.WriteHeader(*routing.config.ClientErrorResponse.HTTPStatus)
-				w.Write(routing.config.ClientErrorResponse.HTTPResponse)
+				http.Error(
+					w,
+					string(routing.config.ClientErrorResponse.HTTPResponse),
+					*routing.config.ClientErrorResponse.HTTPStatus,
+				)
 				return
 			}
 		}

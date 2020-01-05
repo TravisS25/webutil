@@ -12,9 +12,9 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	validation "github.com/go-ozzo/ozzo-validation"
-	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	pkgerrors "github.com/pkg/errors"
+	testifymock "github.com/stretchr/testify/mock"
 )
 
 func TestValidateRequiredRuleUnitTest(t *testing.T) {
@@ -138,22 +138,22 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 func TestCheckIfExistsUnitTest(t *testing.T) {
 	var err error
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
 
 	if err != nil {
 		t.Fatalf("fatal err: %s\n", err.Error())
 	}
 
-	mockCacheStore := NewMockCacheStore(mockCtrl)
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return([]byte("foo"), nil)
+	mockCacheStore1 := &MockCacheStore{}
+	defer mockCacheStore1.AssertExpectations(t)
+	mockCacheStore1.On("Get", testifymock.Anything).Return([]byte("foo"), nil)
+
+	//mockCacheStore.EXPECT().Get(gomock.Any()).Return([]byte("foo"), nil)
 
 	rule := validator{
 		querier: db,
 		cacheConfig: CacheConfig{
-			Cache:          mockCacheStore,
+			Cache:          mockCacheStore1,
 			IgnoreCacheNil: true,
 		},
 		args: []interface{}{1},
@@ -168,8 +168,11 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 		}
 	}
 
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
-	mock.ExpectQuery("select").WillReturnError(ErrServer)
+	mockCacheStore2 := &MockCacheStore{}
+	defer mockCacheStore2.AssertExpectations(t)
+	rule.cacheConfig.Cache = mockCacheStore2
+	mockCacheStore2.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
+	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
 	if err = checkIfExists(rule, "foo", false); err == nil {
 		t.Errorf("should have error\n")
@@ -180,8 +183,11 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 		}
 	}
 
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
-	mock.ExpectQuery("select").WillReturnError(sql.ErrNoRows)
+	mockCacheStore3 := &MockCacheStore{}
+	defer mockCacheStore3.AssertExpectations(t)
+	rule.cacheConfig.Cache = mockCacheStore3
+	mockCacheStore3.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
+	mockDB.ExpectQuery("select").WillReturnError(sql.ErrNoRows)
 
 	if err = checkIfExists(rule, "foo", true); err == nil {
 		t.Errorf("should have error\n")
@@ -192,8 +198,11 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 		}
 	}
 
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
-	mock.ExpectQuery("select").WillReturnError(ErrServer)
+	mockCacheStore4 := &MockCacheStore{}
+	defer mockCacheStore4.AssertExpectations(t)
+	rule.cacheConfig.Cache = mockCacheStore4
+	mockCacheStore4.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
+	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
 	if err = checkIfExists(rule, "foo", true); err == nil {
 		t.Errorf("should have error\n")
@@ -204,8 +213,11 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 		}
 	}
 
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrServer)
-	mock.ExpectQuery("select").WillReturnError(ErrServer)
+	mockCacheStore5 := &MockCacheStore{}
+	defer mockCacheStore5.AssertExpectations(t)
+	rule.cacheConfig.Cache = mockCacheStore5
+	mockCacheStore5.On("Get", testifymock.Anything).Return(nil, ErrServer)
+	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
 	if err = checkIfExists(rule, "foo", true); err == nil {
 		t.Errorf("should have error\n")
@@ -220,7 +232,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 func TestHasFormErrorsUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 
-	if !HasFormErrors(rr, ErrBodyRequired, ServerAndClientErrorConfig{}) {
+	if !HasFormErrors(rr, ErrBodyRequired, ServerErrorConfig{}) {
 		t.Errorf("should have form error\n")
 	}
 	if rr.Result().StatusCode != http.StatusNotAcceptable {
@@ -240,7 +252,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, ErrInvalidJSON, ServerAndClientErrorConfig{})
+	HasFormErrors(rr, ErrInvalidJSON, ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
@@ -257,7 +269,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 		"id": errors.New("field error"),
 	}
 
-	HasFormErrors(rr, vErr, ServerAndClientErrorConfig{})
+	HasFormErrors(rr, vErr, ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
@@ -274,7 +286,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, errors.New("errors"), ServerAndClientErrorConfig{})
+	HasFormErrors(rr, errors.New("errors"), ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 
 	if rr.Result().StatusCode != http.StatusInternalServerError {
@@ -329,11 +341,15 @@ func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
 func TestGetFormSelectionsUnitTest(t *testing.T) {
 	var err error
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
 	rr := httptest.NewRecorder()
 	buf := &bytes.Buffer{}
+	config := ServerErrorCacheConfig{
+		ServerErrorConfig: ServerErrorConfig{
+			RecoverDB: func(err error) error {
+				return ErrServer
+			},
+		},
+	}
 	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
 
 	if err != nil {
@@ -341,13 +357,6 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	}
 
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
-	config := FormSelectionConfig{
-		ServerErrorConfig: ServerErrorConfig{
-			RecoverDB: func(err error) error {
-				return ErrServer
-			},
-		},
-	}
 
 	if _, err = GetFormSelections(
 		rr,
@@ -410,9 +419,10 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	mockCacheStore := NewMockCacheStore(mockCtrl)
-	config.CacheConfig.Cache = mockCacheStore
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrServer)
+	mockCacheStore1 := &MockCacheStore{}
+	defer mockCacheStore1.AssertExpectations(t)
+	config.CacheConfig.Cache = mockCacheStore1
+	mockCacheStore1.On("Get", testifymock.Anything).Return(nil, ErrServer)
 	mockDB.ExpectQuery("").WillReturnRows(rows)
 
 	if _, err = GetFormSelections(
@@ -428,8 +438,11 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
+	mockCacheStore2 := &MockCacheStore{}
+	defer mockCacheStore2.AssertExpectations(t)
+	config.CacheConfig.Cache = mockCacheStore2
 	config.CacheConfig.IgnoreCacheNil = true
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
+	mockCacheStore2.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
 	mockDB.ExpectQuery("").WillReturnRows(rows)
 
 	if _, err = GetFormSelections(
@@ -445,8 +458,11 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
+	mockCacheStore3 := &MockCacheStore{}
+	defer mockCacheStore3.AssertExpectations(t)
+	config.CacheConfig.Cache = mockCacheStore3
 	config.CacheConfig.IgnoreCacheNil = false
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(nil, ErrCacheNil)
+	mockCacheStore3.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
 
 	if _, err = GetFormSelections(
 		rr,
@@ -476,7 +492,10 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	mockCacheStore.EXPECT().Get(gomock.Any()).Return(formBytes, nil)
+	mockCacheStore4 := &MockCacheStore{}
+	defer mockCacheStore4.AssertExpectations(t)
+	config.CacheConfig.Cache = mockCacheStore4
+	mockCacheStore4.On("Get", testifymock.Anything).Return(formBytes, nil)
 
 	if _, err = GetFormSelections(
 		rr,

@@ -24,8 +24,8 @@ var (
 	}
 )
 
-func getMockSession(mockCtrl *gomock.Controller, cookieName string) *sessions.Session {
-	mockSession := NewMockSessionStore(mockCtrl)
+func getMockSession(cookieName string) *sessions.Session {
+	mockSession := &MockSessionStore{}
 	return sessions.NewSession(mockSession, cookieName)
 }
 
@@ -34,7 +34,7 @@ func TestDecodeCookieUnitTest(t *testing.T) {
 	defer mockCtrl.Finish()
 
 	req := httptest.NewRequest(http.MethodGet, "/url", nil)
-	session := getMockSession(mockCtrl, cookieName)
+	session := getMockSession(cookieName)
 	encoded, err := securecookie.EncodeMulti(
 		session.Name(),
 		session.ID,
@@ -53,11 +53,8 @@ func TestDecodeCookieUnitTest(t *testing.T) {
 }
 
 func TestSetSecureCookieUnitTest(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
 	rr := httptest.NewRecorder()
-	session := getMockSession(mockCtrl, cookieName)
+	session := getMockSession(cookieName)
 
 	if err := SetSecureCookie(rr, session, keyPairs...); err != nil {
 		t.Fatalf("err: %s\n", err.Error())
@@ -83,7 +80,7 @@ func TestGetUserUnitTest(t *testing.T) {
 }
 
 func TestGetMiddlewareUserUnitTest(t *testing.T) {
-	user := &middlewareUser{
+	user := &MiddlewareUser{
 		ID:    "1",
 		Email: "email@email.com",
 	}

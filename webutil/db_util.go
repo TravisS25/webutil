@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 )
 
 //////////////////////////////////////////////////////////////////
@@ -79,25 +80,25 @@ type Querier interface {
 }
 
 // Scanner will scan row returned from database
-type Scanner interface {
-	Scan(dest ...interface{}) error
-}
+// type Scanner interface {
+// 	Scan(dest ...interface{}) error
+// }
 
-// Rower loops through rows returns from database with
-// abilty to scan each row
-type Rower interface {
-	Scanner
-	Next() bool
-	Columns() ([]string, error)
-}
+// // Rower loops through rows returns from database with
+// // abilty to scan each row
+// type Rower interface {
+// 	Scanner
+// 	Next() bool
+// 	Columns() ([]string, error)
+// }
 
-// Tx is for transaction related queries
-type Tx interface {
-	XODB
-	SqlxDB
-	Commit() error
-	Rollback() error
-}
+// // Tx is for transaction related queries
+// type Tx interface {
+// 	QuerierExec
+// 	SqlxDB
+// 	Commit() error
+// 	Rollback() error
+// }
 
 // Transaction is for ability to create database transaction
 type Transaction interface {
@@ -105,15 +106,15 @@ type Transaction interface {
 	Commit(tx *sql.Tx) error
 }
 
-// QueryTransaction is used for basic querying but also
+// QuerierTransaction is used for basic querying but also
 // need transaction
-type QueryTransaction interface {
+type QuerierTransaction interface {
 	Transaction
 	Querier
 }
 
-// XODB allows to query rows but also exec statement against database
-type XODB interface {
+// QuerierExec allows to query rows but also exec statement against database
+type QuerierExec interface {
 	Querier
 	Exec(string, ...interface{}) (sql.Result, error)
 }
@@ -127,7 +128,7 @@ type SqlxDB interface {
 
 // Entity is mainly used for FormValidation
 type Entity interface {
-	XODB
+	QuerierExec
 	SqlxDB
 }
 
@@ -136,20 +137,20 @@ type Entity interface {
 type DBInterface interface {
 	Entity
 	Transaction
-	Recover
+	// /Recover
 }
 
 // Recover implementation is used to recover from db failure
-type Recover interface {
-	RecoverError(err error) (*DB, error)
-}
+// type Recover interface {
+// 	RecoverError(err error) (*DB, error)
+// }
 
-// RecoverQuerier is used to be able to do basic querying
-// and recover from db failure if neccessary
-type RecoverQuerier interface {
-	Querier
-	Recover
-}
+// // RecoverQuerier is used to be able to do basic querying
+// // and recover from db failure if neccessary
+// type RecoverQuerier interface {
+// 	Querier
+// 	Recover
+// }
 
 //////////////////////////////////////////////////////////////////
 //-------------------------- TYPES ----------------------------
@@ -246,6 +247,8 @@ func NewDB(dbConfig DatabaseSetting, dbType string) (*DB, error) {
 		dbConfig.SSLMode,
 	)
 
+	fmt.Printf("conn: %s\n", dbInfo)
+
 	db, err := sqlx.Open(dbType, dbInfo)
 	if err != nil {
 		return nil, err
@@ -292,7 +295,7 @@ func HasDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool
 //
 // If error is "sql.ErrNoRows", then another response is written
 // to client based on config passed
-func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerAndClientErrorConfig) bool {
+func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	defaultDBErrors(&config)
 
 	if err == sql.ErrNoRows {
@@ -301,7 +304,7 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerAndClient
 		return true
 	}
 
-	return dbError(w, err, config.ServerErrorConfig)
+	return dbError(w, err, config)
 }
 
 // QueryCount is used for queries that consist of count in select statement
@@ -311,7 +314,7 @@ func QueryCount(db SqlxDB, query string, args ...interface{}) (*Count, error) {
 	return &dest, err
 }
 
-func defaultDBErrors(config *ServerAndClientErrorConfig) {
+func defaultDBErrors(config *ServerErrorConfig) {
 	SetHTTPResponseDefaults(&config.ClientErrorResponse, http.StatusNotFound, []byte("Not Found"))
 	SetHTTPResponseDefaults(
 		&config.ServerErrorResponse,

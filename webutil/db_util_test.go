@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -41,6 +42,18 @@ func (m *channel) Stop() {
 
 func (m *channel) Get() <-chan struct{} {
 	return m.ready
+}
+
+type dbCommand struct {
+	Command string   `yaml:"command" mapstructure:"command"`
+	Args    []string `yaml:"args" mapstructure:"args"`
+}
+
+type dbConfiguration struct {
+	DbConnections  []DatabaseSetting `yaml:"db_connections" mapstructure:"db_connections"`
+	DbStopCommand  dbCommand         `yaml:"db_stop_command" mapstructure:"db_stop_command"`
+	DbStartCommand dbCommand         `yaml:"db_start_command" mapstructure:"db_start_command"`
+	ValidateQuery  string            `yaml:"validate_query" mapstructure:"validate_query"`
 }
 
 func TestHasDBErrorUnitTest(t *testing.T) {
@@ -74,7 +87,7 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 
 func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
-	conf := ServerAndClientErrorConfig{}
+	conf := ServerErrorConfig{}
 
 	if HasNoRowsOrDBError(rr, nil, conf) {
 		t.Errorf("should not have db error\n")
@@ -87,36 +100,25 @@ func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 
 func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	var err error
+	var config dbConfiguration
 
-	dbList := []DatabaseSetting{
-		{
-			DBName:   "test1",
-			User:     "test",
-			Password: "password",
-			Host:     "localhost",
-			Port:     "26257",
-			SSLMode:  SSLRequire,
-		},
-		{
-			DBName:   "test2",
-			User:     "test",
-			Password: "password",
-			Host:     "localhost",
-			Port:     "26258",
-			SSLMode:  SSLRequire,
-		},
-		{
-			DBName:   "test3",
-			User:     "test",
-			Password: "password",
-			Host:     "localhost",
-			Port:     "26259",
-			SSLMode:  SSLRequire,
-		},
+	filePath := os.Getenv(WebUtilConfig)
+
+	if filePath == "" {
+		t.Fatalf("env var not set\n")
 	}
 
-	var db *DB
-	db, err = NewDBWithList(dbList, Postgres)
+	v := viper.New()
+	v.SetConfigFile(filePath)
+
+	if err = v.ReadInConfig(); err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
+	if err = v.Unmarshal(&config); err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
+
+	db, err := NewDBWithList(config.DbConnections, Postgres)
 
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -134,20 +136,10 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	oneShot := newChannel()
 	r := mux.NewRouter()
 	r.HandleFunc("/test", func(w http.ResponseWriter, req *http.Request) {
+		var name string
 		fmt.Printf("req from: %s\n", req.RemoteAddr)
 
-		scanner := db.QueryRow(
-			`
-			select 
-				crdb_internal.zones.zone_name
-			from	
-				crdb_internal.zones
-			where
-				crdb_internal.zones.zone_name = '.default'
-			`,
-		)
-
-		var name string
+		scanner := db.QueryRow(config.ValidateQuery)
 		err = scanner.Scan(&name)
 
 		if err != nil {
@@ -203,7 +195,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	// Allow for the clients to make a couple of requests
 	time.Sleep(time.Second * 2)
 
-	cmd := exec.Command("cockroach", "quit", "--host", dbList[0].Host+":"+dbList[0].Port)
+	cmd := exec.Command(config.DbStopCommand.Command, config.DbStopCommand.Args...)
 	err = cmd.Start()
 
 	if err != nil {
@@ -218,23 +210,25 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	oneShot.Stop()
 	wg.Wait()
 
-	// Bring cockroachdb back online
-	h := os.Getenv("HOME")
-	cmd = exec.Command(
-		"cockroach",
-		"start",
-		"--certs-dir="+h+"/.cockroach-certs",
-		"--store="+h+"/store1",
-		"--listen-addr="+dbList[0].Host+":"+dbList[0].Port,
-		"--http-addr=localhost:8080",
-		"--join=localhost",
-		"--background",
-	)
+	cmd = exec.Command(config.DbStartCommand.Command, config.DbStartCommand.Args...)
 	err = cmd.Start()
 
 	if err != nil {
 		t.Fatalf("Could not bring database back up\n")
 	}
+}
 
-	//t.Fatalf("boom")
+func TestBar(t *testing.T) {
+	_, err := NewDB(DatabaseSetting{
+		DBName:   "test1",
+		User:     "test",
+		Password: "password",
+		Host:     "localhost",
+		Port:     "26257",
+		SSLMode:  SSLRequire,
+	}, Postgres)
+
+	if err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
 }

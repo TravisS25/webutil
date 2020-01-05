@@ -3,6 +3,7 @@ package webutil
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,7 +16,6 @@ import (
 	pkgerrors "github.com/pkg/errors"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	gomock "github.com/golang/mock/gomock"
 )
 
 ////////////////////////////////////////////////////////////
@@ -24,9 +24,6 @@ import (
 
 func TestQueryFunctionsUnitTest(t *testing.T) {
 	var err error
-
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	idField := "foo.id"
 	nameField := "foo.name"
@@ -133,13 +130,54 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 		},
 	}
 
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue(filtersParam).Return(invalidJSONDecoding)
+	mockRequest1 := &MockFormRequest{}
+	defer mockRequest1.AssertExpectations(t)
+	mockRequest1.On("FormValue", filtersParam).Return(invalidJSONDecoding)
 
 	if _, err = getValueResults(
 		&query,
 		true,
-		mockRequest,
+		mockRequest1,
+		ParamConfig{},
+		QueryConfig{},
+		filterFields,
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if _, ok := pkgerrors.Cause(err).(*json.SyntaxError); !ok {
+			t.Errorf("should have json.SyntaxError{} instance error\n")
+		}
+	}
+
+	// query = defaultQuery
+	// mockRequest.On("FormValue", filtersParam).Return(string(fBytes))
+	// mockRequest.On("FormValue", filtersParam).Return(invalidJSONDecoding)
+
+	// if _, err = getValueResults(
+	// 	&query,
+	// 	true,
+	// 	mockRequest,
+	// 	ParamConfig{},
+	// 	QueryConfig{},
+	// 	filterFields,
+	// ); err == nil {
+	// 	t.Errorf("should have error\n")
+	// } else {
+	// 	if _, ok := pkgerrors.Cause(err).(*json.SyntaxError); !ok {
+	// 		t.Errorf("should have json.SyntaxError{} instance error\n")
+	// 	}
+	// }
+
+	query = defaultQuery
+	mockRequest2 := &MockFormRequest{}
+	defer mockRequest2.AssertExpectations(t)
+	mockRequest2.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest2.On("FormValue", groupsParam).Return(invalidJSONDecoding)
+
+	if _, err = getValueResults(
+		&query,
+		true,
+		mockRequest2,
 		ParamConfig{},
 		QueryConfig{},
 		filterFields,
@@ -152,13 +190,16 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(invalidJSONDecoding)
+	mockRequest3 := &MockFormRequest{}
+	defer mockRequest3.AssertExpectations(t)
+	mockRequest3.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest3.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest3.On("FormValue", sortsParam).Return(invalidJSONDecoding)
 
 	if _, err = getValueResults(
 		&query,
 		true,
-		mockRequest,
+		mockRequest3,
 		ParamConfig{},
 		QueryConfig{},
 		filterFields,
@@ -171,56 +212,19 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(invalidJSONDecoding)
+	mockRequest4 := &MockFormRequest{}
+	defer mockRequest4.AssertExpectations(t)
+	mockRequest4.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest4.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest4.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest4.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest4.On("FormValue", takeParam).Return(string(take))
+	mockRequest4.On("FormValue", skipParam).Return(string(skip))
 
 	if _, err = getValueResults(
 		&query,
 		true,
-		mockRequest,
-		ParamConfig{},
-		QueryConfig{},
-		filterFields,
-	); err == nil {
-		t.Errorf("should have error\n")
-	} else {
-		if _, ok := pkgerrors.Cause(err).(*json.SyntaxError); !ok {
-			t.Errorf("should have json.SyntaxError{} instance error\n")
-		}
-	}
-
-	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(invalidJSONDecoding)
-
-	if _, err = getValueResults(
-		&query,
-		true,
-		mockRequest,
-		ParamConfig{},
-		QueryConfig{},
-		filterFields,
-	); err == nil {
-		t.Errorf("should have error\n")
-	} else {
-		if _, ok := pkgerrors.Cause(err).(*json.SyntaxError); !ok {
-			t.Errorf("should have json.SyntaxError{} instance error\n")
-		}
-	}
-
-	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(takeParam).Return(take)
-	mockRequest.EXPECT().FormValue(skipParam).Return(skip)
-
-	if _, err = getValueResults(
-		&query,
-		true,
-		mockRequest,
+		mockRequest4,
 		ParamConfig{},
 		QueryConfig{},
 		filterFields,
@@ -230,14 +234,16 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest5 := &MockFormRequest{}
+	defer mockRequest5.AssertExpectations(t)
+	mockRequest5.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest5.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest5.On("FormValue", sortsParam).Return(string(sBytes))
 
 	if _, err = getValueResults(
 		&query,
 		true,
-		mockRequest,
+		mockRequest5,
 		ParamConfig{},
 		QueryConfig{},
 		invalidSortFields,
@@ -255,15 +261,17 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(invalidSortBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(invalidSortBytes))
+	mockRequest6 := &MockFormRequest{}
+	defer mockRequest6.AssertExpectations(t)
+	mockRequest6.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest6.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest6.On("FormValue", sortsParam).Return(string(invalidSortBytes))
+	mockRequest6.On("FormValue", sortsParam).Return(string(invalidSortBytes))
 
 	if _, err = getValueResults(
 		&query,
 		true,
-		mockRequest,
+		mockRequest6,
 		ParamConfig{},
 		QueryConfig{},
 		filterFields,
@@ -281,17 +289,19 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(takeParam).Return("invalid")
-	mockRequest.EXPECT().FormValue(skipParam).Return(skip)
+	mockRequest7 := &MockFormRequest{}
+	defer mockRequest7.AssertExpectations(t)
+	mockRequest7.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest7.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest7.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest7.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest7.On("FormValue", takeParam).Return(string("invalid"))
+	mockRequest7.On("FormValue", skipParam).Return(string(skip))
 
 	if _, err = getValueResults(
 		&query,
 		true,
-		mockRequest,
+		mockRequest7,
 		ParamConfig{},
 		QueryConfig{},
 		filterFields,
@@ -305,17 +315,19 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(takeParam).Return(take)
-	mockRequest.EXPECT().FormValue(skipParam).Return("invalid")
+	mockRequest8 := &MockFormRequest{}
+	defer mockRequest1.AssertExpectations(t)
+	mockRequest8.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest8.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest8.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest8.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest8.On("FormValue", takeParam).Return(string(take))
+	mockRequest8.On("FormValue", skipParam).Return(string("invalid"))
 
 	if _, err = getValueResults(
 		&query,
 		true,
-		mockRequest,
+		mockRequest8,
 		ParamConfig{},
 		QueryConfig{},
 		filterFields,
@@ -328,15 +340,21 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 		}
 	}
 
+	/////////////////////////////////////////////////////////////////
+	//------------------Testing GetPreQueryResults------------------
+	/////////////////////////////////////////////////////////////////
+
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest9 := &MockFormRequest{}
+	defer mockRequest9.AssertExpectations(t)
+	mockRequest9.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest9.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest9.On("FormValue", sortsParam).Return(string(sBytes))
 
 	if _, err = GetPreQueryResults(
 		&query,
 		invalidSortFields,
-		mockRequest,
+		mockRequest9,
 		ParamConfig{},
 		QueryConfig{},
 	); err == nil {
@@ -352,17 +370,19 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(takeParam).Return(take)
-	mockRequest.EXPECT().FormValue(skipParam).Return(skip)
+	mockRequest10 := &MockFormRequest{}
+	defer mockRequest10.AssertExpectations(t)
+	mockRequest10.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest10.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest10.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest10.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest10.On("FormValue", takeParam).Return(string(take))
+	mockRequest10.On("FormValue", skipParam).Return(string(skip))
 
 	if _, err = GetPreQueryResults(
 		&query,
 		filterFields,
-		mockRequest,
+		mockRequest10,
 		ParamConfig{},
 		QueryConfig{},
 	); err != nil {
@@ -371,17 +391,23 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
+	mockRequest11 := &MockFormRequest{}
+	defer mockRequest11.AssertExpectations(t)
+	mockRequest11.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest11.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest11.On("FormValue", sortsParam).Return(string(sBytes))
 
-	mockQuerier := NewMockQuerier(mockCtrl)
+	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+	if err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
 
 	if _, err = GetQueriedResults(
 		&query,
 		invalidSortFields,
-		mockRequest,
-		mockQuerier,
+		mockRequest11,
+		db,
 		ParamConfig{},
 		QueryConfig{},
 	); err == nil {
@@ -397,20 +423,23 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(sortsParam).Return(string(sBytes))
-	mockRequest.EXPECT().FormValue(takeParam).Return(take)
-	mockRequest.EXPECT().FormValue(skipParam).Return(skip)
+	mockRequest12 := &MockFormRequest{}
+	defer mockRequest12.AssertExpectations(t)
+	mockRequest12.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest12.On("FormValue", groupsParam).Return(string(gBytes))
+	mockRequest12.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest12.On("FormValue", sortsParam).Return(string(sBytes))
+	mockRequest12.On("FormValue", takeParam).Return(string(take))
+	mockRequest12.On("FormValue", skipParam).Return(string(skip))
 
-	mockQuerier.EXPECT().Query(gomock.Any(), gomock.Any())
+	rows := sqlmock.NewRows([]string{"total"}).AddRow(20)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
 
 	if _, err = GetQueriedResults(
 		&query,
 		filterFields,
-		mockRequest,
-		mockQuerier,
+		mockRequest12,
+		db,
 		ParamConfig{},
 		QueryConfig{},
 	); err != nil {
@@ -419,22 +448,16 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	query = defaultQuery
-	mockRequest.EXPECT().FormValue(filtersParam).Return(string(fBytes))
-	mockRequest.EXPECT().FormValue(groupsParam).Return(string(gBytes))
-
-	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
-
-	if err != nil {
-		t.Fatalf("fatal err: %s\n", err.Error())
-	}
-
-	rows := sqlmock.NewRows([]string{"total"}).AddRow(20)
-	mock.ExpectQuery("select").WillReturnRows(rows)
+	mockRequest13 := &MockFormRequest{}
+	defer mockRequest13.AssertExpectations(t)
+	mockRequest13.On("FormValue", filtersParam).Return(string(fBytes))
+	mockRequest13.On("FormValue", groupsParam).Return(string(gBytes))
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
 
 	if _, err = GetCountResults(
 		&query,
 		filterFields,
-		mockRequest,
+		mockRequest13,
 		db,
 		ParamConfig{},
 		QueryConfig{},
@@ -448,21 +471,20 @@ func TestGetLimitWithOffsetValuesUnitTest(t *testing.T) {
 	var err error
 	var limitOffset *LimitOffset
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
 	query := "select"
 	invalidValue := "invalid"
 	takeParam := "takeParam"
 	skipParam := "skipParam"
 	take := 20
 	skip := 0
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue(takeParam).Return("")
-	mockRequest.EXPECT().FormValue(skipParam).Return("")
+
+	mockRequest1 := &MockFormRequest{}
+	defer mockRequest1.AssertExpectations(t)
+	mockRequest1.On("FormValue", takeParam).Return("")
+	mockRequest1.On("FormValue", skipParam).Return("")
 
 	if _, err = GetLimitWithOffsetValues(
-		mockRequest,
+		mockRequest1,
 		&query,
 		takeParam,
 		skipParam,
@@ -473,11 +495,13 @@ func TestGetLimitWithOffsetValuesUnitTest(t *testing.T) {
 		t.Errorf("er: %s\n", err.Error())
 	}
 
-	mockRequest.EXPECT().FormValue(takeParam).Return(invalidValue)
-	mockRequest.EXPECT().FormValue(skipParam).Return(invalidValue)
+	mockRequest2 := &MockFormRequest{}
+	defer mockRequest2.AssertExpectations(t)
+	mockRequest2.On("FormValue", takeParam).Return(invalidValue)
+	mockRequest2.On("FormValue", skipParam).Return(invalidValue)
 
 	if _, err = GetLimitWithOffsetValues(
-		mockRequest,
+		mockRequest2,
 		&query,
 		takeParam,
 		skipParam,
@@ -487,25 +511,13 @@ func TestGetLimitWithOffsetValuesUnitTest(t *testing.T) {
 		t.Errorf("should have errors\n")
 	}
 
-	mockRequest.EXPECT().FormValue(takeParam).Return(invalidValue)
-	mockRequest.EXPECT().FormValue(skipParam).Return(invalidValue)
-
-	if _, err = GetLimitWithOffsetValues(
-		mockRequest,
-		&query,
-		takeParam,
-		skipParam,
-		100,
-		false,
-	); err == nil {
-		t.Errorf("should have errors\n")
-	}
-
-	mockRequest.EXPECT().FormValue(takeParam).Return(strconv.Itoa(take))
-	mockRequest.EXPECT().FormValue(skipParam).Return(strconv.Itoa(skip))
+	mockRequest3 := &MockFormRequest{}
+	defer mockRequest3.AssertExpectations(t)
+	mockRequest3.On("FormValue", takeParam).Return(strconv.Itoa(take))
+	mockRequest3.On("FormValue", skipParam).Return(strconv.Itoa(skip))
 
 	if limitOffset, err = GetLimitWithOffsetValues(
-		mockRequest,
+		mockRequest3,
 		&query,
 		takeParam,
 		skipParam,
@@ -528,13 +540,9 @@ func TestGetLimitWithOffsetValuesUnitTest(t *testing.T) {
 func TestGetGroupReplacementsUnitTest(t *testing.T) {
 	var err error
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
 	groupParam := "groups"
 	invalid := "invalid"
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue(groupParam).Return(invalid)
+
 	defaultQuery :=
 		`
 	select
@@ -569,8 +577,12 @@ func TestGetGroupReplacementsUnitTest(t *testing.T) {
 		},
 	}
 
+	mockRequest1 := &MockFormRequest{}
+	defer mockRequest1.AssertExpectations(t)
+	mockRequest1.On("FormValue", groupParam).Return(invalid)
+
 	if _, err = GetGroupReplacements(
-		mockRequest,
+		mockRequest1,
 		&query,
 		groupParam,
 		conf,
@@ -593,10 +605,12 @@ func TestGetGroupReplacementsUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	mockRequest.EXPECT().FormValue(groupParam).Return(string(gBytes))
+	mockRequest2 := &MockFormRequest{}
+	defer mockRequest2.AssertExpectations(t)
+	mockRequest2.On("FormValue", groupParam).Return(string(gBytes))
 
 	if _, err = GetGroupReplacements(
-		mockRequest,
+		mockRequest2,
 		&query,
 		groupParam,
 		conf,
@@ -610,7 +624,9 @@ func TestGetGroupReplacementsUnitTest(t *testing.T) {
 		}
 	}
 
-	mockRequest.EXPECT().FormValue(groupParam).Return(string(gBytes))
+	mockRequest3 := &MockFormRequest{}
+	defer mockRequest3.AssertExpectations(t)
+	mockRequest3.On("FormValue", groupParam).Return(string(gBytes))
 	query = defaultQuery
 	query +=
 		`
@@ -619,7 +635,7 @@ func TestGetGroupReplacementsUnitTest(t *testing.T) {
 	`
 
 	if _, err = GetGroupReplacements(
-		mockRequest,
+		mockRequest3,
 		&query,
 		groupParam,
 		conf,
@@ -636,8 +652,10 @@ func TestGetGroupReplacementsUnitTest(t *testing.T) {
 	conf.ExcludeGroups = true
 	query = defaultQuery
 
+	mockRequest4 := &MockFormRequest{}
+	defer mockRequest4.AssertExpectations(t)
 	if _, err = GetGroupReplacements(
-		mockRequest,
+		mockRequest4,
 		&query,
 		groupParam,
 		conf,
@@ -650,9 +668,6 @@ func TestGetGroupReplacementsUnitTest(t *testing.T) {
 
 func TestGetSortReplacementsUnitTest(t *testing.T) {
 	var err error
-
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	sortParam := "sorts"
 	invalid := "invalid"
@@ -690,11 +705,12 @@ func TestGetSortReplacementsUnitTest(t *testing.T) {
 		},
 	}
 
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue(sortParam).Return(invalid)
+	mockRequest1 := &MockFormRequest{}
+	defer mockRequest1.AssertExpectations(t)
+	mockRequest1.On("FormValue", sortParam).Return(invalid)
 
 	if _, err = GetSortReplacements(
-		mockRequest,
+		mockRequest1,
 		&query,
 		sortParam,
 		conf,
@@ -718,10 +734,12 @@ func TestGetSortReplacementsUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	mockRequest.EXPECT().FormValue(sortParam).Return(string(sBytes))
+	mockRequest2 := &MockFormRequest{}
+	defer mockRequest2.AssertExpectations(t)
+	mockRequest2.On("FormValue", sortParam).Return(string(sBytes))
 
 	if _, err = GetSortReplacements(
-		mockRequest,
+		mockRequest2,
 		&query,
 		sortParam,
 		conf,
@@ -735,7 +753,10 @@ func TestGetSortReplacementsUnitTest(t *testing.T) {
 		}
 	}
 
-	mockRequest.EXPECT().FormValue(sortParam).Return(string(sBytes))
+	mockRequest3 := &MockFormRequest{}
+	defer mockRequest3.AssertExpectations(t)
+	mockRequest3.On("FormValue", sortParam).Return(string(sBytes))
+
 	query = defaultQuery
 	query +=
 		`
@@ -744,7 +765,7 @@ func TestGetSortReplacementsUnitTest(t *testing.T) {
 	`
 
 	if _, err = GetSortReplacements(
-		mockRequest,
+		mockRequest3,
 		&query,
 		sortParam,
 		conf,
@@ -761,8 +782,11 @@ func TestGetSortReplacementsUnitTest(t *testing.T) {
 	conf.ExcludeSorts = true
 	query = defaultQuery
 
+	mockRequest4 := &MockFormRequest{}
+	defer mockRequest4.AssertExpectations(t)
+
 	if _, err = GetSortReplacements(
-		mockRequest,
+		mockRequest4,
 		&query,
 		sortParam,
 		conf,
@@ -775,9 +799,6 @@ func TestGetSortReplacementsUnitTest(t *testing.T) {
 
 func TestGetFilterReplacementsUnitTest(t *testing.T) {
 	var err error
-
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	filterParam := "filters"
 	invalid := "invalid"
@@ -816,11 +837,12 @@ func TestGetFilterReplacementsUnitTest(t *testing.T) {
 		},
 	}
 
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue(filterParam).Return(invalid)
+	mockRequest1 := &MockFormRequest{}
+	defer mockRequest1.AssertExpectations(t)
+	mockRequest1.On("FormValue", filterParam).Return(invalid)
 
 	if _, _, err = GetFilterReplacements(
-		mockRequest,
+		mockRequest1,
 		&query,
 		filterParam,
 		conf,
@@ -845,10 +867,12 @@ func TestGetFilterReplacementsUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	mockRequest.EXPECT().FormValue(filterParam).Return(string(fBytes))
+	mockRequest2 := &MockFormRequest{}
+	defer mockRequest2.AssertExpectations(t)
+	mockRequest2.On("FormValue", filterParam).Return(string(fBytes))
 
 	if _, _, err = GetFilterReplacements(
-		mockRequest,
+		mockRequest2,
 		&query,
 		filterParam,
 		conf,
@@ -862,7 +886,9 @@ func TestGetFilterReplacementsUnitTest(t *testing.T) {
 		}
 	}
 
-	mockRequest.EXPECT().FormValue(filterParam).Return(string(fBytes))
+	mockRequest3 := &MockFormRequest{}
+	defer mockRequest3.AssertExpectations(t)
+	mockRequest3.On("FormValue", filterParam).Return(string(fBytes))
 	query = defaultQuery
 	query +=
 		`
@@ -871,7 +897,7 @@ func TestGetFilterReplacementsUnitTest(t *testing.T) {
 	`
 
 	if _, _, err = GetFilterReplacements(
-		mockRequest,
+		mockRequest3,
 		&query,
 		filterParam,
 		conf,
@@ -885,11 +911,13 @@ func TestGetFilterReplacementsUnitTest(t *testing.T) {
 		}
 	}
 
+	mockRequest4 := &MockFormRequest{}
+	defer mockRequest4.AssertExpectations(t)
 	conf.ExcludeFilters = true
 	query = defaultQuery
 
 	if _, _, err = GetFilterReplacements(
-		mockRequest,
+		mockRequest4,
 		&query,
 		filterParam,
 		conf,
@@ -1083,13 +1111,14 @@ func TestFilterCheckUnitTest(t *testing.T) {
 func TestDecodeFiltersUnitTest(t *testing.T) {
 	var err error
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+	mockRequest := &MockFormRequest{}
+	defer mockRequest.AssertExpectations(t)
 
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue("test").Return("invalid")
+	invalidParam := "invalidParam"
+	param := "param"
+	mockRequest.On("FormValue", invalidParam).Return("invalid")
 
-	if _, err = DecodeFilters(mockRequest, "test"); err == nil {
+	if _, err = DecodeFilters(mockRequest, invalidParam); err == nil {
 		t.Errorf("should have error\n")
 	}
 
@@ -1107,10 +1136,10 @@ func TestDecodeFiltersUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	params := url.QueryEscape(string(fBytes))
-	mockRequest.EXPECT().FormValue("test").Return(params)
+	paramValues := url.QueryEscape(string(fBytes))
+	mockRequest.On("FormValue", param).Return(paramValues)
 
-	if _, err = DecodeFilters(mockRequest, "test"); err != nil {
+	if _, err = DecodeFilters(mockRequest, param); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
@@ -1119,13 +1148,15 @@ func TestDecodeFiltersUnitTest(t *testing.T) {
 func TestDecodeSortsUnitTest(t *testing.T) {
 	var err error
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+	mockRequest := &MockFormRequest{}
+	defer mockRequest.AssertExpectations(t)
 
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue("test").Return("invalid")
+	invalidParam := "invalidParam"
+	param := "param"
 
-	if _, err = DecodeSorts(mockRequest, "test"); err == nil {
+	mockRequest.On("FormValue", invalidParam).Return("invalid")
+
+	if _, err = DecodeSorts(mockRequest, invalidParam); err == nil {
 		t.Errorf("should have error\n")
 	}
 
@@ -1142,25 +1173,28 @@ func TestDecodeSortsUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	params := url.QueryEscape(string(sBytes))
-	mockRequest.EXPECT().FormValue("test").Return(params)
+	paramValues := url.QueryEscape(string(sBytes))
+	fmt.Printf("%s\n", paramValues)
+	mockRequest.On("FormValue", param).Return(paramValues)
 
-	if _, err = DecodeSorts(mockRequest, "test"); err != nil {
+	if _, err = DecodeSorts(mockRequest, param); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
+		t.Errorf("cause: %v\n", reflect.TypeOf(pkgerrors.Cause(err)))
 	}
 }
 
 func TestDecodeGroupsUnitTest(t *testing.T) {
 	var err error
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+	mockRequest := &MockFormRequest{}
+	defer mockRequest.AssertExpectations(t)
 
-	mockRequest := NewMockFormRequest(mockCtrl)
-	mockRequest.EXPECT().FormValue("test").Return("invalid")
+	invalidParam := "invalidParam"
+	param := "param"
+	mockRequest.On("FormValue", invalidParam).Return("invalid")
 
-	if _, err = DecodeGroups(mockRequest, "test"); err == nil {
+	if _, err = DecodeGroups(mockRequest, invalidParam); err == nil {
 		t.Errorf("should have error\n")
 	}
 
@@ -1176,10 +1210,10 @@ func TestDecodeGroupsUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	params := url.QueryEscape(string(gBytes))
-	mockRequest.EXPECT().FormValue("test").Return(params)
+	paramValues := url.QueryEscape(string(gBytes))
+	mockRequest.On("FormValue", param).Return(paramValues)
 
-	if _, err = DecodeGroups(mockRequest, "test"); err != nil {
+	if _, err = DecodeGroups(mockRequest, param); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
@@ -1290,7 +1324,7 @@ func TestSetRowerResultsUnitTest(t *testing.T) {
 func TestHasFilterErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	err := errors.New("error")
-	conf := ServerAndClientErrorConfig{}
+	conf := ServerErrorConfig{}
 
 	if HasFilterOrServerError(rr, nil, conf) {
 		t.Errorf("should not have error\n")

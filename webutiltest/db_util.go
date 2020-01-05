@@ -5,7 +5,26 @@ import (
 	"github.com/pkg/errors"
 )
 
-func DBSetup(db webutil.QueryTransaction, bindVar int) func() error {
+// DBSetup allows user to set up and tear down against a live
+// database for each test without having to set up and tear down
+// the entire database everytime
+//
+// This is accomplished by entering every action into a logging table
+// and when the test is finished, delete all the records associated
+// with the table
+//
+// Example
+//
+// func TestFoo(t *testing.T){
+//		teardown := DBSetup(realDB, sqlx.DOLLAR)
+//		defer teardown()
+//
+//		...
+//		Test Code
+// }
+//
+//
+func DBSetup(db webutil.QuerierTransaction, bindVar int) func() error {
 	return func() error {
 		query :=
 			`
@@ -19,7 +38,7 @@ func DBSetup(db webutil.QueryTransaction, bindVar int) func() error {
 		join
 			database_table on logging.database_table_id = database_table.id
 		where
-			logging.action_id = 1
+			logging.database_action_id = 1
 		group by
 			logging.primary_key_id,
 			logging.primary_key_uuid,

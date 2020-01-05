@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS user(
+CREATE TABLE IF NOT EXISTS user_profile(
     id serial primary key,
     email text not null unique,
     first_name text not null,
@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS user(
 
 CREATE TABLE IF NOT EXISTS user_group(
     id serial primary key,
-    group text not null
+    user_group text not null
 );
 
 CREATE TABLE IF NOT EXISTS database_table(
@@ -37,8 +37,7 @@ CREATE TABLE IF NOT EXISTS logging(
     been_viewed boolean not null default false,
     database_action_id int REFERENCES database_action(id),
     database_table_id int default 1 REFERENCES database_table(id) ON UPDATE SET DEFAULT ON DELETE SET DEFAULT,
-    user_profile_id int REFERENCES user_profile(id),
-    area_id int REFERENCES area(id)
+    user_profile_id int REFERENCES user_profile(id)
 );
 
 CREATE TABLE IF NOT EXISTS user_session(
@@ -49,3 +48,7 @@ CREATE TABLE IF NOT EXISTS user_session(
     group_bytes text not null,
     user_profile_id int not null REFERENCES user_profile(id)
 );
+
+INSERT INTO database_action(id, action) VALUES (1, 'CREATE') ON CONFLICT DO NOTHING;
+INSERT INTO database_action(id, action) VALUES (2, 'UPDATE') ON CONFLICT DO NOTHING;
+INSERT INTO database_action(id, action) VALUES (3, 'DELETE') ON CONFLICT DO NOTHING;

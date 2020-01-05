@@ -1046,7 +1046,7 @@ func decodeQueryParams(req FormRequest, paramName string, val interface{}) error
 		param, err := url.QueryUnescape(formVal)
 
 		if err != nil {
-			return err
+			return errors.Wrap(err, "")
 		}
 
 		err = json.Unmarshal([]byte(param), &val)
@@ -1513,7 +1513,7 @@ func InQueryRebind(bindType int, query string, args ...interface{}) (string, []i
 
 // HasFilterOrServerError determines if passed error is a filter based error
 // or a server type error and writes appropriate response to client
-func HasFilterOrServerError(w http.ResponseWriter, err error, errResp ServerAndClientErrorConfig) bool {
+func HasFilterOrServerError(w http.ResponseWriter, err error, errResp ServerErrorConfig) bool {
 	if err != nil {
 		SetHTTPResponseDefaults(&errResp.ClientErrorResponse, http.StatusNotAcceptable, []byte(err.Error()))
 		SetHTTPResponseDefaults(&errResp.ServerErrorResponse, http.StatusInternalServerError, []byte(ErrServer.Error()))

@@ -62,17 +62,17 @@ type StripeSetting struct {
 
 // DatabaseSetting is config struct to set up database connection
 type DatabaseSetting struct {
-	DBName   string `yaml:"db_name"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	SSLMode  string `yaml:"ssl_mode"`
+	DBName   string `yaml:"db_name" mapstructure:"db_name"`
+	User     string `yaml:"user" mapstructure:"user"`
+	Password string `yaml:"password" mapstructure:"password"`
+	Host     string `yaml:"host" mapstructure:"host"`
+	Port     string `yaml:"port" mapstructure:"port"`
+	SSLMode  string `yaml:"ssl_mode" mapstructure:"ssl_mode"`
 }
 
 type S3Config map[string]S3StorageSetting
 
-// S3StorageSetting
+// S3StorageSetting is setting for S3 backend
 type S3StorageSetting struct {
 	EndPoint        string `yaml:"end_point"`
 	AccessKeyID     string `yaml:"access_key_id"`

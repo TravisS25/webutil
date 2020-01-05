@@ -71,16 +71,6 @@ var (
 )
 
 //////////////////////////////////////////////////////////////////
-//------------------------ INTERFACES --------------------------
-//////////////////////////////////////////////////////////////////
-
-// CookieError is wrapper interface for securecookie.Error
-// to be able to generate mocks
-type cookieError interface {
-	securecookie.Error
-}
-
-//////////////////////////////////////////////////////////////////
 //------------------------- FUNCTIONS --------------------------
 //////////////////////////////////////////////////////////////////
 
@@ -139,12 +129,12 @@ func GetUser(r *http.Request) []byte {
 }
 
 // GetMiddlewareUser returns a user's email if set in userctx, else returns nil
-func GetMiddlewareUser(r *http.Request) *middlewareUser {
+func GetMiddlewareUser(r *http.Request) *MiddlewareUser {
 	if r.Context().Value(MiddlewareUserCtxKey) == nil {
 		return nil
 	}
 
-	return r.Context().Value(MiddlewareUserCtxKey).(*middlewareUser)
+	return r.Context().Value(MiddlewareUserCtxKey).(*MiddlewareUser)
 }
 
 // // HasBodyError checks if the "Body" field of the request parameter is nil or not

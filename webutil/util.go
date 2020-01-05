@@ -7,6 +7,10 @@ type ServerErrorConfig struct {
 	// of when a server error occurs
 	ServerErrorResponse HTTPResponseConfig
 
+	// ClientErrorResponse is used to give response header and text
+	// of when a client error occurs
+	ClientErrorResponse HTTPResponseConfig
+
 	// RecoverDB is optional parameter used to try to recover
 	// from error if one occurs
 	//
@@ -14,21 +18,20 @@ type ServerErrorConfig struct {
 	RecoverDB RecoverDB
 }
 
-// ServerAndClientErrorConfig is wrapper struct for ServerErrorConfig
-// with extra config field for setting response if error is
-// a client error
-type ServerAndClientErrorConfig struct {
+type ServerErrorCacheConfig struct {
 	ServerErrorConfig
-
-	// ClientErrorResponse is used to give response header and text
-	// of when a client error occurs
-	ClientErrorResponse HTTPResponseConfig
+	CacheConfig
 }
 
-// // CheckError simply prints given error in verbose to stdout
-// func CheckError(err error, customMessage string) {
-// 	err = errors.Wrap(err, customMessage)
-// 	fmt.Printf("%+v\n", err)
+// // ServerAndClientErrorConfig is wrapper struct for ServerErrorConfig
+// // with extra config field for setting response if error is
+// // a client error
+// type ServerAndClientErrorConfig struct {
+// 	ServerErrorConfig
+
+// 	// ClientErrorResponse is used to give response header and text
+// 	// of when a client error occurs
+// 	ClientErrorResponse HTTPResponseConfig
 // }
 
 // InsertAt is util function to insert passed value into passed slice

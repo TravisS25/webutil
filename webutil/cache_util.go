@@ -57,12 +57,13 @@ type CacheConfig struct {
 	// Cache is the cache backend to retrieve information
 	Cache CacheStore
 
-	// Key will be used against Cache to get value based on key
-	Key string
-
 	// IgnoreCacheNil will query database for information
 	// even if cache returns nil
 	IgnoreCacheNil bool
+
+	// Key will be used against Cache to get value based on key
+	// This field could be optional depending on on use case
+	Key string
 }
 
 type CacheKey struct {
