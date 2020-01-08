@@ -10,11 +10,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
+	"github.com/go-redis/redis"
 	"github.com/gorilla/sessions"
 	"github.com/knq/snaker"
 	redistore "gopkg.in/boj/redistore.v1"
 )
+
+var _ CacheStore = (*ClientCache)(nil)
+var _ SessionStore = (*ClientSession)(nil)
 
 //////////////////////////////////////////////////////////////////
 //---------------------- CUSTOM ERRORS ------------------------
@@ -95,68 +98,66 @@ type CacheSetup struct {
 	CacheStore CacheStore
 }
 
-// CacheSetup is configuration struct used to setup caching database tables
-// that generally do not insert/update often
-//
-// CacheSetup should be used in a map where the key value is the string name of
-// the database table to cache and CacheSetup is the value to use for setting up cache
-// type CacheSetup struct {
-// 	// StringVal should be the "string" representation of the database table
-// 	StringVal string
-
-// 	// CacheIDKey should be the key value you will store the table id in cache
-// 	CacheIDKey string
-
-// 	// CacheListKey should be the key value you will store the whole table in cache
-// 	CacheListKey string
-
-// 	// OrderByColumn should determine what column to order by if passed
-// 	OrderByColumn string
-
-// 	CacheSelectionConf CacheSelectionConfig
-// }
-
 //////////////////////////////////////////////////////////////////
 //------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
 
-// RedisCache is default struct that implements the CacheStore interface
+// ClientCache is default struct that implements the CacheStore interface
 // The underlining implementation is based off of the
 // "github.com/go-redis/redis" library
-type RedisCache struct {
-	CacheStore
+type ClientCache struct {
+	*redis.Client
 }
 
-// NewRedisCache returns pointer of RedisCache
-func NewRedisCache(client CacheStore) *RedisCache {
-	return &RedisCache{client}
+// NewClientCache returns pointer of ClientCache
+func NewClientCache(client *redis.Client) *ClientCache {
+	return &ClientCache{client}
 }
 
-// Get takes key value and determines if that key is in cache
-func (c *RedisCache) Get(key string) ([]byte, error) {
-	bytes, err := c.CacheStore.Get(key)
+// Get gets value based on key passed
+// Returns error if key does not exist
+func (c *ClientCache) Get(key string) ([]byte, error) {
+	var resultsErr error
 
-	if err == redis.ErrNil {
-		return nil, ErrCacheNil
+	results, err := c.Client.Get(key).Bytes()
+
+	if err != nil {
+		if err == redis.Nil {
+			resultsErr = ErrCacheNil
+		} else {
+			resultsErr = err
+		}
 	}
 
-	return bytes, err
+	return results, resultsErr
 }
 
-// RedisSession is used for storing session variables
+// Set sets value in redis server based on key and value given
+// Expiration sets how long the cache will stay in the server
+// If 0, key/value will never be deleted
+func (c *ClientCache) Set(key string, value interface{}, expiration time.Duration) {
+	c.Client.Set(key, value, expiration)
+}
+
+// Del deletes given string array of keys from server if exists
+func (c *ClientCache) Del(keys ...string) {
+	c.Client.Del(keys...)
+}
+
+// ClientSession is used for storing session variables
 // in a Redis database
-type RedisSession struct {
+type ClientSession struct {
 	*redistore.RediStore
 }
 
-// NewRedisSession returns new instance of *RedisSession
-func NewRedisSession(r *redistore.RediStore) *RedisSession {
-	return &RedisSession{RediStore: r}
+// NewClientSession returns new instance of *ClientSession
+func NewClientSession(r *redistore.RediStore) *ClientSession {
+	return &ClientSession{RediStore: r}
 }
 
 // Ping verifies that the cache backend is still
 // up and running
-func (r *RedisSession) Ping() error {
+func (r *ClientSession) Ping() error {
 	conn := r.RediStore.Pool.Get()
 	defer conn.Close()
 	_, err := conn.Do("PING")

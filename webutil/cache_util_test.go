@@ -105,7 +105,7 @@ func TestRedisSessionIntegrationTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	rs := NewRedisSession(store)
+	rs := NewClientSession(store)
 
 	if err = rs.Ping(); err != nil {
 		t.Fatalf("err: %s\n", err.Error())
