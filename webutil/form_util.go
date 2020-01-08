@@ -208,6 +208,15 @@ func NewFormValidation(entity Entity) *FormValidation {
 	}
 }
 
+// NewFormValidationCache returns *FormValidation instance with
+// the cache also set
+func NewFormValidationCache(entity Entity, cache CacheStore) *FormValidation {
+	return &FormValidation{
+		entity: entity,
+		cache:  cache,
+	}
+}
+
 // IsValid returns *validRule based on isValid parameter
 // Basically IsValid is a wrapper for the passed bool
 // to return valid rule to then apply custom error message

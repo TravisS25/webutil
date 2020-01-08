@@ -37,16 +37,14 @@ type RedisCacheSetting struct {
 // CookieStoreSetting is config struct for storing sessions
 // in cookies
 type CookieStoreSetting struct {
-	AuthKey    string `yaml:"auth_key"`
-	EncryptKey string `yaml:"encrypt_key"`
+	store
 }
 
 // FileSystemStoreSetting is config struct for storing sessions
 // in the file system
 type FileSystemStoreSetting struct {
-	Dir        string `yaml:"dir"`
-	AuthKey    string `yaml:"auth_key"`
-	EncryptKey string `yaml:"encrypt_key"`
+	store
+	Dir string `yaml:"dir"`
 }
 
 type CacheSetting struct {
@@ -55,7 +53,6 @@ type CacheSetting struct {
 
 // StripeSetting is config struct to set up stripe in app
 type StripeSetting struct {
-	TestMode            bool   `yaml:"test_mode"`
 	StripeTestSecretKey string `yaml:"stripe_test_secret_key"`
 	StripeLiveSecretKey string `yaml:"stripe_live_secret_key"`
 }
@@ -70,8 +67,6 @@ type DatabaseSetting struct {
 	SSLMode  string `yaml:"ssl_mode" mapstructure:"ssl_mode"`
 }
 
-type S3Config map[string]S3StorageSetting
-
 // S3StorageSetting is setting for S3 backend
 type S3StorageSetting struct {
 	EndPoint        string `yaml:"end_point"`
@@ -82,21 +77,20 @@ type S3StorageSetting struct {
 
 // Settings is the configuration settings for the app
 type Settings struct {
-	Prod           bool          `yaml:"prod"`
-	Domain         string        `yaml:"domain"`
-	ClientDomain   string        `yaml:"client_domain"`
-	CSRF           string        `yaml:"csrf"`
-	TemplatesDir   string        `yaml:"templates_dir"`
-	HTTPS          bool          `yaml:"https"`
-	AssetsLocation string        `yaml:"assets_location"`
-	AllowedOrigins []string      `yaml:"allowed_origins"`
-	Cache          CacheSetting  `yaml:"cache"`
-	Stripe         StripeSetting `yaml:"stripe"`
-	S3Config       S3Config      `yaml:"s3_config"`
+	Prod           bool     `yaml:"prod"`
+	Domain         string   `yaml:"domain"`
+	ClientDomain   string   `yaml:"client_domain"`
+	CSRF           string   `yaml:"csrf"`
+	TemplatesDir   string   `yaml:"templates_dir"`
+	HTTPS          bool     `yaml:"https"`
+	AssetsLocation string   `yaml:"assets_location"`
+	AllowedOrigins []string `yaml:"allowed_origins"`
 
-	Databases map[string][]DatabaseSetting `yaml:"databases"`
-	Emails    map[string]EmailSetting      `yaml:"emails"`
-	StripeMap map[string]StripeSetting     `yaml:"stripe_map"`
+	CacheConfig    map[string]CacheSetting     `yaml:"cache_config"`
+	S3Config       map[string]S3StorageSetting `yaml:"s3_config"`
+	DatabaseConfig map[string]DatabaseSetting  `yaml:"database_config"`
+	EmailConfig    map[string]EmailSetting     `yaml:"email_config"`
+	StripeConfig   map[string]StripeSetting    `yaml:"stripe_config"`
 }
 
 // ConfigSettings simply takes a string which should reference an enviroment variable
@@ -114,4 +108,9 @@ func ConfigSettings(envString string) (*Settings, error) {
 	}
 
 	return settings, nil
+}
+
+type store struct {
+	AuthKey    string `yaml:"auth_key"`
+	EncryptKey string `yaml:"encrypt_key"`
 }
