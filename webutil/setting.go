@@ -9,62 +9,45 @@ import (
 
 // EmailSetting is config struct for email
 type EmailSetting struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	User     string `yaml:"user"`
+	baseAuthConfig
+}
+
+// SessionSetting is config struct for setting up session authEncryptionConfig
+// for redis server
+type SessionSetting struct {
+	authEncryptionConfig
+	Size     int    `yaml:"size"`
+	Network  string `yaml:"network"`
+	Address  string `yaml:"address"`
 	Password string `yaml:"password"`
 }
 
-// RedisSessionSetting is config struct for setting up session store
-// for redis server
-type RedisSessionSetting struct {
-	Size       int    `yaml:"size"`
-	Network    string `yaml:"network"`
-	Address    string `yaml:"address"`
-	Password   string `yaml:"password"`
-	AuthKey    string `yaml:"auth_key"`
-	EncryptKey string `yaml:"encrypt_key"`
-}
-
-// RedisCacheSetting is config struct for setting up caching for
+// CacheSetting is config struct for setting up caching for
 // a redis server
-type RedisCacheSetting struct {
+type CacheSetting struct {
 	Address  string `yaml:"address"`
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
 }
 
-// CookieStoreSetting is config struct for storing sessions
+// CookieauthConfigSetting is config struct for storing sessions
 // in cookies
-type CookieStoreSetting struct {
-	store
+type CookieauthConfigSetting struct {
+	authEncryptionConfig
 }
 
-// FileSystemStoreSetting is config struct for storing sessions
+// FileSystemauthConfigSetting is config struct for storing sessions
 // in the file system
-type FileSystemStoreSetting struct {
-	store
+type FileSystemauthConfigSetting struct {
+	authEncryptionConfig
 	Dir string `yaml:"dir"`
-}
-
-type CacheSetting struct {
-	Redis *RedisCacheSetting `yaml:"redis"`
-}
-
-// StripeSetting is config struct to set up stripe in app
-type StripeSetting struct {
-	StripeTestSecretKey string `yaml:"stripe_test_secret_key"`
-	StripeLiveSecretKey string `yaml:"stripe_live_secret_key"`
 }
 
 // DatabaseSetting is config struct to set up database connection
 type DatabaseSetting struct {
-	DBName   string `yaml:"db_name" mapstructure:"db_name"`
-	User     string `yaml:"user" mapstructure:"user"`
-	Password string `yaml:"password" mapstructure:"password"`
-	Host     string `yaml:"host" mapstructure:"host"`
-	Port     string `yaml:"port" mapstructure:"port"`
-	SSLMode  string `yaml:"ssl_mode" mapstructure:"ssl_mode"`
+	baseAuthConfig
+	DBName  string `yaml:"db_name" mapstructure:"db_name"`
+	SSLMode string `yaml:"ssl_mode" mapstructure:"ssl_mode"`
 }
 
 // S3StorageSetting is setting for S3 backend
@@ -86,11 +69,12 @@ type Settings struct {
 	AssetsLocation string   `yaml:"assets_location"`
 	AllowedOrigins []string `yaml:"allowed_origins"`
 
+	PaymentConfig  map[string]string           `yaml:"payment_config"`
 	CacheConfig    map[string]CacheSetting     `yaml:"cache_config"`
+	SessionConfig  map[string]SessionSetting   `yaml:"session_config"`
 	S3Config       map[string]S3StorageSetting `yaml:"s3_config"`
 	DatabaseConfig map[string]DatabaseSetting  `yaml:"database_config"`
 	EmailConfig    map[string]EmailSetting     `yaml:"email_config"`
-	StripeConfig   map[string]StripeSetting    `yaml:"stripe_config"`
 }
 
 // ConfigSettings simply takes a string which should reference an enviroment variable
@@ -110,7 +94,14 @@ func ConfigSettings(envString string) (*Settings, error) {
 	return settings, nil
 }
 
-type store struct {
+type authEncryptionConfig struct {
 	AuthKey    string `yaml:"auth_key"`
 	EncryptKey string `yaml:"encrypt_key"`
+}
+
+type baseAuthConfig struct {
+	User     string `yaml:"user" mapstructure:"user"`
+	Password string `yaml:"password" mapstructure:"password"`
+	Host     string `yaml:"host" mapstructure:"host"`
+	Port     string `yaml:"port" mapstructure:"port"`
 }
