@@ -30,15 +30,15 @@ type CacheSetting struct {
 	DB       int    `yaml:"db"`
 }
 
-// CookieauthConfigSetting is config struct for storing sessions
+// CookieSetting is config struct for storing sessions
 // in cookies
-type CookieauthConfigSetting struct {
+type CookieSetting struct {
 	authEncryptionConfig
 }
 
-// FileSystemauthConfigSetting is config struct for storing sessions
+// FileSystemSetting is config struct for storing sessions
 // in the file system
-type FileSystemauthConfigSetting struct {
+type FileSystemSetting struct {
 	authEncryptionConfig
 	Dir string `yaml:"dir"`
 }
