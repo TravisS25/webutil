@@ -103,5 +103,5 @@ type baseAuthConfig struct {
 	User     string `yaml:"user" mapstructure:"user"`
 	Password string `yaml:"password" mapstructure:"password"`
 	Host     string `yaml:"host" mapstructure:"host"`
-	Port     string `yaml:"port" mapstructure:"port"`
+	Port     int    `yaml:"port" mapstructure:"port"`
 }

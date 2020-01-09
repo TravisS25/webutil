@@ -52,7 +52,7 @@ const (
 
 const (
 	// DBConnStr is default connection string
-	DBConnStr = "host=%s user=%s password=%s dbname=%s port=%s sslmode=%s"
+	DBConnStr = "host=%s user=%s password=%s dbname=%s port=%d sslmode=%s"
 )
 
 //////////////////////////////////////////////////////////////////
