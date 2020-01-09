@@ -69,12 +69,12 @@ type Settings struct {
 	AssetsLocation string   `yaml:"assets_location"`
 	AllowedOrigins []string `yaml:"allowed_origins"`
 
-	PaymentConfig  map[string]string           `yaml:"payment_config"`
-	CacheConfig    map[string]CacheSetting     `yaml:"cache_config"`
-	SessionConfig  map[string]SessionSetting   `yaml:"session_config"`
-	S3Config       map[string]S3StorageSetting `yaml:"s3_config"`
-	DatabaseConfig map[string]DatabaseSetting  `yaml:"database_config"`
-	EmailConfig    map[string]EmailSetting     `yaml:"email_config"`
+	PaymentConfig  map[string]string            `yaml:"payment_config"`
+	CacheConfig    map[string]CacheSetting      `yaml:"cache_config"`
+	SessionConfig  map[string]SessionSetting    `yaml:"session_config"`
+	S3Config       map[string]S3StorageSetting  `yaml:"s3_config"`
+	DatabaseConfig map[string][]DatabaseSetting `yaml:"database_config"`
+	EmailConfig    map[string]EmailSetting      `yaml:"email_config"`
 }
 
 // ConfigSettings simply takes a string which should reference an enviroment variable
