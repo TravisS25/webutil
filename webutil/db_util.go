@@ -73,10 +73,21 @@ var (
 //------------------------ INTERFACES ---------------------------
 //////////////////////////////////////////////////////////////////
 
+// Executer implementation should exec against a db
+type Executer interface {
+	Exec(string, ...interface{}) (sql.Result, error)
+}
+
 // Querier implementation is basic querying of a db
 type Querier interface {
 	QueryRow(query string, args ...interface{}) *sql.Row
 	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
+// QuerierExec is for querying and executing against db
+type QuerierExec interface {
+	Querier
+	Executer
 }
 
 // Scanner will scan row returned from database
@@ -100,24 +111,24 @@ type Querier interface {
 // 	Rollback() error
 // }
 
-// Transaction is for ability to create database transaction
-type Transaction interface {
+// Tx is for ability to create database transaction
+type Tx interface {
 	Begin() (tx *sql.Tx, err error)
 	Commit(tx *sql.Tx) error
 }
 
-// QuerierTransaction is used for basic querying but also
+// QuerierTx is used for basic querying but also
 // need transaction
-type QuerierTransaction interface {
-	Transaction
-	Querier
+type QuerierTx interface {
+	Tx
+	QuerierExec
 }
 
-// QuerierExec allows to query rows but also exec statement against database
-type QuerierExec interface {
-	Querier
-	Exec(string, ...interface{}) (sql.Result, error)
-}
+// // QuerierExec allows to query rows but also exec statement against database
+// type QuerierExec interface {
+// 	Querier
+// 	//Exec(string, ...interface{}) (sql.Result, error)
+// }
 
 // SqlxDB uses the sqlx library methods Get and Select for ability to
 // easily query results into structs
@@ -136,14 +147,14 @@ type Entity interface {
 // request handler functions
 type DBInterface interface {
 	Entity
-	Transaction
+	Tx
 	// /Recover
 }
 
 // Recover implementation is used to recover from db failure
-// type Recover interface {
-// 	RecoverError(err error) (*DB, error)
-// }
+type Recover interface {
+	RecoverError(err error) (*DB, error)
+}
 
 // // RecoverQuerier is used to be able to do basic querying
 // // and recover from db failure if neccessary
@@ -162,6 +173,14 @@ type DBInterface interface {
 // mind for distributed databases ie. CockroachDB
 type RecoverDB func(err error) error
 
+// RecoverDBQuery is func used to be able to recovery from db failure
+// and to re-execute query without any down time
+type RecoverDBQuery func(err error, retryFn func(db Entity, query string, args ...interface{}) error) error
+
+// RecoverDBTransaction is func used to be able to recovery from db failure
+// and to re-execute transaction without any down time
+type RecoverDBTransaction func(err error, retryFn func(db QuerierTx, queries []RunQuery) error) error
+
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
 //////////////////////////////////////////////////////////////////
@@ -169,6 +188,11 @@ type RecoverDB func(err error) error
 // Count is used to retrieve from count queries
 type Count struct {
 	Total int `json:"total"`
+}
+
+type RunQuery struct {
+	Query string
+	Args  []interface{}
 }
 
 //////////////////////////////////////////////////////////////////
@@ -299,8 +323,11 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerErrorConf
 	defaultDBErrors(&config)
 
 	if err == sql.ErrNoRows {
-		w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
-		w.Write(config.ClientErrorResponse.HTTPResponse)
+		http.Error(
+			w,
+			string(config.ClientErrorResponse.HTTPResponse),
+			*config.ClientErrorResponse.HTTPStatus,
+		)
 		return true
 	}
 
@@ -327,8 +354,11 @@ func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
 			if err = config.RecoverDB(err); err != nil {
-				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-				w.Write(config.ServerErrorResponse.HTTPResponse)
+				http.Error(
+					w,
+					string(config.ServerErrorResponse.HTTPResponse),
+					*config.ServerErrorResponse.HTTPStatus,
+				)
 				return true
 			}
 		} else {

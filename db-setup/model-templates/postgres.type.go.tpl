@@ -18,13 +18,13 @@ excludeJSONFields map[string]interface{}
 includeJSONFields map[string]interface{}
 }
 
-func Query{{ .Name }}(db httputil.SqlxDB, query string, args ...interface{}) (*{{ .Name }}, error) {
+func Query{{ .Name }}(db webutil.SqlxDB, query string, args ...interface{}) (*{{ .Name }}, error) {
 	var dest {{.Name }}
 	err := db.Get(&dest, query, args...)
 	return &dest, err
 }
 
-func Query{{ convertName .Name }}s(db httputil.SqlxDB, query string, args ...interface{}) ([]*{{ .Name }}, error) {
+func Query{{ convertName .Name }}s(db webutil.SqlxDB, query string, args ...interface{}) ([]*{{ .Name }}, error) {
 	var dest []*{{.Name }}
 	err := db.Select(&dest, query, args...)
 	return dest, err
@@ -95,7 +95,7 @@ func ({{ $short }} *{{ .Name }}) SetInclusionJSONFields(fields map[string]interf
 }
 
 // Insert inserts the {{ .Name }} to the database.
-func ({{ $short }} *{{ .Name }}) Insert(db httputil.XODB) error {
+func ({{ $short }} *{{ .Name }}) Insert(db webutil.XODB) error {
 	var err error
 
 {{ if .Table.ManualPk }}
@@ -133,7 +133,7 @@ func ({{ $short }} *{{ .Name }}) Insert(db httputil.XODB) error {
 }
 
 // Insert inserts the {{ .Name }} to the database along with adding to logging table.
-func ({{ $short }} *{{ .Name }}) InsertWithLog(db httputil.Entity, request *http.Request) error {
+func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.Request) error {
 	var err error
 	err = {{ $short }}.Insert(db)
 
@@ -153,7 +153,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db httputil.Entity, request *http
 
 {{ if ne (fieldnamesmulti .Fields $short .PrimaryKeyFields) "" }}
 	// Update updates the {{ .Name }} in the database.
-	func ({{ $short }} *{{ .Name }}) Update(db httputil.XODB) error {
+	func ({{ $short }} *{{ .Name }}) Update(db webutil.XODB) error {
 		var err error
 
 		{{ if gt ( len .PrimaryKeyFields ) 1 }}
@@ -196,7 +196,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db httputil.Entity, request *http
 	}
 
 
-	func ({{ $short }} *{{ .Name }}) UpdateWithLog(db httputil.Entity, request *http.Request) error {
+	func ({{ $short }} *{{ .Name }}) UpdateWithLog(db webutil.Entity, request *http.Request) error {
 		var err error
 		canInsertLog := {{ $short }}.canInsertLog(db)
 		err = {{ $short }}.Update(db)
@@ -220,7 +220,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db httputil.Entity, request *http
 	// Upsert performs an upsert for {{ .Name }}.
 	//
 	// NOTE: PostgreSQL 9.5+ only
-	func ({{ $short }} *{{ .Name }}) Upsert(db httputil.XODB) error {
+	func ({{ $short }} *{{ .Name }}) Upsert(db webutil.XODB) error {
 		var err error
 
 		// sql query
@@ -249,7 +249,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db httputil.Entity, request *http
 {{ end }}
 
 // Delete deletes the {{ .Name }} from the database.
-func ({{ $short }} *{{ .Name }}) Delete(db httputil.XODB) error {
+func ({{ $short }} *{{ .Name }}) Delete(db webutil.XODB) error {
 	var err error
 
 	{{ if gt ( len .PrimaryKeyFields ) 1 }}
@@ -290,7 +290,7 @@ func ({{ $short }} *{{ .Name }}) Delete(db httputil.XODB) error {
 
 
 //  Delete deletes the {{ .Name }} from the database while logging it.
-func ({{ $short }} *{{ .Name }}) DeleteWithLog(db httputil.Entity, request *http.Request) error {
+func ({{ $short }} *{{ .Name }}) DeleteWithLog(db webutil.Entity, request *http.Request) error {
 	var err error
 	err = {{ $short }}.Delete(db)
 
@@ -307,7 +307,7 @@ func ({{ $short }} *{{ .Name }}) DeleteWithLog(db httputil.Entity, request *http
 	return nil
 }
 
-func ({{ $short }} *{{ .Name }}) canInsertLog(db httputil.Entity) bool{
+func ({{ $short }} *{{ .Name }}) canInsertLog(db webutil.Entity) bool{
 	{{- if .PrimaryKey }}
 		prev, err := Query{{ .Name }}(db, `select * from {{ $table }} where {{ .PrimaryKey.Col.ColumnName }} = $1`, {{ $short }}.{{ .PrimaryKey.Name }})
 	{{- else }}
@@ -325,7 +325,7 @@ func ({{ $short }} *{{ .Name }}) canInsertLog(db httputil.Entity) bool{
 	return true
 }
 
-func ({{ $short }} *{{ .Name }}) insertLog(db httputil.Entity, request *http.Request, httpMethodID int) error {
+func ({{ $short }} *{{ .Name }}) insertLog(db webutil.Entity, request *http.Request, httpMethodID int) error {
 	rowBytes, err := json.Marshal(&{{ $short }})
 
 	if err != nil{

@@ -198,3 +198,49 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 		t.Fatalf("Could not bring database back up\n")
 	}
 }
+
+// func TestRecoveringTransactionsIntegrationTest(t *testing.T) {
+// 	var err error
+
+// 	db, err := NewDBWithList(testConf.DBConnections, Postgres)
+
+// 	if err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
+
+// 	RecoverFromError := func(err error) error {
+// 		dbMutex.Lock()
+// 		defer dbMutex.Unlock()
+// 		db, err = db.RecoverError(err)
+// 		return err
+// 	}
+
+// 	tx, err := db.Beginx()
+
+// 	if err != nil {
+// 		t.Fatalf("fatal err: %s\n", err.Error())
+// 	}
+
+// 	if _, err = tx.Exec(`insert into user_profile (id, email, first_name, last_name) values(1, 'test@email.com', 'first', 'last');`); err != nil {
+// 		t.Fatalf("err: %s", err.Error())
+// 	}
+
+// 	cmd := exec.Command(
+// 		testConf.DBResetConfiguration.DbStopCommand.Command,
+// 		testConf.DBResetConfiguration.DbStopCommand.Args...,
+// 	)
+// 	err = cmd.Start()
+
+// 	time.Sleep(time.Second * 5)
+
+// 	if _, err = tx.Exec(`insert into user_profile (id, email, first_name, last_name) values(2, 'test2@email.com', 'first2', 'last2');`); err != nil {
+// 		if err = RecoverFromError(err); err != nil{
+// 			t.Fatalf("fatal err: %s\n", err.Error())
+// 		} else{
+// 			if _, err = tx.Exec(`insert into user_profile (id, email, first_name, last_name) values(3, 'test3@email.com', 'first3', 'last3');`) err != nil{
+
+// 			}
+// 		}
+// 	}
+
+// }

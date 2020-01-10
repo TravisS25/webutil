@@ -12,10 +12,22 @@ type ServerErrorConfig struct {
 	ClientErrorResponse HTTPResponseConfig
 
 	// RecoverDB is optional parameter used to try to recover
-	// from error if one occurs
+	// from db error if one occurs
 	//
 	// Allowed to be nil
 	RecoverDB RecoverDB
+
+	// RecoverDBQueryConfig is optional parameter used to try to recover
+	// from db error if one occurs and tries to retry query
+	// that error occured on
+	//
+	// Allowed to be nil
+	RecoverDBQueryConfig RecoverDBQueryConfig
+}
+
+type RecoverDBQueryConfig struct {
+	RunQuery
+	RecoverDBQuery RecoverDBQuery
 }
 
 type ServerErrorCacheConfig struct {

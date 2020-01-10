@@ -7,10 +7,9 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"github.com/jmoiron/sqlx"
-	"github.com/TravisS25/httputil"
-	"github.com/TravisS25/httputil/confutil"
+	"github.com/TravisS25/webutil/webutil"
 	"github.com/fatih/structs"
-	"github.com/satori/go.uuid"
+	"github.com/gofrs/uuid"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"encoding/csv"
@@ -22,4 +21,3 @@ import (
 	"net/http"
 	"strconv"
 )
-
