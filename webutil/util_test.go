@@ -57,6 +57,16 @@ func initTestConfig() {
 	}
 }
 
+func initDB() {
+	var err error
+	db, err = NewDBWithList(testConf.DBConnections, Postgres)
+
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
 func init() {
 	initTestConfig()
+	initDB()
 }

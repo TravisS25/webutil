@@ -52,7 +52,7 @@ const (
 
 const (
 	// DBConnStr is default connection string
-	DBConnStr = "host=%s user=%s password=%s dbname=%s port=%d sslmode=%s"
+	DBConnStr = "%s://%s:%s@%s:%d/%s?ssl=%v&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s"
 )
 
 //////////////////////////////////////////////////////////////////
@@ -173,13 +173,10 @@ type Recover interface {
 // mind for distributed databases ie. CockroachDB
 type RecoverDB func(err error) error
 
-// RecoverDBQuery is func used to be able to recovery from db failure
-// and to re-execute query without any down time
-type RecoverDBQuery func(err error, retryFn func(db Entity, query string, args ...interface{}) error) error
-
-// RecoverDBTransaction is func used to be able to recovery from db failure
-// and to re-execute transaction without any down time
-type RecoverDBTransaction func(err error, retryFn func(db QuerierTx, queries []RunQuery) error) error
+// RetryDB implementation should query database that has
+// recovered from a failure and return whether you get
+// an error or not
+type RetryDB func() error
 
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
@@ -216,20 +213,22 @@ type DB struct {
 //
 // This function does not check what type of err is passed, just checks
 // if err is nil or not so it's up to user to use appropriately; however
-// we do a quick ping check just to make sure db is truely down
-//
-// This function is NOT thread safe so one should create a mutex around
-// this function when trying to recover from error
+// we do a quick ping check just to make sure db is truly down
 func (db *DB) RecoverError(err error) (*DB, error) {
 	if err != nil {
 		dbInfo := fmt.Sprintf(
 			DBConnStr,
-			db.currentConfig.Host,
+			db.dbType,
 			db.currentConfig.User,
 			db.currentConfig.Password,
-			db.currentConfig.DBName,
+			db.currentConfig.Host,
 			db.currentConfig.Port,
+			db.currentConfig.DBName,
+			db.currentConfig.SSL,
 			db.currentConfig.SSLMode,
+			db.currentConfig.SSLRootCert,
+			db.currentConfig.SSLKey,
+			db.currentConfig.SSLCert,
 		)
 
 		_, err = db.Driver().Open(dbInfo)
@@ -261,19 +260,22 @@ func (db *DB) RecoverError(err error) (*DB, error) {
 // NewDB is function that returns *DB with given DB config
 // If db connection fails, returns error
 func NewDB(dbConfig DatabaseSetting, dbType string) (*DB, error) {
-	dbInfo := fmt.Sprintf(
+	dbStr := fmt.Sprintf(
 		DBConnStr,
-		dbConfig.Host,
+		dbType,
 		dbConfig.User,
 		dbConfig.Password,
-		dbConfig.DBName,
+		dbConfig.Host,
 		dbConfig.Port,
+		dbConfig.DBName,
+		dbConfig.SSL,
 		dbConfig.SSLMode,
+		dbConfig.SSLRootCert,
+		dbConfig.SSLKey,
+		dbConfig.SSLCert,
 	)
 
-	fmt.Printf("conn: %s\n", dbInfo)
-
-	db, err := sqlx.Open(dbType, dbInfo)
+	db, err := sqlx.Open(dbType, dbStr)
 	if err != nil {
 		return nil, err
 	}
@@ -353,17 +355,25 @@ func defaultDBErrors(config *ServerErrorConfig) {
 func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
-			if err = config.RecoverDB(err); err != nil {
-				http.Error(
-					w,
-					string(config.ServerErrorResponse.HTTPResponse),
-					*config.ServerErrorResponse.HTTPStatus,
-				)
-				return true
+			fmt.Printf("made to recover\n")
+			if err = config.RecoverDB(err); err == nil {
+				fmt.Printf("past recover\n")
+				if config.RetryDB != nil {
+					fmt.Printf("made to retry\n")
+					if err = config.RetryDB(); err == nil {
+						fmt.Printf("past retry\n")
+						return false
+					}
+				}
 			}
-		} else {
-			return true
 		}
+
+		http.Error(
+			w,
+			string(config.ServerErrorResponse.HTTPResponse),
+			*config.ServerErrorResponse.HTTPStatus,
+		)
+		return true
 	}
 
 	return false

@@ -1382,162 +1382,20 @@ func InQueryRebind(bindType int, query string, args ...interface{}) (string, []i
 	return query, args, nil
 }
 
-// SetRowerResults gathers the results within rower and applies
-// it to the cache store
-// func SetRowerResults(
-// 	rower Rower,
-// 	cache CacheStore,
-// 	cacheSetup CacheSetup,
-// ) error {
-// 	var err error
-// 	columns, err := rower.Columns()
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	count := len(columns)
-// 	values := make([]interface{}, count)
-// 	valuePtrs := make([]interface{}, count)
-// 	rows := make([]interface{}, 0)
-// 	forms := make([]FormSelection, 0)
-
-// 	for rower.Next() {
-// 		form := FormSelection{}
-
-// 		for i := range columns {
-// 			valuePtrs[i] = &values[i]
-// 		}
-
-// 		err = rower.Scan(valuePtrs...)
-
-// 		if err != nil {
-// 			return err
-// 		}
-
-// 		row := make(map[string]interface{}, 0)
-// 		var idVal interface{}
-
-// 		for i, k := range columns {
-// 			var v interface{}
-// 			//var formVal string
-
-// 			val := values[i]
-
-// 			if k == "id" {
-// 				idVal = val
-// 			}
-
-// 			switch val.(type) {
-// 			case int64:
-// 				v = strconv.FormatInt(val.(int64), IntBase)
-// 			case *int64:
-// 				t := val.(*int64)
-// 				if t != nil {
-// 					v = strconv.FormatInt(*t, IntBase)
-// 				}
-// 			case []byte:
-// 				t := val.([]byte)
-// 				v, err = strconv.ParseFloat(string(t), IntBitSize)
-// 				if err != nil {
-// 					panic(err)
-// 				}
-// 			default:
-// 				v = val
-// 			}
-
-// 			var columnName string
-
-// 			if snaker.IsInitialism(columns[i]) {
-// 				columnName = strings.ToLower(columns[i])
-// 			} else {
-// 				camelCaseJSON := snaker.ForceLowerCamelIdentifier(columns[i])
-// 				firstLetter := strings.ToLower(string(camelCaseJSON[0]))
-// 				columnName = firstLetter + camelCaseJSON[1:]
-// 			}
-
-// 			row[columnName] = v
-
-// 			if cacheSetup.CacheSelectionConf.ValueColumn == columnName {
-// 				form.Value = v
-// 			}
-
-// 			if cacheSetup.CacheSelectionConf.TextColumn == columnName {
-// 				form.Text = v
-// 			}
-// 		}
-
-// 		rowBytes, err := json.Marshal(&row)
-
-// 		if err != nil {
-// 			return err
-// 		}
-
-// 		var cacheID string
-
-// 		switch idVal.(type) {
-// 		case int64:
-// 			cacheID = strconv.FormatInt(idVal.(int64), IntBase)
-// 		case int:
-// 			cacheID = strconv.Itoa(idVal.(int))
-// 		default:
-// 			return errors.New("Invalid id type")
-// 		}
-
-// 		cache.Set(
-// 			fmt.Sprintf(cacheSetup.CacheIDKey, cacheID),
-// 			rowBytes,
-// 			0,
-// 		)
-
-// 		rows = append(rows, row)
-// 		forms = append(forms, form)
-// 	}
-
-// 	rowsBytes, err := json.Marshal(&rows)
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	formBytes, err := json.Marshal(&forms)
-
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	cache.Set(cacheSetup.CacheListKey, rowsBytes, 0)
-// 	cache.Set(cacheSetup.CacheSelectionConf.FormSelectionKey, formBytes, 0)
-// 	return nil
-// }
-
 // HasFilterOrServerError determines if passed error is a filter based error
 // or a server type error and writes appropriate response to client
-func HasFilterOrServerError(w http.ResponseWriter, err error, errResp ServerErrorConfig) bool {
+func HasFilterOrServerError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	if err != nil {
-		SetHTTPResponseDefaults(&errResp.ClientErrorResponse, http.StatusNotAcceptable, []byte(err.Error()))
-		SetHTTPResponseDefaults(&errResp.ServerErrorResponse, http.StatusInternalServerError, []byte(ErrServer.Error()))
-
-		serverResp := func() {
-			w.WriteHeader(*errResp.ServerErrorResponse.HTTPStatus)
-			w.Write(errResp.ServerErrorResponse.HTTPResponse)
-		}
+		SetHTTPResponseDefaults(&config.ClientErrorResponse, http.StatusNotAcceptable, []byte(err.Error()))
+		SetHTTPResponseDefaults(&config.ServerErrorResponse, http.StatusInternalServerError, []byte(ErrServer.Error()))
 
 		switch err.(type) {
 		case *FilterError, *SortError, *GroupError:
-			w.WriteHeader(*errResp.ClientErrorResponse.HTTPStatus)
-			w.Write(errResp.ClientErrorResponse.HTTPResponse)
+			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
+			w.Write(config.ClientErrorResponse.HTTPResponse)
 			return true
 		default:
-			if errResp.RecoverDB != nil {
-				if err = errResp.RecoverDB(err); err != nil {
-					serverResp()
-					return true
-				}
-			} else {
-				serverResp()
-				return true
-			}
+			return dbError(w, err, config)
 		}
 	}
 

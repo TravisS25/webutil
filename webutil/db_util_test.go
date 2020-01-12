@@ -1,6 +1,7 @@
 package webutil
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 var (
 	dbMutex sync.Mutex
+	db      *DB
 
 	errDB     = errors.New("db error")
 	recoverDB = func(err error) error {
@@ -42,6 +44,17 @@ func (m *channel) Get() <-chan struct{} {
 	return m.ready
 }
 
+func RecoverFromError(err error) error {
+	if err != nil {
+		dbMutex.Lock()
+		defer dbMutex.Unlock()
+		db, err = db.RecoverError(err)
+		return err
+	}
+
+	return nil
+}
+
 func TestHasDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	conf := ServerErrorConfig{}
@@ -57,9 +70,16 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 	// Mocking recovering from db so should
 	// return false
 	conf.RecoverDB = recoverDB
+	conf.RetryDB = func() error {
+		return nil
+	}
 
 	if HasDBError(rr, errDB, conf) {
+		buf := &bytes.Buffer{}
+		buf.ReadFrom(rr.Result().Body)
+		rr.Result().Body.Close()
 		t.Errorf("should not have db error\n")
+		t.Errorf("response: %s\n", buf.String())
 	}
 
 	// Mocking fail recovery from db so should
@@ -87,20 +107,7 @@ func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	var err error
 
-	db, err := NewDBWithList(testConf.DBConnections, Postgres)
-
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
 	var wg sync.WaitGroup
-
-	RecoverFromError := func(err error) error {
-		dbMutex.Lock()
-		defer dbMutex.Unlock()
-		db, err = db.RecoverError(err)
-		return err
-	}
 
 	oneShot := newChannel()
 	r := mux.NewRouter()
@@ -118,7 +125,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 				fmt.Printf("able to recover err from req: %s\n", req.RemoteAddr)
 			} else {
 				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Printf("could not recover err from req: %s\n", req.RemoteAddr)
+				t.Errorf("could not recover err from req: %s\n", req.RemoteAddr)
 			}
 
 		} else {
@@ -168,10 +175,10 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 		testConf.DBResetConfiguration.DbStopCommand.Command,
 		testConf.DBResetConfiguration.DbStopCommand.Args...,
 	)
-	err = cmd.Start()
+	err = cmd.Run()
 
 	if err != nil {
-		t.Errorf("Could not quit database\n")
+		t.Errorf("Could not quit database: %s\n", err.Error())
 		t.Errorf(
 			"command: %s, args: %v\n",
 			testConf.DBResetConfiguration.DbStopCommand.Command,
@@ -180,11 +187,6 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 		t.Fatalf("err: %s", err.Error())
 	}
 
-	// Allow for at least one client to connect to
-	// db while down to try to recover and allow other
-	// clients to connect to new db connection
-	time.Sleep(time.Second * 5)
-
 	oneShot.Stop()
 	wg.Wait()
 
@@ -192,55 +194,70 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 		testConf.DBResetConfiguration.DbStartCommand.Command,
 		testConf.DBResetConfiguration.DbStartCommand.Args...,
 	)
-	err = cmd.Start()
+	err = cmd.Run()
 
 	if err != nil {
-		t.Fatalf("Could not bring database back up\n")
+		t.Fatalf("Could not bring database back up: %s\n", err.Error())
 	}
 }
 
-// func TestRecoveringTransactionsIntegrationTest(t *testing.T) {
-// 	var err error
+func TestRecoverDBIntegrationTest(t *testing.T) {
+	var err error
+	var rows *sql.Rows
 
-// 	db, err := NewDBWithList(testConf.DBConnections, Postgres)
+	rr := httptest.NewRecorder()
+	conf := ServerErrorConfig{
+		RecoverDB: RecoverFromError,
+	}
+	cmd := exec.Command(
+		testConf.DBResetConfiguration.DbStopCommand.Command,
+		testConf.DBResetConfiguration.DbStopCommand.Args...,
+	)
+	err = cmd.Run()
 
-// 	if err != nil {
-// 		t.Fatalf(err.Error())
-// 	}
+	if err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
 
-// 	RecoverFromError := func(err error) error {
-// 		dbMutex.Lock()
-// 		defer dbMutex.Unlock()
-// 		db, err = db.RecoverError(err)
-// 		return err
-// 	}
+	defer func() {
+		cmd = exec.Command(
+			testConf.DBResetConfiguration.DbStartCommand.Command,
+			testConf.DBResetConfiguration.DbStartCommand.Args...,
+		)
+		cmd.Run()
+	}()
 
-// 	tx, err := db.Beginx()
+	validateQuery := func() error {
+		rows, err = db.Query(testConf.DBResetConfiguration.ValidateQuery)
+		return err
+	}
 
-// 	if err != nil {
-// 		t.Fatalf("fatal err: %s\n", err.Error())
-// 	}
+	err = validateQuery()
 
-// 	if _, err = tx.Exec(`insert into user_profile (id, email, first_name, last_name) values(1, 'test@email.com', 'first', 'last');`); err != nil {
-// 		t.Fatalf("err: %s", err.Error())
-// 	}
+	if err == nil {
+		t.Errorf("should have error\n")
+	}
 
-// 	cmd := exec.Command(
-// 		testConf.DBResetConfiguration.DbStopCommand.Command,
-// 		testConf.DBResetConfiguration.DbStopCommand.Args...,
-// 	)
-// 	err = cmd.Start()
+	conf.RetryDB = validateQuery
 
-// 	time.Sleep(time.Second * 5)
+	if HasDBError(rr, err, conf) {
+		t.Fatalf("could not recover")
+	}
 
-// 	if _, err = tx.Exec(`insert into user_profile (id, email, first_name, last_name) values(2, 'test2@email.com', 'first2', 'last2');`); err != nil {
-// 		if err = RecoverFromError(err); err != nil{
-// 			t.Fatalf("fatal err: %s\n", err.Error())
-// 		} else{
-// 			if _, err = tx.Exec(`insert into user_profile (id, email, first_name, last_name) values(3, 'test3@email.com', 'first3', 'last3');`) err != nil{
+	if rows == nil {
+		t.Errorf("rows is nil\n")
+	}
 
-// 			}
-// 		}
-// 	}
+	results := make([]interface{}, 0)
 
-// }
+	for rows.Next() {
+		var result interface{}
+		err = rows.Scan(&result)
+
+		if err != nil {
+			t.Fatalf("err: %s\n", err.Error())
+		}
+
+		results = append(results, result)
+	}
+}

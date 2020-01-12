@@ -96,6 +96,10 @@ var (
 	// ErrInvalidStringInternal returns for form field if
 	// data type for date field is not "string" or "*string"
 	ErrInvalidStringInternal = errors.New("input must be string or *string")
+
+	// ErrInvalidFormSelectionInternal will be returned if a query does not
+	// return two columns when trying to query for Formselections
+	ErrInvalidFormSelectionInternal = errors.New("query should only return 2 columns")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -649,12 +653,13 @@ func (v *validateIDsRule) Error(message string) *validateIDsRule {
 //----------------------- FUNCTIONS -------------------------
 //////////////////////////////////////////////////////////////////
 
-// func StandardizeSpaces(s string) string {
-// 	return strings.Join(strings.Fields(s), " ")
-// }
-
 // HasFormErrors determines what type of form error is passed and
 // sends appropriate error message to client
+//
+// ServerErrorResponse and ClientErrorResponse have set default
+// if user does not
+//
+// RecoverDB is optional and can be set but RetryDB is not used
 func HasFormErrors(
 	w http.ResponseWriter,
 	err error,
@@ -678,9 +683,7 @@ func HasFormErrors(
 				w.Write(jsonString)
 			} else {
 				if config.RecoverDB != nil {
-					if err = config.RecoverDB(err); err == nil {
-						return false
-					}
+					config.RecoverDB(err)
 				}
 
 				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
@@ -696,6 +699,12 @@ func HasFormErrors(
 
 // GetFormSelections takes query with arguments and returns slice of
 // FormSelection of result
+// The query given should only return two columns, value and
+//
+// ServerErrorResponse and ClientErrorResponse have set default
+// if user does not
+//
+// RecoverDB is optional and can be set but RetryDB is not used
 func GetFormSelections(
 	w http.ResponseWriter,
 	config ServerErrorCacheConfig,
@@ -717,17 +726,33 @@ func GetFormSelections(
 		rower, err := db.Query(query, args...)
 
 		if err != nil {
+			canRecover := false
+
 			if config.RecoverDB != nil {
-				if err = config.RecoverDB(err); err != nil {
-					w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
-					w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
-					return nil, err
+				if err = config.RecoverDB(err); err == nil {
+					rower, err = db.Query(query, args...)
+
+					if err == nil {
+						canRecover = true
+					}
 				}
-			} else {
-				w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
-				w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
+			}
+
+			if !canRecover {
+				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
+				w.Write(config.ServerErrorResponse.HTTPResponse)
 				return nil, err
 			}
+		}
+
+		cols, err := rower.Columns()
+
+		if err != nil {
+			return nil, err
+		}
+
+		if len(cols) != 2 {
+			return nil, ErrInvalidFormSelectionInternal
 		}
 
 		forms := make([]FormSelection, 0)
@@ -759,12 +784,13 @@ func GetFormSelections(
 			return getFormSelectionsFromDB()
 		}
 
-		w.WriteHeader(*config.ServerErrorConfig.ServerErrorResponse.HTTPStatus)
-		w.Write(config.ServerErrorConfig.ServerErrorResponse.HTTPResponse)
+		w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
+		w.Write(config.ServerErrorResponse.HTTPResponse)
 		return nil, err
 	}
 
 	forms := make([]FormSelection, 0)
+
 	if err = json.Unmarshal(jsonBytes, &forms); err != nil {
 		http.Error(w, ErrServer.Error(), http.StatusInternalServerError)
 		return nil, err

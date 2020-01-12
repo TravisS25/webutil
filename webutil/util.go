@@ -17,34 +17,19 @@ type ServerErrorConfig struct {
 	// Allowed to be nil
 	RecoverDB RecoverDB
 
-	// RecoverDBQueryConfig is optional parameter used to try to recover
-	// from db error if one occurs and tries to retry query
-	// that error occured on
+	// RetryDB is optional parameter used to try to re-query
+	// from a recovered database failure
 	//
 	// Allowed to be nil
-	RecoverDBQueryConfig RecoverDBQueryConfig
+	RetryDB RetryDB
 }
 
-type RecoverDBQueryConfig struct {
-	RunQuery
-	RecoverDBQuery RecoverDBQuery
-}
-
+// ServerErrorCacheConfig is config struct used to respond to server
+// error but also have ability to use cache
 type ServerErrorCacheConfig struct {
 	ServerErrorConfig
 	CacheConfig
 }
-
-// // ServerAndClientErrorConfig is wrapper struct for ServerErrorConfig
-// // with extra config field for setting response if error is
-// // a client error
-// type ServerAndClientErrorConfig struct {
-// 	ServerErrorConfig
-
-// 	// ClientErrorResponse is used to give response header and text
-// 	// of when a client error occurs
-// 	ClientErrorResponse HTTPResponseConfig
-// }
 
 // InsertAt is util function to insert passed value into passed slice
 // at passed index

@@ -1321,7 +1321,7 @@ func TestSetRowerResultsUnitTest(t *testing.T) {
 	// mockCacheStore.EXPECT()
 }
 
-func TestHasFilterErrorUnitTest(t *testing.T) {
+func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	err := errors.New("error")
 	conf := ServerErrorConfig{}
@@ -1353,6 +1353,7 @@ func TestHasFilterErrorUnitTest(t *testing.T) {
 		}
 	}
 
+	rr = httptest.NewRecorder()
 	conf.RecoverDB = func(err error) error {
 		return err
 	}
@@ -1363,5 +1364,34 @@ func TestHasFilterErrorUnitTest(t *testing.T) {
 		if rr.Code != http.StatusInternalServerError {
 			t.Errorf("status should be http.StatusInternalServerError\n")
 		}
+	}
+
+	rr = httptest.NewRecorder()
+	conf.RecoverDB = func(err error) error {
+		return nil
+	}
+	conf.RetryDB = func() error {
+		return err
+	}
+
+	if !HasFilterOrServerError(rr, err, conf) {
+		t.Errorf("should have error\n")
+	} else {
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("status should be http.StatusInternalServerError\n")
+		}
+	}
+
+	rr = httptest.NewRecorder()
+	conf.RecoverDB = func(err error) error {
+		return nil
+	}
+	conf.RetryDB = func() error {
+		return nil
+	}
+
+	if HasFilterOrServerError(rr, err, conf) {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
 	}
 }

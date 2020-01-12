@@ -9,13 +9,13 @@ import (
 
 // EmailSetting is config struct for email
 type EmailSetting struct {
-	baseAuthConfig
+	BaseAuthSetting
 }
 
-// SessionSetting is config struct for setting up session authEncryptionConfig
+// SessionSetting is config struct for setting up session AuthEncryptionSetting
 // for redis server
 type SessionSetting struct {
-	authEncryptionConfig
+	AuthEncryptionSetting
 	Size     int    `yaml:"size"`
 	Network  string `yaml:"network"`
 	Address  string `yaml:"address"`
@@ -33,21 +33,25 @@ type CacheSetting struct {
 // CookieSetting is config struct for storing sessions
 // in cookies
 type CookieSetting struct {
-	authEncryptionConfig
+	AuthEncryptionSetting
 }
 
 // FileSystemSetting is config struct for storing sessions
 // in the file system
 type FileSystemSetting struct {
-	authEncryptionConfig
+	AuthEncryptionSetting
 	Dir string `yaml:"dir"`
 }
 
 // DatabaseSetting is config struct to set up database connection
 type DatabaseSetting struct {
-	baseAuthConfig
-	DBName  string `yaml:"db_name" mapstructure:"db_name"`
-	SSLMode string `yaml:"ssl_mode" mapstructure:"ssl_mode"`
+	BaseAuthSetting `yaml:"base_auth_setting" mapstructure:"base_auth_setting"`
+	DBName          string `yaml:"db_name" mapstructure:"db_name"`
+	SSLMode         string `yaml:"ssl_mode" mapstructure:"ssl_mode"`
+	SSL             bool   `yaml:"ssl" mapstructure:"ssl"`
+	SSLRootCert     string `yaml:"ssl_root_cert" mapstructure:"ssl_root_cert"`
+	SSLKey          string `yaml:"ssl_key" mapstructure:"ssl_key"`
+	SSLCert         string `yaml:"ssl_cert" mapstructure:"ssl_cert"`
 }
 
 // S3StorageSetting is setting for S3 backend
@@ -94,12 +98,12 @@ func ConfigSettings(envString string) (*Settings, error) {
 	return settings, nil
 }
 
-type authEncryptionConfig struct {
+type AuthEncryptionSetting struct {
 	AuthKey    string `yaml:"auth_key"`
 	EncryptKey string `yaml:"encrypt_key"`
 }
 
-type baseAuthConfig struct {
+type BaseAuthSetting struct {
 	User     string `yaml:"user" mapstructure:"user"`
 	Password string `yaml:"password" mapstructure:"password"`
 	Host     string `yaml:"host" mapstructure:"host"`
