@@ -513,8 +513,10 @@ func TestGroupHandlerUnitTest(t *testing.T) {
 	state := &middlewareState{}
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
-			RecoverDB: func(err error) error {
-				return nil
+			RecoverConfig: RecoverConfig{
+				RecoverDB: func(err error) error {
+					return nil
+				},
 			},
 		},
 	}
@@ -676,8 +678,10 @@ func TestRoutingHandlerUnitTest(t *testing.T) {
 	state := &middlewareState{}
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
-			RecoverDB: func(err error) error {
-				return nil
+			RecoverConfig: RecoverConfig{
+				RecoverDB: func(err error) error {
+					return nil
+				},
 			},
 		},
 	}

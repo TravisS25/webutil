@@ -203,9 +203,9 @@ func TestSetCachingUnitTest(t *testing.T) {
 		CacheSets: []CacheSet{
 			{
 				CacheKey: CacheKey{
-					Key:       "key-%v",
-					NumOfArgs: 1,
-					Expire:    0,
+					Key:                  "key-%v",
+					PlaceHolderPositions: []int{1},
+					Expire:               0,
 				},
 				Query:       "select",
 				IsSingleKey: true,
@@ -229,18 +229,18 @@ func TestSetCachingUnitTest(t *testing.T) {
 		t.Errorf("err: %s\n", err.Error())
 	}
 
-	rows = sqlmock.NewRows([]string{"value", "text"}).
-		AddRow(1, "foo").
-		AddRow(2, "bar")
-	mockDB.ExpectQuery("").WillReturnRows(rows)
-	setup.CacheSets[0].CacheKey.NumOfArgs = 3
+	// rows = sqlmock.NewRows([]string{"value", "text"}).
+	// 	AddRow(1, "foo").
+	// 	AddRow(2, "bar")
+	// mockDB.ExpectQuery("").WillReturnRows(rows)
+	// setup.CacheSets[0].CacheKey.NumOfArgs = 3
 
-	if err = SetCacheFromDB(setup, db); err == nil {
-		t.Errorf("should have error\n")
-	} else {
-		if err != errTooManyKeyArgs {
-			t.Errorf("should have errTooManyKeyArgs error\n")
-			t.Errorf("err: %s\n", err.Error())
-		}
-	}
+	// if err = SetCacheFromDB(setup, db); err == nil {
+	// 	t.Errorf("should have error\n")
+	// } else {
+	// 	if err != errTooManyKeyArgs {
+	// 		t.Errorf("should have errTooManyKeyArgs error\n")
+	// 		t.Errorf("err: %s\n", err.Error())
+	// 	}
+	// }
 }

@@ -28,7 +28,9 @@ var (
 	// back with nil
 	ErrCacheNil = errors.New("webutil: cache is nil")
 
-	errTooManyKeyArgs = errors.New("webutil: there are more cache args then columns")
+	ErrTooManyPlaceHolders = errors.New("webutil: there are more place holders then columns")
+
+	ErrOutOfRange = errors.New("webutil: place holder out of range")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -65,18 +67,19 @@ type CacheConfig struct {
 	IgnoreCacheNil bool
 
 	// Key will be used against Cache to get value based on key
-	// This field could be optional depending on on use case
+	// This field could be optional depending on use case
 	Key string
 }
 
 type CacheKey struct {
 	Key string
 
-	NumOfArgs int
+	PlaceHolderPositions []int
 
 	Expire time.Duration
 }
 
+// CacheSet is config struct used in CacheSetup config struct
 type CacheSet struct {
 	CacheKey CacheKey
 
@@ -238,16 +241,21 @@ func SetCacheFromDB(cacheSetup CacheSetup, db Querier) error {
 				return err
 			}
 
-			fmt.Printf("val: %v\n", v.IsSingleKey)
-
 			if !v.IsSingleKey {
-				if colCount < v.CacheKey.NumOfArgs {
-					return errTooManyKeyArgs
+				if colCount < len(v.CacheKey.PlaceHolderPositions) {
+					return ErrTooManyPlaceHolders
 				}
 
-				keyArgs := make([]interface{}, 0, v.CacheKey.NumOfArgs)
+				keyArgs := make([]interface{}, 0, len(v.CacheKey.PlaceHolderPositions))
 
-				for i := 0; i < v.CacheKey.NumOfArgs; i++ {
+				// Check to make sure user is not going out of index
+				for i := 0; i < len(v.CacheKey.PlaceHolderPositions); i++ {
+					idx := v.CacheKey.PlaceHolderPositions[i]
+
+					if idx >= len(columns) {
+						return ErrTooManyPlaceHolders
+					}
+
 					keyArgs = append(keyArgs, columns[i])
 				}
 

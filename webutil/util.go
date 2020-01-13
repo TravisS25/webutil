@@ -3,6 +3,8 @@ package webutil
 // ServerErrorConfig is a generic config struct to use
 // with various functions to give default responses if error occurs
 type ServerErrorConfig struct {
+	RecoverConfig
+
 	// ServerErrorResponse is used to give response header and text
 	// of when a server error occurs
 	ServerErrorResponse HTTPResponseConfig
@@ -10,11 +12,14 @@ type ServerErrorConfig struct {
 	// ClientErrorResponse is used to give response header and text
 	// of when a client error occurs
 	ClientErrorResponse HTTPResponseConfig
+}
 
-	// RecoverDB is optional parameter used to try to recover
-	// from db error if one occurs
-	//
-	// Allowed to be nil
+// RecoverConfig is config struct used to allow user to implement
+// a way of recovering from a db failure and optionally
+// re-querying the db
+type RecoverConfig struct {
+	// RecoverDB is func that should be used to try to recover
+	// from a db failure
 	RecoverDB RecoverDB
 
 	// RetryDB is optional parameter used to try to re-query

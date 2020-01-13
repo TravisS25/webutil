@@ -345,8 +345,10 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	buf := &bytes.Buffer{}
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
-			RecoverDB: func(err error) error {
-				return ErrServer
+			RecoverConfig: RecoverConfig{
+				RecoverDB: func(err error) error {
+					return ErrServer
+				},
 			},
 		},
 	}

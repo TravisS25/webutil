@@ -269,8 +269,6 @@ func (f *FormValidation) ValidateDate(
 //
 // If the ids passed happen to be type formutil#Int64, it will extract the values so it
 // can be used against the query properly
-//
-// The cacheConfig parameter can be nil if you do not need/have a cache backend
 func (f *FormValidation) ValidateIDs(
 	cacheConfig CacheConfig,
 	placeHolderPosition,

@@ -207,7 +207,9 @@ func TestRecoverDBIntegrationTest(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	conf := ServerErrorConfig{
-		RecoverDB: RecoverFromError,
+		RecoverConfig: RecoverConfig{
+			RecoverDB: RecoverFromError,
+		},
 	}
 	cmd := exec.Command(
 		testConf.DBResetConfiguration.DbStopCommand.Command,
