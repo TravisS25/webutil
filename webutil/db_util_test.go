@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -17,7 +20,7 @@ import (
 
 var (
 	dbMutex sync.Mutex
-	db      *DB
+	//db      *DB
 
 	errDB     = errors.New("db error")
 	recoverDB = func(err error) error {
@@ -44,16 +47,180 @@ func (m *channel) Get() <-chan struct{} {
 	return m.ready
 }
 
-func RecoverFromError(err error) error {
-	if err != nil {
-		dbMutex.Lock()
-		defer dbMutex.Unlock()
-		db, err = db.RecoverError(err)
-		return err
+// func RecoverFromError(err error) error {
+// 	if err != nil {
+// 		dbMutex.Lock()
+// 		defer dbMutex.Unlock()
+// 		db, err = db.RecoverError(err)
+// 		return err
+// 	}
+
+// 	return nil
+// }
+
+// dbRecoverSetup sets up and returns new db with implemented RecoverDB function
+func dbRecoverSetup() (*DB, func(*DB, error) error, func() error, error) {
+	var db *DB
+	var err error
+	var chosenPort int
+	var dockerName string
+	var conf teardownConfig
+	//var chosenPortInt int
+
+	rand.Seed(time.Now().UnixNano())
+	minPort := 3000
+	maxPort := 30000
+	portAttempts := 0
+
+	for {
+		chosenPort = rand.Intn(maxPort-minPort+1) + minPort
+		ln, err := net.Listen("tcp", ":"+strconv.Itoa(chosenPort))
+
+		if err == nil {
+			if err = ln.Close(); err != nil {
+				return nil, nil, nil, errors.Wrap(err, "")
+			}
+
+			break
+		}
+
+		portAttempts++
+
+		if portAttempts > testConf.DBResetConf.MaxPortAttempts {
+			return nil, nil, nil, errors.New("can't find empty port")
+		}
 	}
 
-	return nil
+	conf.ChosenPort = chosenPort
+	portFormat := "%v"
+	portArgs := []interface{}{chosenPort}
+	dynamicArgs := []string{}
+
+	if testConf.DBResetConf.DBStartCommand.PortConfig.DockerPort != "" {
+		rand.Seed(time.Now().UnixNano())
+		dockerName = strconv.Itoa(rand.Int())
+		conf.DockerName = dockerName
+		portFormat += ":%v"
+
+		dynamicArgs = append(dynamicArgs, "--name", dockerName, "--hostname", dockerName)
+
+		portArgs = append(
+			portArgs,
+			testConf.DBResetConf.DBStartCommand.PortConfig.DockerPort,
+		)
+	}
+
+	portVal := fmt.Sprintf(portFormat, portArgs...)
+	dynamicArgs = append(
+		dynamicArgs,
+		testConf.DBResetConf.DBStartCommand.PortConfig.FlagKey,
+		portVal,
+	)
+
+	// args := []interface{}{}
+
+	// for _, v := range testConf.DBResetConf.DBStartCommand.Args {
+	// 	args = append(args, v)
+	// }
+
+	//var flagStartIdx int
+	startArgs := []string{}
+
+	hasDynamicArgs := false
+
+	for _, v := range testConf.DBResetConf.DBStartCommand.Args {
+		if v[0] == '-' && !hasDynamicArgs {
+			startArgs = append(startArgs, v)
+
+			for _, t := range dynamicArgs {
+				startArgs = append(startArgs, t)
+			}
+
+			hasDynamicArgs = true
+		} else {
+			startArgs = append(startArgs, v)
+		}
+	}
+
+	fmt.Printf("command: %s\n", testConf.DBResetConf.DBStartCommand.Command)
+	fmt.Printf("args: %v\n", startArgs)
+
+	cmd := exec.Command(
+		testConf.DBResetConf.DBStartCommand.Command,
+		startArgs...,
+	)
+	err = cmd.Run()
+
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "")
+	}
+
+	time.Sleep(time.Second * 2)
+
+	baseConn := testConf.DBResetConf.BaseConnection
+	baseConn.Port = chosenPort
+
+	dbSettings := []DatabaseSetting{baseConn}
+	dbSettings = append(dbSettings, testConf.DBResetConf.DBConnections...)
+	db, err = NewDBWithList(dbSettings, Postgres)
+
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "")
+	}
+
+	return db, func(innerDB *DB, err error) error {
+			if err != nil {
+				db, err = db.RecoverError(err)
+				return errors.Wrap(err, "")
+			}
+
+			return nil
+		}, func() error {
+			stopArgs := testConf.DBResetConf.DBRemoveCommand.Args
+
+			if conf.DockerName != "" {
+				stopArgs = append(stopArgs, conf.DockerName)
+			} else {
+				stopArgs = append(stopArgs, strconv.Itoa(conf.ChosenPort))
+			}
+
+			cmd := exec.Command(
+				testConf.DBResetConf.DBRemoveCommand.Command,
+				stopArgs...,
+			)
+			return cmd.Run()
+		}, nil
 }
+
+func TestFoo(t *testing.T) {
+	_, _, _, err := dbRecoverSetup()
+
+	if err != nil {
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	t.Error("error\n")
+}
+
+// func getRecoverError() (*DB, func(error) error, error) {
+// 	var db *DB
+// 	var err error
+
+// 	db, err = NewDBWithList(testConf.DBConnections, Postgres)
+
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+
+// 	return db, func(err error) error {
+// 		if err != nil {
+// 			db, err = db.RecoverError(err)
+// 			return err
+// 		}
+
+// 		return nil
+// 	}, nil
+// }
 
 func TestHasDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
@@ -106,8 +273,17 @@ func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 
 func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	var err error
-
+	var recoverFn func(*DB, error) error
+	var db *DB
 	var wg sync.WaitGroup
+	var removeFn func() error
+	//var dockerName string
+	//var conf teardownConfig
+
+	//initDB()
+	if db, recoverFn, removeFn, err = dbRecoverSetup(); err != nil {
+		t.Fatalf("err: %s\n", errors.Cause(err).Error())
+	}
 
 	oneShot := newChannel()
 	r := mux.NewRouter()
@@ -115,13 +291,13 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 		var name string
 		fmt.Printf("req from: %s\n", req.RemoteAddr)
 
-		scanner := db.QueryRow(testConf.DBResetConfiguration.ValidateQuery)
+		scanner := db.QueryRow(testConf.DBResetConf.ValidateQuery)
 		err = scanner.Scan(&name)
 
 		if err != nil {
 			fmt.Printf("db is down from req: %s\n", req.RemoteAddr)
 
-			if err = RecoverFromError(err); err == nil {
+			if err = recoverFn(db, err); err == nil {
 				fmt.Printf("able to recover err from req: %s\n", req.RemoteAddr)
 			} else {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -129,7 +305,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 			}
 
 		} else {
-			fmt.Printf("No db error from reg: %s\n", req.RemoteAddr)
+			fmt.Printf("no db error from reg: %s\n", req.RemoteAddr)
 		}
 	})
 
@@ -150,7 +326,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 				}
 
 				if res.StatusCode != http.StatusOK {
-					t.Errorf("Did not return staus ok\n")
+					t.Errorf("did not return staus ok\n")
 				}
 
 				select {
@@ -171,66 +347,78 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	// Allow for the clients to make a couple of requests
 	time.Sleep(time.Second * 2)
 
-	cmd := exec.Command(
-		testConf.DBResetConfiguration.DbStopCommand.Command,
-		testConf.DBResetConfiguration.DbStopCommand.Args...,
-	)
-	err = cmd.Run()
+	// stopArgs := testConf.DBResetConf.DBRemoveCommand.Args
+
+	// if conf.DockerName != "" {
+	// 	stopArgs = append(stopArgs, conf.DockerName)
+	// } else {
+	// 	stopArgs = append(stopArgs, strconv.Itoa(conf.ChosenPort))
+	// }
+
+	// cmd := exec.Command(
+	// 	testConf.DBResetConf.DBRemoveCommand.Command,
+	// 	stopArgs...,
+	// )
+	// err = cmd.Run()
+
+	err = removeFn()
 
 	if err != nil {
 		t.Errorf("Could not quit database: %s\n", err.Error())
 		t.Errorf(
 			"command: %s, args: %v\n",
-			testConf.DBResetConfiguration.DbStopCommand.Command,
-			testConf.DBResetConfiguration.DbStopCommand.Args,
+			testConf.DBResetConf.DBRemoveCommand.Command,
+			testConf.DBResetConf.DBRemoveCommand.Args,
 		)
 		t.Fatalf("err: %s", err.Error())
 	}
 
 	oneShot.Stop()
 	wg.Wait()
-
-	cmd = exec.Command(
-		testConf.DBResetConfiguration.DbStartCommand.Command,
-		testConf.DBResetConfiguration.DbStartCommand.Args...,
-	)
-	err = cmd.Run()
-
-	if err != nil {
-		t.Fatalf("Could not bring database back up: %s\n", err.Error())
-	}
 }
 
-func TestRecoverDBIntegrationTest(t *testing.T) {
+func TestHasDBErrorIntegrationTest(t *testing.T) {
 	var err error
+	//var recoverFn RecoverDB
 	var rows *sql.Rows
+	var db *DB
+	var removeFn func() error
+
+	if db, _, removeFn, err = dbRecoverSetup(); err != nil {
+		t.Fatalf("err: %s\n", errors.Cause(err).Error())
+	}
 
 	rr := httptest.NewRecorder()
 	conf := ServerErrorConfig{
 		RecoverConfig: RecoverConfig{
-			RecoverDB: RecoverFromError,
+			RecoverDB: func(err error) error {
+				if err != nil {
+					db, err = db.RecoverError(err)
+					return err
+				}
+
+				return nil
+			},
 		},
 	}
-	cmd := exec.Command(
-		testConf.DBResetConfiguration.DbStopCommand.Command,
-		testConf.DBResetConfiguration.DbStopCommand.Args...,
-	)
-	err = cmd.Run()
+	err = removeFn()
 
 	if err != nil {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	defer func() {
-		cmd = exec.Command(
-			testConf.DBResetConfiguration.DbStartCommand.Command,
-			testConf.DBResetConfiguration.DbStartCommand.Args...,
-		)
-		cmd.Run()
-	}()
+	fmt.Printf("config: %v", db.currentConfig)
+
+	// defer func() {
+	// 	cmd = exec.Command(
+	// 		testConf.DBResetConf.DBRemoveCommand.Command,
+	// 		testConf.DBResetConf.DBRemoveCommand.Args...,
+	// 	)
+	// 	cmd.Run()
+	// }()
 
 	validateQuery := func() error {
-		rows, err = db.Query(testConf.DBResetConfiguration.ValidateQuery)
+		rows, err = db.Query(testConf.DBResetConf.ValidateQuery)
 		return err
 	}
 

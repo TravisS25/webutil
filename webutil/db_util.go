@@ -300,6 +300,8 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*DB, error) {
 			newDB.currentConfig = v
 			return newDB, nil
 		}
+
+		fmt.Printf("err: %s\n", err.Error())
 	}
 
 	return nil, ErrNoConnection
@@ -363,6 +365,8 @@ func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 					if err = config.RetryDB(); err == nil {
 						fmt.Printf("past retry\n")
 						return false
+					} else {
+						fmt.Printf("failed on retry: %s\n", err.Error())
 					}
 				}
 			}

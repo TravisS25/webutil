@@ -152,9 +152,11 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	rule := validator{
 		querier: db,
-		cacheConfig: CacheConfig{
-			Cache:          mockCacheStore1,
-			IgnoreCacheNil: true,
+		recoverCacheConf: RecoverCacheConfig{
+			CacheConfig: CacheConfig{
+				Cache:          mockCacheStore1,
+				IgnoreCacheNil: true,
+			},
 		},
 		args: []interface{}{1},
 		err:  ErrDoesNotExistValidator,
@@ -170,7 +172,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore2 := &MockCacheStore{}
 	defer mockCacheStore2.AssertExpectations(t)
-	rule.cacheConfig.Cache = mockCacheStore2
+	rule.recoverCacheConf.Cache = mockCacheStore2
 	mockCacheStore2.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
@@ -185,7 +187,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore3 := &MockCacheStore{}
 	defer mockCacheStore3.AssertExpectations(t)
-	rule.cacheConfig.Cache = mockCacheStore3
+	rule.recoverCacheConf.Cache = mockCacheStore3
 	mockCacheStore3.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
 	mockDB.ExpectQuery("select").WillReturnError(sql.ErrNoRows)
 
@@ -200,7 +202,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore4 := &MockCacheStore{}
 	defer mockCacheStore4.AssertExpectations(t)
-	rule.cacheConfig.Cache = mockCacheStore4
+	rule.recoverCacheConf.Cache = mockCacheStore4
 	mockCacheStore4.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
@@ -215,8 +217,26 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore5 := &MockCacheStore{}
 	defer mockCacheStore5.AssertExpectations(t)
-	rule.cacheConfig.Cache = mockCacheStore5
+	rule.recoverCacheConf.Cache = mockCacheStore5
 	mockCacheStore5.On("Get", testifymock.Anything).Return(nil, ErrServer)
+	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
+
+	if err = checkIfExists(rule, "foo", true); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != ErrServer.Error() {
+			t.Errorf("should have ErrServer error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	mockCacheStore6 := &MockCacheStore{}
+	defer mockCacheStore6.AssertExpectations(t)
+	rule.recoverCacheConf.Cache = mockCacheStore6
+	rule.recoverCacheConf.RecoverDB = func(err error) error {
+		return errors.New("errors")
+	}
+	mockCacheStore6.On("Get", testifymock.Anything).Return(nil, ErrServer)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
 	if err = checkIfExists(rule, "foo", true); err == nil {

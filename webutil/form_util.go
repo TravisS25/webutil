@@ -270,7 +270,7 @@ func (f *FormValidation) ValidateDate(
 // If the ids passed happen to be type formutil#Int64, it will extract the values so it
 // can be used against the query properly
 func (f *FormValidation) ValidateIDs(
-	cacheConfig CacheConfig,
+	recoverCacheConf RecoverCacheConfig,
 	placeHolderPosition,
 	bindVar int,
 	query string,
@@ -279,7 +279,7 @@ func (f *FormValidation) ValidateIDs(
 	return &validateIDsRule{
 		validator: validator{
 			querier:             f.entity,
-			cacheConfig:         cacheConfig,
+			recoverCacheConf:    recoverCacheConf,
 			placeHolderPosition: placeHolderPosition,
 			bindVar:             bindVar,
 			query:               query,
@@ -292,7 +292,7 @@ func (f *FormValidation) ValidateIDs(
 // ValidateUniqueness determines whether passed field is unique
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
-	cacheConfig CacheConfig,
+	recoverCacheConf RecoverCacheConfig,
 	instanceValue interface{},
 	placeHolderPosition,
 	bindVar int,
@@ -303,7 +303,7 @@ func (f *FormValidation) ValidateUniqueness(
 		instanceValue: instanceValue,
 		validator: validator{
 			querier:             f.entity,
-			cacheConfig:         cacheConfig,
+			recoverCacheConf:    recoverCacheConf,
 			placeHolderPosition: placeHolderPosition,
 			bindVar:             bindVar,
 			query:               query,
@@ -316,7 +316,7 @@ func (f *FormValidation) ValidateUniqueness(
 // ValidateExists determines whether passed field exists
 // within database or cache if set
 func (f *FormValidation) ValidateExists(
-	cacheConfig CacheConfig,
+	recoverCacheConf RecoverCacheConfig,
 	placeHolderPosition,
 	bindVar int,
 	query string,
@@ -325,7 +325,7 @@ func (f *FormValidation) ValidateExists(
 	return &validateExistsRule{
 		validator: validator{
 			querier:             f.entity,
-			cacheConfig:         cacheConfig,
+			recoverCacheConf:    recoverCacheConf,
 			placeHolderPosition: placeHolderPosition,
 			bindVar:             bindVar,
 			query:               query,
@@ -362,7 +362,7 @@ type validator struct {
 	bindVar             int
 	placeHolderPosition int
 	err                 error
-	cacheConfig         CacheConfig
+	recoverCacheConf    RecoverCacheConfig
 }
 
 type validateRequiredRule struct {
@@ -589,7 +589,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		return nil
 	}
 
-	if v.cacheConfig.Cache != nil {
+	if v.recoverCacheConf.Cache != nil {
 		//var validID bool
 		var singleID bool
 		var cacheBytes []byte
@@ -601,11 +601,11 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 			// cacheBytes, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
 		}
 
-		cacheBytes, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
+		cacheBytes, err = v.recoverCacheConf.Cache.Get(v.recoverCacheConf.Key)
 
 		if err != nil {
 			if err == ErrCacheNil {
-				if v.cacheConfig.IgnoreCacheNil {
+				if v.recoverCacheConf.IgnoreCacheNil {
 					err = queryFunc()
 				}
 			} else {
@@ -855,24 +855,38 @@ func checkIfExists(v validator, value interface{}, wantExists bool) error {
 		row := v.querier.QueryRow(q, queryArgs...)
 
 		if err = row.Scan(&filler); err != nil {
-			if wantExists {
-				if err == sql.ErrNoRows {
+			if err == sql.ErrNoRows {
+				if wantExists {
 					return v.err
 				}
+			} else {
+				if v.recoverCacheConf.RecoverDB == nil {
+					return validation.NewInternalError(err)
+				}
 
-				return validation.NewInternalError(err)
+				if err = v.recoverCacheConf.RecoverDB(err); err != nil {
+					return validation.NewInternalError(err)
+				}
 			}
 
-			if err != sql.ErrNoRows {
-				return validation.NewInternalError(err)
-			}
+			// if wantExists {
+			// 	if err == sql.ErrNoRows {
+			// 		return v.err
+			// 	}
+
+			// 	return validation.NewInternalError(err)
+			// }
+
+			// if err != sql.ErrNoRows {
+			// 	return validation.NewInternalError(err)
+			// }
 		}
 
 		return nil
 	}
 
-	if v.cacheConfig.Cache != nil {
-		_, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
+	if v.recoverCacheConf.Cache != nil {
+		_, err = v.recoverCacheConf.Cache.Get(v.recoverCacheConf.Key)
 
 		if err != nil {
 			if err != ErrCacheNil {
@@ -880,7 +894,7 @@ func checkIfExists(v validator, value interface{}, wantExists bool) error {
 					return err
 				}
 			} else {
-				if v.cacheConfig.IgnoreCacheNil {
+				if v.recoverCacheConf.IgnoreCacheNil {
 					if err = dbCall(); err != nil {
 						return err
 					}

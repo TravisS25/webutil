@@ -1,17 +1,17 @@
 host: &main_host localhost
 port: &main_port 26257
 db_connections: &connections
-  - db_name: test1
+  - db_name: test
     user: test
     host: *main_host
     port: *main_port
     ssl_mode: disable
-  - db_name: test2
+  - db_name: test
     user: test
     host: *main_host
     port: 26258
     ssl_mode: disable
-  - db_name: test3
+  - db_name: test
     user: test
     host: *main_host
     port: 26259
