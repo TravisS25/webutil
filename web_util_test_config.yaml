@@ -1,34 +1,52 @@
 host: &main_host localhost
 port: &main_port 26257
+db_type: postgres
 db_connections: &connections
-  - db_name: test
-    user: test
-    host: *main_host
-    port: *main_port
+  - base_auth_setting:
+      user: test
+      host: *main_host
+      port: *main_port
+    db_name: test
     ssl_mode: disable
-  - db_name: test
-    user: test
-    host: *main_host
-    port: 26258
+  - base_auth_setting:
+      user: test
+      host: *main_host
+      port: 26258
+    db_name: test
     ssl_mode: disable
-  - db_name: test
-    user: test
-    host: *main_host
-    port: 26259
+  - base_auth_setting:
+      user: test
+      host: *main_host
+      port: 26259
+    db_name: test
     ssl_mode: disable
 db_reset_configuration:
-  validate_query: "select crdb_internal.zones.zone_name from crdb_internal.zones where crdb_internal.zones.zone_name = '.default'"
+  db_type: postgres
+  validate_query: "show tables;"
   db_connections: *connections
-  db_stop_command:
+  base_connection:
+    ssl_mode: disable
+    base_auth_setting:
+      user: root
+      host: *main_host
+  db_remove_command:
     command: docker
     args:
       - container
-      - stop
-      - roach1
+      - rm
+      - "-f"
   db_start_command:
     command: docker
     args:
-      - container
+      - run
+      - "-d"
+      - "--network"
+      - "roachnet"
+      - cockroachdb/cockroach:v19.2.2
       - start
-      - roach1
-   
+      - "--insecure"
+      - "--join=roach1,roach2,roach3"
+    port_config:
+      flag_key: "-p"
+      docker_port: "26257"
+  
