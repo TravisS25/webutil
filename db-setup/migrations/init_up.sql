@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS database_action(
 );
 
 CREATE TABLE IF NOT EXISTS logging(
-    id uuid DEFAULT gen_random_uuid(),
+    id uuid primary key DEFAULT gen_random_uuid(),
     date_created TIMESTAMP default now(),
     data text,
     primary_key_id int,

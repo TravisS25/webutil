@@ -18,15 +18,27 @@ excludeJSONFields map[string]interface{}
 includeJSONFields map[string]interface{}
 }
 
-func Query{{ .Name }}(db webutil.SqlxDB, query string, args ...interface{}) (*{{ .Name }}, error) {
+func Query{{ .Name }}(db webutil.SqlxDB, bindVar int, query string, args ...interface{}) (*{{ .Name }}, error) {
 	var dest {{.Name }}
-	err := db.Get(&dest, query, args...)
+	var err error
+
+	if query, args, err = webutil.InQueryRebind(bindVar, query, args...); err != nil{
+		return nil, err
+	}
+
+	err = db.Get(&dest, query, args...)
 	return &dest, err
 }
 
-func Query{{ convertName .Name }}s(db webutil.SqlxDB, query string, args ...interface{}) ([]*{{ .Name }}, error) {
+func Query{{ convertName .Name }}s(db webutil.SqlxDB, bindVar int, query string, args ...interface{}) ([]*{{ .Name }}, error) {
 	var dest []*{{.Name }}
-	err := db.Select(&dest, query, args...)
+	var err error
+
+	if query, args, err = webutil.InQueryRebind(bindVar, query, args...); err != nil{
+		return nil, err
+	}
+
+	err = db.Select(&dest, query, args...)
 	return dest, err
 }
 
@@ -95,7 +107,7 @@ func ({{ $short }} *{{ .Name }}) SetInclusionJSONFields(fields map[string]interf
 }
 
 // Insert inserts the {{ .Name }} to the database.
-func ({{ $short }} *{{ .Name }}) Insert(db webutil.XODB) error {
+func ({{ $short }} *{{ .Name }}) Insert(db webutil.QuerierExec) error {
 	var err error
 
 {{ if .Table.ManualPk }}
@@ -133,7 +145,7 @@ func ({{ $short }} *{{ .Name }}) Insert(db webutil.XODB) error {
 }
 
 // Insert inserts the {{ .Name }} to the database along with adding to logging table.
-func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.Request) error {
+func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, bindVar int, request *http.Request) error {
 	var err error
 	err = {{ $short }}.Insert(db)
 
@@ -141,7 +153,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.
 		return err
 	}
 
-	err = {{ $short }}.insertLog(db, request, 1)
+	err = {{ $short }}.insertLog(db, request, 1, bindVar)
 
 	if err == ErrNotInDatabaseTable{
 		message := fmt.Sprint(databaseTableErr, "{{ .Name }}")
@@ -153,7 +165,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.
 
 {{ if ne (fieldnamesmulti .Fields $short .PrimaryKeyFields) "" }}
 	// Update updates the {{ .Name }} in the database.
-	func ({{ $short }} *{{ .Name }}) Update(db webutil.XODB) error {
+	func ({{ $short }} *{{ .Name }}) Update(db webutil.QuerierExec) error {
 		var err error
 
 		{{ if gt ( len .PrimaryKeyFields ) 1 }}
@@ -196,9 +208,9 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.
 	}
 
 
-	func ({{ $short }} *{{ .Name }}) UpdateWithLog(db webutil.Entity, request *http.Request) error {
+	func ({{ $short }} *{{ .Name }}) UpdateWithLog(db webutil.Entity, bindVar int, request *http.Request) error {
 		var err error
-		canInsertLog := {{ $short }}.canInsertLog(db)
+		canInsertLog := {{ $short }}.canInsertLog(db, bindVar)
 		err = {{ $short }}.Update(db)
 
 		if err != nil{
@@ -206,7 +218,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.
 		}
 
 		if canInsertLog{
-			err = {{ $short }}.insertLog(db, request, 2)
+			err = {{ $short }}.insertLog(db, request, 2, bindVar)
 
 			if err == ErrNotInDatabaseTable{
 				message := fmt.Sprint(databaseTableErr, "{{ .Name }}")
@@ -220,7 +232,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.
 	// Upsert performs an upsert for {{ .Name }}.
 	//
 	// NOTE: PostgreSQL 9.5+ only
-	func ({{ $short }} *{{ .Name }}) Upsert(db webutil.XODB) error {
+	func ({{ $short }} *{{ .Name }}) Upsert(db webutil.QuerierExec) error {
 		var err error
 
 		// sql query
@@ -249,7 +261,7 @@ func ({{ $short }} *{{ .Name }}) InsertWithLog(db webutil.Entity, request *http.
 {{ end }}
 
 // Delete deletes the {{ .Name }} from the database.
-func ({{ $short }} *{{ .Name }}) Delete(db webutil.XODB) error {
+func ({{ $short }} *{{ .Name }}) Delete(db webutil.QuerierExec, bindVar int) error {
 	var err error
 
 	{{ if gt ( len .PrimaryKeyFields ) 1 }}
@@ -265,7 +277,11 @@ func ({{ $short }} *{{ .Name }}) Delete(db webutil.XODB) error {
 	{{- else }}
 		{{- if .PrimaryKey }}
 			// sql query
-			const sqlstr = `DELETE FROM {{ $table }} WHERE {{ colname .PrimaryKey.Col }} = $1`
+			sqlstr := `DELETE FROM {{ $table }} WHERE {{ colname .PrimaryKey.Col }} = ?`
+
+			if sqlstr, _, err = webutil.InQueryRebind(bindVar, sqlstr); err != nil{
+				return err
+			}
 
 			// run query
 			XOLog(sqlstr, {{ $short }}.{{ .PrimaryKey.Name }})
@@ -275,7 +291,11 @@ func ({{ $short }} *{{ .Name }}) Delete(db webutil.XODB) error {
 			}
 		{{- else }}
 			// sql query
-			const sqlstr = `DELETE FROM {{ $table }} WHERE id = $1`
+			sqlstr := `DELETE FROM {{ $table }} WHERE id = ?`
+
+			if sqlstr, _, err = webutil.InQueryRebind(bindVar, sqlstr); err != nil{
+				return err
+			}
 
 			// run query
 			_, err = db.Exec(sqlstr, {{ $short }}.ID.String())
@@ -290,15 +310,15 @@ func ({{ $short }} *{{ .Name }}) Delete(db webutil.XODB) error {
 
 
 //  Delete deletes the {{ .Name }} from the database while logging it.
-func ({{ $short }} *{{ .Name }}) DeleteWithLog(db webutil.Entity, request *http.Request) error {
+func ({{ $short }} *{{ .Name }}) DeleteWithLog(db webutil.Entity, bindVar int, request *http.Request) error {
 	var err error
-	err = {{ $short }}.Delete(db)
+	err = {{ $short }}.Delete(db, bindVar)
 
 	if err != nil{
 		return err
 	}
 
-	err = {{ $short }}.insertLog(db, request, 3)
+	err = {{ $short }}.insertLog(db, request, 3, bindVar)
 
 	if err == ErrNotInDatabaseTable{
 		message := fmt.Sprint(databaseTableErr, "{{ .Name }}")
@@ -307,11 +327,11 @@ func ({{ $short }} *{{ .Name }}) DeleteWithLog(db webutil.Entity, request *http.
 	return nil
 }
 
-func ({{ $short }} *{{ .Name }}) canInsertLog(db webutil.Entity) bool{
+func ({{ $short }} *{{ .Name }}) canInsertLog(db webutil.Entity, bindVar int) bool{
 	{{- if .PrimaryKey }}
-		prev, err := Query{{ .Name }}(db, `select * from {{ $table }} where {{ .PrimaryKey.Col.ColumnName }} = $1`, {{ $short }}.{{ .PrimaryKey.Name }})
+		prev, err := Query{{ .Name }}(db, bindVar, `select * from {{ $table }} where {{ .PrimaryKey.Col.ColumnName }} = ?`, {{ $short }}.{{ .PrimaryKey.Name }})
 	{{- else }}
-		prev, err := Query{{ .Name }}(db, `select * from {{ $table }} where id = $1`, {{ $short }}.ID.String())
+		prev, err := Query{{ .Name }}(db, bindVar, `select * from {{ $table }} where id = ?`, {{ $short }}.ID.String())
 	{{- end }}
 
 	if err == nil{
@@ -325,7 +345,9 @@ func ({{ $short }} *{{ .Name }}) canInsertLog(db webutil.Entity) bool{
 	return true
 }
 
-func ({{ $short }} *{{ .Name }}) insertLog(db webutil.Entity, request *http.Request, httpMethodID int) error {
+func ({{ $short }} *{{ .Name }}) insertLog(db webutil.Entity, request *http.Request, dbAction, bindVar int) error {
+	var args []interface{}
+
 	rowBytes, err := json.Marshal(&{{ $short }})
 
 	if err != nil{
@@ -334,8 +356,8 @@ func ({{ $short }} *{{ .Name }}) insertLog(db webutil.Entity, request *http.Requ
 
 	var userID *int64
 
-	if request.Context().Value(apiutil.UserCtxKey) != nil {
-		userBytes := request.Context().Value(apiutil.UserCtxKey).([]byte)
+	if request.Context().Value(webutil.UserCtxKey) != nil {
+		userBytes := request.Context().Value(webutil.UserCtxKey).([]byte)
 		var user *UserProfile
 		json.Unmarshal(userBytes, &user)
 
@@ -344,7 +366,14 @@ func ({{ $short }} *{{ .Name }}) insertLog(db webutil.Entity, request *http.Requ
 
 	var tableID interface{} 
 	tableName := "{{ .Table.TableName }}"
-	table := db.QueryRow(`select id from database_table where name = $1;`, tableName)
+
+	query := `select id from database_table where name = ?;`
+
+	if query, args, err = webutil.InQueryRebind(bindVar, query, tableName); err != nil{
+		return err
+	}
+
+	table := db.QueryRow(query, args...)
 	err = table.Scan(&tableID)
 
 	if err != nil{
@@ -376,15 +405,15 @@ func ({{ $short }} *{{ .Name }}) insertLog(db webutil.Entity, request *http.Requ
 
 	_, err = db.Exec(
 		`
-		insert into logging (date_created, data, primary_key_id, primary_key_uuid, been_viewed, http_method_id, database_table_id, user_profile_id, area_id)
-		values($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		insert into logging (date_created, data, primary_key_id, primary_key_uuid, been_viewed, http_method_id, database_table_id, user_profile_id)
+		values($1, $2, $3, $4, $5, $6, $7, $8)
 		`, 
-		time.Now().UTC().Format(confutil.DateTimeMilliLayout),
+		time.Now().UTC().Format(webutil.DateTimeMilliLayout),
 		rowBytes,
 		id,
 		uid,
 		false,
-		httpMethodID,
+		dbAction,
 		tableID,
 		userID,
 		areaID,
