@@ -20,12 +20,12 @@ import (
 func TestValidateRequiredRuleUnitTest(t *testing.T) {
 	var err error
 
-	rule := &validateRequiredRule{err: ErrRequiredValidator}
+	rule := &validateRequiredRule{err: errors.New(RequiredTxt)}
 
 	if err = rule.Validate(nil); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err != ErrRequiredValidator {
+		if err.Error() != RequiredTxt {
 			t.Errorf("should have returned required error\n")
 		}
 	}
@@ -33,7 +33,7 @@ func TestValidateRequiredRuleUnitTest(t *testing.T) {
 	if err = rule.Validate(""); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err != ErrRequiredValidator {
+		if err.Error() != RequiredTxt {
 			t.Errorf("should have ErrRequiredValidator error\n")
 		}
 	}
@@ -76,7 +76,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	if err = rule.Validate("invalid"); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if pkgerrors.Cause(err) != ErrInvalidFormatValidator {
+		if pkgerrors.Cause(err).Error() != InvalidFormatTxt {
 			t.Errorf("should have ErrInvalidFormatValidator error\n")
 		}
 	}
@@ -105,7 +105,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	if err = rule.Validate(pastDateStr); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err != ErrInvalidPastDateValidator {
+		if err.Error() != InvalidPastDateTxt {
 			t.Errorf("should have ErrInvalidPastDateValidator error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
@@ -117,7 +117,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	if err = rule.Validate(futureDateStr); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err != ErrInvalidFutureDateValidator {
+		if err.Error() != InvalidFutureDateTxt {
 			t.Errorf("should have ErrInvalidFutureDateValidator error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
@@ -159,13 +159,13 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 			},
 		},
 		args: []interface{}{1},
-		err:  ErrDoesNotExistValidator,
+		err:  errors.New(DoesNotExistTxt),
 	}
 
 	if err = checkIfExists(rule, "foo", false); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err != ErrDoesNotExistValidator {
+		if err.Error() != DoesNotExistTxt {
 			t.Errorf("should have ErrDoesNotExistValidator error\n")
 		}
 	}
@@ -194,7 +194,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 	if err = checkIfExists(rule, "foo", true); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err.Error() != ErrDoesNotExistValidator.Error() {
+		if err.Error() != DoesNotExistTxt {
 			t.Errorf("should have ErrServer error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
@@ -234,7 +234,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 	defer mockCacheStore6.AssertExpectations(t)
 	rule.recoverCacheConf.Cache = mockCacheStore6
 	rule.recoverCacheConf.RecoverDB = func(err error) error {
-		return errors.New("errors")
+		return ErrServer
 	}
 	mockCacheStore6.On("Get", testifymock.Anything).Return(nil, ErrServer)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)

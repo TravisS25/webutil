@@ -28,9 +28,15 @@ var (
 	// back with nil
 	ErrCacheNil = errors.New("webutil: cache is nil")
 
+	// ErrTooManyPlaceHolders returns from SetCacheFromDB function
+	// when the length of CacheKey#PlaceHolderPositions is more than
+	// the number of columns passed
 	ErrTooManyPlaceHolders = errors.New("webutil: there are more place holders then columns")
 
-	ErrOutOfRange = errors.New("webutil: place holder out of range")
+	// ErrPlaceholderOutOfRange returns from SetCacheFromDB function
+	// when an index within the slice is out of range of the number
+	// of columns returned from query
+	ErrPlaceholderOutOfRange = errors.New("webutil: place holder out of range")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -253,7 +259,7 @@ func SetCacheFromDB(cacheSetup CacheSetup, db Querier) error {
 					idx := v.CacheKey.PlaceHolderPositions[i]
 
 					if idx >= len(columns) {
-						return ErrTooManyPlaceHolders
+						return ErrPlaceholderOutOfRange
 					}
 
 					keyArgs = append(keyArgs, columns[i])

@@ -14,6 +14,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
+var _ DBInterface = (*DB)(nil)
+
 //////////////////////////////////////////////////////////////////
 //------------------------ SSL MODES ---------------------------
 //////////////////////////////////////////////////////////////////
@@ -251,6 +253,12 @@ func (db *DB) RecoverError(err error) (*DB, error) {
 		return db, nil
 	}
 	return db, nil
+}
+
+// Commit is just a wrapper for sql.Tx Commit function
+// to implement SqlxDB interface
+func (db *DB) Commit(tx *sql.Tx) error {
+	return tx.Commit()
 }
 
 //////////////////////////////////////////////////////////////////

@@ -20,6 +20,40 @@ import (
 )
 
 //////////////////////////////////////////////////////////////////
+//--------------------------- CONSTS -------------------------
+//////////////////////////////////////////////////////////////////
+
+const (
+	// RequiredTxt is string const error when field is required
+	RequiredTxt = "Required"
+
+	// AlreadyExistsTxt is string const error when field already exists
+	// in database or cache
+	AlreadyExistsTxt = "Already exists"
+
+	// DoesNotExistTxt is string const error when field does not exist
+	// in database or cache
+	DoesNotExistTxt = "Does not exist"
+
+	// InvalidTxt is string const error when field is invalid
+	InvalidTxt = "Invalid"
+
+	// InvalidFormatTxt is string const error when field has invalid format
+	InvalidFormatTxt = "Invalid format"
+
+	// InvalidFutureDateTxt is sring const when field is not allowed
+	// to be in the future
+	InvalidFutureDateTxt = "Date can't be after current date/time"
+
+	// InvalidPastDateTxt is sring const when field is not allowed
+	// to be in the past
+	InvalidPastDateTxt = "Date can't be before current date/time"
+
+	// CantBeNegativeTxt is sring const when field can't be negative
+	CantBeNegativeTxt = "Can't be negative"
+)
+
+//////////////////////////////////////////////////////////////////
 //----------------------- GLOBAL VARS -------------------------
 //////////////////////////////////////////////////////////////////
 
@@ -50,7 +84,7 @@ var (
 
 var (
 	// RequiredRule makes field required and does NOT allow just spaces
-	RequiredRule = &validateRequiredRule{err: ErrRequiredValidator}
+	RequiredRule = &validateRequiredRule{err: errors.New(RequiredTxt)}
 )
 
 //////////////////////////////////////////////////////////////////
@@ -58,48 +92,17 @@ var (
 //////////////////////////////////////////////////////////////////
 
 var (
-	// ErrRequiredValidator returns for form field if field is empty
-	ErrRequiredValidator = errors.New("required")
-
-	// ErrAlreadyExistsValidator returns for form field if an entry
-	// in database or cache already exists
-	ErrAlreadyExistsValidator = errors.New("already exists")
-
-	// ErrDoesNotExistValidator returns for form field if an entry
-	// in database or cache does not exists
-	ErrDoesNotExistValidator = errors.New("does not exist")
-
-	// ErrInvalidValidator returns for form field if value for
-	// field is generally invalid
-	ErrInvalidValidator = errors.New("invalid")
-
-	// ErrInvalidFormatValidator returns for form field if value for
-	// field is formatted incorrectly
-	ErrInvalidFormatValidator = errors.New("invalid format")
-
-	// ErrInvalidFutureDateValidator returns for form field if value for
-	// field is not allowed to be passed the current date/time
-	ErrInvalidFutureDateValidator = errors.New("date can not be after current date/time")
-
-	// ErrInvalidPastDateValidator returns for form field if value for
-	// field is not allowed to be before the current date/time
-	ErrInvalidPastDateValidator = errors.New("date can not be before current date/time")
-
-	// ErrCanNotBeNegativeValidator returns for form field if value
-	// is negative, generally used for things like currency
-	ErrCanNotBeNegativeValidator = errors.New("can not be negative")
-
 	// ErrFutureAndPastDateInternal returns for form field if
 	// user sets that a date can not be both a future or past date
-	ErrFutureAndPastDateInternal = errors.New("both 'canBeFuture and 'canBePast' can not be false")
+	ErrFutureAndPastDateInternal = errors.New("webutil: both 'canBeFuture and 'canBePast' can not be false")
 
 	// ErrInvalidStringInternal returns for form field if
 	// data type for date field is not "string" or "*string"
-	ErrInvalidStringInternal = errors.New("input must be string or *string")
+	ErrInvalidStringInternal = errors.New("webutil: input must be string or *string")
 
 	// ErrInvalidFormSelectionInternal will be returned if a query does not
 	// return two columns when trying to query for Formselections
-	ErrInvalidFormSelectionInternal = errors.New("query should only return 2 columns")
+	ErrInvalidFormSelectionInternal = errors.New("webutil: query should only return 2 columns")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -293,7 +296,7 @@ func (f *FormValidation) ValidateIDs(
 			bindVar:             bindVar,
 			query:               query,
 			args:                args,
-			err:                 ErrInvalidValidator,
+			err:                 errors.New(InvalidTxt),
 		},
 	}
 }
@@ -317,7 +320,7 @@ func (f *FormValidation) ValidateUniqueness(
 			bindVar:             bindVar,
 			query:               query,
 			args:                args,
-			err:                 ErrAlreadyExistsValidator,
+			err:                 errors.New(AlreadyExistsTxt),
 		},
 	}
 }
@@ -339,7 +342,7 @@ func (f *FormValidation) ValidateExists(
 			bindVar:             bindVar,
 			query:               query,
 			args:                args,
-			err:                 ErrDoesNotExistValidator,
+			err:                 errors.New(DoesNotExistTxt),
 		},
 	}
 }
@@ -385,14 +388,14 @@ func (v *validateRequiredRule) Validate(value interface{}) error {
 		val = strings.TrimSpace(val)
 
 		if len(val) == 0 {
-			return ErrRequiredValidator
+			return errors.New(RequiredTxt)
 		}
 
 		return nil
 	}
 
 	if isNilValue(value) {
-		return ErrRequiredValidator
+		return errors.New(RequiredTxt)
 	}
 
 	switch value.(type) {
@@ -443,18 +446,18 @@ func (v *validateDateRule) Validate(value interface{}) error {
 	}
 
 	if dateTime, err = time.Parse(v.layout, dateValue); err != nil {
-		return ErrInvalidFormatValidator
+		return errors.New(InvalidFormatTxt)
 	}
 
 	if v.canBeFuture && v.canBePast {
 		err = nil
 	} else if v.canBeFuture {
 		if dateTime.Before(currentTime) {
-			err = ErrInvalidPastDateValidator
+			err = errors.New(InvalidPastDateTxt)
 		}
 	} else if v.canBePast {
 		if dateTime.After(currentTime) {
-			err = ErrInvalidFutureDateValidator
+			err = errors.New(InvalidFutureDateTxt)
 		}
 	} else {
 		err = validation.NewInternalError(ErrFutureAndPastDateInternal)
