@@ -221,6 +221,15 @@ func NewFormValidationCache(entity Entity, cache CacheStore) *FormValidation {
 	}
 }
 
+// GetPathRegex returns path template of currently passed request
+//
+// This function is mainly used for testing purposes as injecting
+// and retrieving a route into mux is quite complex without
+// spinning up an entire server
+func (f *FormValidation) GetPathRegex(r *http.Request, pathReg PathRegex) (string, error) {
+	return pathReg(r)
+}
+
 // IsValid returns *validRule based on isValid parameter
 // Basically IsValid is a wrapper for the passed bool
 // to return valid rule to then apply custom error message

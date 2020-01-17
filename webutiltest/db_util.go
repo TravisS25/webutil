@@ -24,7 +24,7 @@ import (
 // }
 //
 //
-func DBSetup(db webutil.QuerierTransaction, bindVar int) func() error {
+func DBSetup(db webutil.QuerierTx, bindVar int) func() error {
 	return func() error {
 		query :=
 			`
