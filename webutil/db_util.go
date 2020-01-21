@@ -323,11 +323,7 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*DB, error) {
 // HasDBError takes passed error and determines what to write
 // back to client depending on settings set in config
 func HasDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
-	SetHTTPResponseDefaults(
-		&config.ServerErrorResponse,
-		http.StatusInternalServerError,
-		[]byte(ErrServer.Error()),
-	)
+	defaultDBErrors(&config)
 	return dbError(w, err, config)
 }
 
@@ -367,17 +363,13 @@ func defaultDBErrors(config *ServerErrorConfig) {
 func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
-			fmt.Printf("made to recover\n")
 			if db, err := config.RecoverDB(err); err == nil {
-				config.DBInterfaceRecover.SetDBInterface(db)
-				fmt.Printf("past recover\n")
-				if config.RetryDB != nil {
-					fmt.Printf("made to retry\n")
-					if err = config.RetryDB(db); err == nil {
-						fmt.Printf("past retry\n")
-						return false
-					} else {
-						fmt.Printf("failed on retry: %s\n", err.Error())
+				if config.DBInterfaceRecover != nil {
+					config.DBInterfaceRecover.SetDBInterface(db)
+					if config.RetryDB != nil {
+						if err = config.RetryDB(db); err == nil {
+							return false
+						}
 					}
 				}
 			}
