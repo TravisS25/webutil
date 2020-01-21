@@ -1324,7 +1324,11 @@ func TestSetRowerResultsUnitTest(t *testing.T) {
 func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	err := errors.New("error")
-	conf := ServerErrorConfig{}
+	conf := ServerErrorConfig{
+		RecoverConfig: RecoverConfig{
+			DBInterfaceRecover: &testAPI{},
+		},
+	}
 
 	if HasFilterOrServerError(rr, nil, conf) {
 		t.Errorf("should not have error\n")
@@ -1354,7 +1358,23 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	conf.RecoverDB = func(err error) error {
+	conf.RecoverDB = func(err error) (*DB, error) {
+		return nil, err
+	}
+
+	if !HasFilterOrServerError(rr, err, conf) {
+		t.Errorf("should have error\n")
+	} else {
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("status should be http.StatusInternalServerError\n")
+		}
+	}
+
+	rr = httptest.NewRecorder()
+	conf.RecoverDB = func(err error) (*DB, error) {
+		return &DB{}, nil
+	}
+	conf.RetryDB = func(db DBInterface) error {
 		return err
 	}
 
@@ -1367,26 +1387,10 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	conf.RecoverDB = func(err error) error {
-		return nil
+	conf.RecoverDB = func(err error) (*DB, error) {
+		return &DB{}, nil
 	}
-	conf.RetryDB = func() error {
-		return err
-	}
-
-	if !HasFilterOrServerError(rr, err, conf) {
-		t.Errorf("should have error\n")
-	} else {
-		if rr.Code != http.StatusInternalServerError {
-			t.Errorf("status should be http.StatusInternalServerError\n")
-		}
-	}
-
-	rr = httptest.NewRecorder()
-	conf.RecoverDB = func(err error) error {
-		return nil
-	}
-	conf.RetryDB = func() error {
+	conf.RetryDB = func(db DBInterface) error {
 		return nil
 	}
 

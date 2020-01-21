@@ -24,17 +24,20 @@ type RecoverConfig struct {
 
 	// RetryDB is optional parameter used to try to re-query
 	// from a recovered database failure
-	//
-	// Allowed to be nil
 	RetryDB RetryDB
+
+	// DBInterfaceRecover is optional parameter generally used in api
+	// enpoints or form validators to reset their DBInterface after
+	// being recovered from RecoverDB function
+	DBInterfaceRecover DBInterfaceRecover
 }
 
 // RecoverCacheConfig is config struct that combines RecoverConfig
 // and CacheConfig config structs
-type RecoverCacheConfig struct {
-	RecoverConfig
-	CacheConfig
-}
+// type RecoverCacheConfig struct {
+// 	RecoverConfig
+// 	CacheConfig
+// }
 
 // ServerErrorCacheConfig is config struct used to respond to server
 // error but also have ability to use cache

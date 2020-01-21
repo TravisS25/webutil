@@ -283,8 +283,8 @@ func TestAuthHandlerUnitTest(t *testing.T) {
 	rr = httptest.NewRecorder()
 	req.Header.Set(queryUser, recoverUserErr)
 
-	config.RecoverDB = func(err error) error {
-		return nil
+	config.RecoverDB = func(err error) (*DB, error) {
+		return &DB{}, nil
 	}
 	authHandler.config = config
 
@@ -389,8 +389,8 @@ func TestAuthHandlerUnitTest(t *testing.T) {
 	mockSessionStore5.On("New", testifymock.Anything, testifymock.Anything).
 		Return(nil, errors.New("errors"))
 	config.SessionStore = mockSessionStore5
-	config.RecoverDB = func(err error) error {
-		return nil
+	config.RecoverDB = func(err error) (*DB, error) {
+		return &DB{}, nil
 	}
 	config.QueryForSession = middlewareState.queryForSession
 	authHandler.config = config
@@ -427,8 +427,8 @@ func TestAuthHandlerUnitTest(t *testing.T) {
 		Return(session, nil)
 
 	config.SessionStore = mockSessionStore6
-	config.RecoverDB = func(err error) error {
-		return nil
+	config.RecoverDB = func(err error) (*DB, error) {
+		return &DB{}, nil
 	}
 	config.QueryForSession = middlewareState.queryForSession
 	authHandler.config = config
@@ -514,8 +514,8 @@ func TestGroupHandlerUnitTest(t *testing.T) {
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
 			RecoverConfig: RecoverConfig{
-				RecoverDB: func(err error) error {
-					return nil
+				RecoverDB: func(err error) (*DB, error) {
+					return &DB{}, nil
 				},
 			},
 		},
@@ -679,8 +679,8 @@ func TestRoutingHandlerUnitTest(t *testing.T) {
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
 			RecoverConfig: RecoverConfig{
-				RecoverDB: func(err error) error {
-					return nil
+				RecoverDB: func(err error) (*DB, error) {
+					return &DB{}, nil
 				},
 			},
 		},
@@ -806,8 +806,8 @@ func TestRoutingHandlerUnitTest(t *testing.T) {
 	rr = httptest.NewRecorder()
 	state.reset()
 	state.pRegex = defaultURL
-	config.RecoverDB = func(err error) error {
-		return nil
+	config.RecoverDB = func(err error) (*DB, error) {
+		return &DB{}, nil
 	}
 
 	mockCache1 := &MockCacheStore{}

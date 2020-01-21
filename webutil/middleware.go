@@ -122,78 +122,10 @@ type AuthHandlerConfig struct {
 	// This is bascially a recovery method if implementing SessionStore ever
 	// goes down or some how gets its values flushed
 	QueryForSession func(db Querier, userID string) (sessionID string, err error)
-
-	// // DecodeCookieErrResponse is config used to respond to user if decoding
-	// // a cookie is invalid
-	// // This usually happens when a user sends an invalid cookie on request
-	// //
-	// // Default status value is http.StatusBadRequest
-	// // Default response value is []byte("Invalid cookie")
-	// DecodeCookieErrResponse HTTPResponseConfig
-
-	// // ServerErrResponse is config used to respond to user if some type
-	// // of server error occurs
-	// //
-	// // Default status value is http.StatusInternalServerError
-	// // Default response value is []byte("Server error")
-	// ServerErrResponse HTTPResponseConfig
 }
 
-// GroupHandlerConfig is config struct used for GroupHandler
-// The settings don't have to be set but if programmer wants to
-// be able to store user group information in cache instead
-// of database, this can be achieved by implementing CacheStore
-// type GroupHandlerConfig struct {
-// 	ServerErrorConfig
-
-// 	// CacheStore is used for retrieving results from a in-memory
-// 	// database like Redis
-// 	CacheStore CacheStore
-
-// 	// IgnoreCacheNil will query database for group information
-// 	// even if cache returns nil
-// 	// CacheStore must be initialized to use this
-// 	IgnoreCacheNil bool
-
-// 	// // ServerErrResponse is config used to respond to user if some type
-// 	// // of server error occurs
-// 	// //
-// 	// // Default status value is http.StatusInternalServerError
-// 	// // Default response value is []byte("Server error")
-// 	// ServerErrResponse HTTPResponseConfig
-// }
-
-// RoutingHandlerConfig is config struct for RoutingHandler
-// These settings don't have to be set but if user wishes
-// to use caching for routing paths
-// type RoutingHandlerConfig struct {
-// 	ServerErrorConfig
-
-// 	// CacheStore is used for retrieving results from a in-memory
-// 	// database like Redis
-// 	CacheStore CacheStore
-
-// 	// IgnoreCacheNil will query database for routing information
-// 	// even if cache returns nil
-// 	// CacheStore must be initialized for this to activate
-// 	IgnoreCacheNil bool
-
-// 	// // ServerErrResponse is config used to respond to user if some type
-// 	// // of server error occurs
-// 	// //
-// 	// // Default status value is http.StatusInternalServerError
-// 	// // Default response value is []byte("Server Error")
-// 	// ServerErrResponse HTTPResponseConfig
-
-// 	// // UnauthorizedErrResponse is config used to respond to user if none
-// 	// // of the nonUserURLs keys or queried urls match the apis
-// 	// // a user is allowed to access
-// 	// //
-// 	// // Default status value is http.StatusForbidden
-// 	// // Default response value is []byte("Forbidden to access url")
-// 	// ForbiddenURLErrResponse HTTPResponseConfig
-// }
-
+// MiddlewareUser is config struct used to get the base
+// authentication of user in middleware
 type MiddlewareUser struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
@@ -235,6 +167,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 		var middlewareUser MiddlewareUser
 		var session *sessions.Session
 		var err error
+		var db *DB
 
 		// Setting up default values from passed configs if none are set
 		SetHTTPResponseDefaults(
@@ -276,7 +209,8 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 						next.ServeHTTP(w, r)
 					} else {
 						if a.config.RecoverDB != nil {
-							if err = a.config.RecoverDB(err); err == nil {
+							if db, err = a.config.RecoverDB(err); err == nil {
+								a.db = db
 								canRecover = true
 								userBytes, err = a.queryForUser(r, a.db)
 
@@ -436,6 +370,7 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var groupMap map[string]bool
 			var err error
 			var groupBytes []byte
+			var db *DB
 
 			// Setting up default values from passed configs if none are set
 			SetHTTPResponseDefaults(
@@ -458,7 +393,8 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 						next.ServeHTTP(w, r)
 					} else {
 						if g.config.RecoverDB != nil {
-							if err = g.config.RecoverDB(err); err == nil {
+							if db, err = g.config.RecoverDB(err); err == nil {
+								g.db = db
 								isValid = true
 								groupBytes, err = g.queryForGroups(r, g.db)
 
@@ -576,6 +512,7 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var urlBytes []byte
 			var urls map[string]bool
 			var err error
+			var db *DB
 
 			SetHTTPResponseDefaults(
 				&routing.config.ClientErrorResponse,
@@ -605,7 +542,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					}
 
 					if routing.config.RecoverDB != nil {
-						if err = routing.config.RecoverDB(err); err == nil {
+						if db, err = routing.config.RecoverDB(err); err == nil {
+							routing.db = db
 							urlBytes, err = routing.queryRoutes(r, routing.db)
 
 							if err == nil {

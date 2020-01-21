@@ -29,8 +29,6 @@ type portConfig struct {
 	FlagKey    string `yaml:"flag_key" mapstructure:"flag_key"`
 	Port       string `yaml:"port" mapstructure:"port"`
 	DockerPort string `yaml:"docker_port" mapstructure:"docker_port"`
-	// FlagValueFormat string `yaml:"flag_value_format" mapstructure:"flag_value_format"`
-	// NumOfArgs       uint16 `yaml:"num_of_args" mapstructure:"num_of_args"`
 }
 
 type teardownConfig struct {
@@ -51,8 +49,8 @@ type dbResetConfig struct {
 	DBConnections   []DatabaseSetting `yaml:"db_connections" mapstructure:"db_connections"`
 	DBRemoveCommand dbCommand         `yaml:"db_remove_command" mapstructure:"db_remove_command"`
 	DBStartCommand  dbCommand         `yaml:"db_start_command" mapstructure:"db_start_command"`
-	DBRunCommand    dbCommand         `yaml:"db_run_command" mapstructure:"db_run_command"`
-	ValidateQuery   string            `yaml:"validate_query" mapstructure:"validate_query"`
+	//DBRunCommand    dbCommand         `yaml:"db_run_command" mapstructure:"db_run_command"`
+	ValidateQuery string `yaml:"validate_query" mapstructure:"validate_query"`
 }
 
 func initTestConfig() {

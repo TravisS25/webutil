@@ -2,7 +2,6 @@ package webutil
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/jmoiron/sqlx"
 	pkgerrors "github.com/pkg/errors"
+	"github.com/stretchr/testify/mock"
 	testifymock "github.com/stretchr/testify/mock"
 )
 
@@ -150,13 +150,11 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	//mockCacheStore.EXPECT().Get(gomock.Any()).Return([]byte("foo"), nil)
 
-	rule := validator{
+	rule := &validator{
 		querier: db,
-		recoverCacheConf: RecoverCacheConfig{
-			CacheConfig: CacheConfig{
-				Cache:          mockCacheStore1,
-				IgnoreCacheNil: true,
-			},
+		cache:   mockCacheStore1,
+		cacheValidateKey: &CacheValidateKey{
+			IgnoreCacheNil: true,
 		},
 		args: []interface{}{1},
 		err:  errors.New(DoesNotExistTxt),
@@ -172,7 +170,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore2 := &MockCacheStore{}
 	defer mockCacheStore2.AssertExpectations(t)
-	rule.recoverCacheConf.Cache = mockCacheStore2
+	rule.cache = mockCacheStore2
 	mockCacheStore2.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
@@ -187,9 +185,10 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore3 := &MockCacheStore{}
 	defer mockCacheStore3.AssertExpectations(t)
-	rule.recoverCacheConf.Cache = mockCacheStore3
+	rule.cache = mockCacheStore3
+	rows := sqlmock.NewRows([]string{"value", "text"})
 	mockCacheStore3.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
-	mockDB.ExpectQuery("select").WillReturnError(sql.ErrNoRows)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
 
 	if err = checkIfExists(rule, "foo", true); err == nil {
 		t.Errorf("should have error\n")
@@ -202,7 +201,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore4 := &MockCacheStore{}
 	defer mockCacheStore4.AssertExpectations(t)
-	rule.recoverCacheConf.Cache = mockCacheStore4
+	rule.cache = mockCacheStore4
 	mockCacheStore4.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
@@ -217,7 +216,7 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore5 := &MockCacheStore{}
 	defer mockCacheStore5.AssertExpectations(t)
-	rule.recoverCacheConf.Cache = mockCacheStore5
+	rule.cache = mockCacheStore5
 	mockCacheStore5.On("Get", testifymock.Anything).Return(nil, ErrServer)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
@@ -232,10 +231,10 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 
 	mockCacheStore6 := &MockCacheStore{}
 	defer mockCacheStore6.AssertExpectations(t)
-	rule.recoverCacheConf.Cache = mockCacheStore6
-	rule.recoverCacheConf.RecoverDB = func(err error) error {
-		return ErrServer
-	}
+	rule.cache = mockCacheStore6
+	// rule.recoverDB = func(err error) error {
+	// 	return ErrServer
+	// }
 	mockCacheStore6.On("Get", testifymock.Anything).Return(nil, ErrServer)
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
@@ -366,8 +365,8 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
 			RecoverConfig: RecoverConfig{
-				RecoverDB: func(err error) error {
-					return ErrServer
+				RecoverDB: func(err error) (*DB, error) {
+					return nil, ErrServer
 				},
 			},
 		},
@@ -526,6 +525,132 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 		sqlx.DOLLAR,
 		"",
 	); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+}
+
+func TestValidateIDsRuleUnitTest(t *testing.T) {
+	var err error
+
+	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+	if err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
+
+	queryErr := errors.New("query error")
+	validateVal := []interface{}{"1"}
+
+	mockCache1 := &MockCacheStore{}
+	defer mockCache1.AssertExpectations(t)
+
+	mockDB.ExpectQuery("select").WillReturnError(queryErr)
+
+	formValidator := &FormValidation{}
+	validator := &validator{
+		querier:        db,
+		cache:          mockCache1,
+		bindVar:        sqlx.DOLLAR,
+		placeHolderIdx: -1,
+		entityRecover:  formValidator,
+		err:            errors.New(InvalidTxt),
+	}
+
+	idValidator := &validateIDsRule{validator: validator}
+
+	if err = idValidator.Validate(nil); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	if err = idValidator.Validate([]interface{}{}); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	if err = idValidator.Validate(validateVal); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != queryErr.Error() {
+			t.Errorf("should have query error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	mockDB.ExpectQuery("select").WillReturnError(queryErr)
+	mockDB.ExpectQuery("select").WillReturnError(queryErr)
+	idValidator.recoverDB = func(err error) (*DB, error) {
+		return &DB{DB: &sqlx.DB{DB: db}}, nil
+	}
+
+	if err = idValidator.Validate(validateVal); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != queryErr.Error() {
+			t.Errorf("should have query error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	rows := sqlmock.NewRows([]string{"id"}).AddRow(1)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
+
+	if err = idValidator.Validate(validateVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	rows = sqlmock.NewRows([]string{"id"}).AddRow(1).AddRow(2)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
+
+	if err = idValidator.Validate(validateVal); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != InvalidTxt {
+			t.Errorf("should have invalid error\n")
+			t.Errorf("err: %s\n", err.Error())
+		}
+	}
+
+	mockCache1.On("Get", mock.Anything, mock.Anything).Return(nil, ErrCacheNil)
+	idValidator.cacheValidateKey = &CacheValidateKey{
+		Key:            "key",
+		IgnoreCacheNil: true,
+	}
+
+	rows = sqlmock.NewRows([]string{"id"}).AddRow(1)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
+
+	if err = idValidator.Validate(validateVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	valBytes, err := json.Marshal(&validateVal)
+
+	if err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	mockCache2 := &MockCacheStore{}
+	defer mockCache2.AssertExpectations(t)
+	mockCache2.On("Get", mock.Anything, mock.Anything).Return(valBytes, nil)
+
+	idValidator.cache = mockCache2
+
+	if err = idValidator.Validate(validateVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	idValidator.cache = nil
+	idValidator.query = "select id from something where id = ?"
+	idValidator.placeHolderIdx = 0
+	rows = sqlmock.NewRows([]string{"id"}).AddRow(1)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
+
+	if err = idValidator.Validate(1); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}

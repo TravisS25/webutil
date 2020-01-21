@@ -75,7 +75,7 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 			t.Fatalf("TestName required")
 		}
 		if formTest.Validatable == nil && formTest.Validator == nil {
-			t.Fatalf("Validatable or Validator is required")
+			t.Fatalf("Validatable or validator is required")
 		}
 		if formTest.Method == "" {
 			formTest.Method = http.MethodGet

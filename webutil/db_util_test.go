@@ -18,16 +18,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+var _ DBInterfaceRecover = (*testAPI)(nil)
+
 var (
 	dbMutex sync.Mutex
 	//db      *DB
 
 	errDB     = errors.New("db error")
-	recoverDB = func(err error) error {
-		return nil
+	recoverDB = func(err error) (*DB, error) {
+		return &DB{}, nil
 	}
-	failedRecoverDB = func(err error) error {
-		return err
+	failedRecoverDB = func(err error) (*DB, error) {
+		return nil, err
 	}
 )
 
@@ -47,19 +49,75 @@ func (m *channel) Get() <-chan struct{} {
 	return m.ready
 }
 
-// func RecoverFromError(err error) error {
-// 	if err != nil {
-// 		dbMutex.Lock()
-// 		defer dbMutex.Unlock()
-// 		db, err = db.RecoverError(err)
-// 		return err
-// 	}
+type testAPI struct {
+	DB DBInterface
+}
 
-// 	return nil
-// }
+func (f *testAPI) SetDBInterface(db DBInterface) {
+	f.DB = db
+}
+
+func (f *testAPI) Index(w http.ResponseWriter, r *http.Request) {
+	var db *DB
+	var err error
+	//var recoverFn func(err error) (*DB, error)
+	var removeFn func() error
+
+	//initDB()
+	if db, _, removeFn, err = dbRecoverSetup(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("couldn't past recover set up"))
+		return
+	}
+
+	f.DB = db
+
+	if err = removeFn(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	retry := func(innerDB DBInterface) error {
+		_, err = innerDB.Query(testConf.DBResetConf.ValidateQuery)
+		return err
+	}
+
+	if err = retry(f.DB); err == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("couldn't retry"))
+		return
+	}
+
+	conf := ServerErrorConfig{
+		RecoverConfig: RecoverConfig{
+			RecoverDB: func(err error) (*DB, error) {
+				if err != nil {
+					dbMutex.Lock()
+					defer dbMutex.Unlock()
+					db, err = db.RecoverError()
+					return db, err
+				}
+
+				return db, nil
+			},
+			RetryDB:            retry,
+			DBInterfaceRecover: f,
+		},
+	}
+
+	if HasDBError(w, err, conf) {
+		return
+	}
+
+	if _, err = f.DB.Query(testConf.DBResetConf.ValidateQuery); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("didn't recovery right"))
+	}
+}
 
 // dbRecoverSetup sets up and returns new db with implemented RecoverDB function
-func dbRecoverSetup() (*DB, func(*DB, error) error, func() error, error) {
+func dbRecoverSetup() (*DB, func(err error) (*DB, error), func() error, error) {
 	var db *DB
 	var err error
 	var chosenPort int
@@ -117,15 +175,7 @@ func dbRecoverSetup() (*DB, func(*DB, error) error, func() error, error) {
 		portVal,
 	)
 
-	// args := []interface{}{}
-
-	// for _, v := range testConf.DBResetConf.DBStartCommand.Args {
-	// 	args = append(args, v)
-	// }
-
-	//var flagStartIdx int
 	startArgs := []string{}
-
 	hasDynamicArgs := false
 
 	for _, v := range testConf.DBResetConf.DBStartCommand.Args {
@@ -168,13 +218,13 @@ func dbRecoverSetup() (*DB, func(*DB, error) error, func() error, error) {
 		return nil, nil, nil, errors.Wrap(err, "")
 	}
 
-	return db, func(innerDB *DB, err error) error {
+	return db, func(err error) (*DB, error) {
 			if err != nil {
-				db, err = db.RecoverError(err)
-				return errors.Wrap(err, "")
+				db, err = db.RecoverError()
+				return nil, errors.Wrap(err, "")
 			}
 
-			return nil
+			return db, nil
 		}, func() error {
 			stopArgs := testConf.DBResetConf.DBRemoveCommand.Args
 
@@ -192,35 +242,25 @@ func dbRecoverSetup() (*DB, func(*DB, error) error, func() error, error) {
 		}, nil
 }
 
-func TestFoo(t *testing.T) {
-	_, _, _, err := dbRecoverSetup()
+func TestHasDBErrorIntegrationTest(t *testing.T) {
+	api := testAPI{}
+	r := mux.NewRouter()
+	r.HandleFunc("/test", api.Index)
+
+	s := httptest.NewServer(r)
+	c := s.Client()
+
+	res, err := c.Get(s.URL + "/test")
 
 	if err != nil {
-		t.Errorf("err: %s\n", err.Error())
+		t.Errorf("%s\n", err.Error())
 	}
 
-	t.Error("error\n")
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("did not return status ok\n")
+		t.Errorf("status: %s\n", err.Error())
+	}
 }
-
-// func getRecoverError() (*DB, func(error) error, error) {
-// 	var db *DB
-// 	var err error
-
-// 	db, err = NewDBWithList(testConf.DBConnections, Postgres)
-
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-
-// 	return db, func(err error) error {
-// 		if err != nil {
-// 			db, err = db.RecoverError(err)
-// 			return err
-// 		}
-
-// 		return nil
-// 	}, nil
-// }
 
 func TestHasDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
@@ -237,7 +277,8 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 	// Mocking recovering from db so should
 	// return false
 	conf.RecoverDB = recoverDB
-	conf.RetryDB = func() error {
+	conf.DBInterfaceRecover = &testAPI{}
+	conf.RetryDB = func(db DBInterface) error {
 		return nil
 	}
 
@@ -273,14 +314,11 @@ func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 
 func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	var err error
-	var recoverFn func(*DB, error) error
+	var recoverFn func(err error) (*DB, error)
 	var db *DB
 	var wg sync.WaitGroup
 	var removeFn func() error
-	//var dockerName string
-	//var conf teardownConfig
 
-	//initDB()
 	if db, recoverFn, removeFn, err = dbRecoverSetup(); err != nil {
 		t.Fatalf("err: %s\n", errors.Cause(err).Error())
 	}
@@ -297,7 +335,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 		if err != nil {
 			fmt.Printf("db is down from req: %s\n", req.RemoteAddr)
 
-			if err = recoverFn(db, err); err == nil {
+			if _, err = recoverFn(err); err == nil {
 				fmt.Printf("able to recover err from req: %s\n", req.RemoteAddr)
 			} else {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -377,77 +415,131 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	wg.Wait()
 }
 
-func TestHasDBErrorIntegrationTest(t *testing.T) {
-	var err error
-	//var recoverFn RecoverDB
-	var rows *sql.Rows
-	var db *DB
-	var removeFn func() error
+// func TestHasDBErrorIntegrationTest(t *testing.T) {
+// 	var err error
+// 	//var recoverFn RecoverDB
+// 	var rows *sql.Rows
+// 	var db *DB
+// 	var removeFn func() error
 
-	if db, _, removeFn, err = dbRecoverSetup(); err != nil {
-		t.Fatalf("err: %s\n", errors.Cause(err).Error())
-	}
+// 	if db, _, removeFn, err = dbRecoverSetup(); err != nil {
+// 		t.Fatalf("err: %s\n", errors.Cause(err).Error())
+// 	}
 
-	rr := httptest.NewRecorder()
-	conf := ServerErrorConfig{
-		RecoverConfig: RecoverConfig{
-			RecoverDB: func(err error) error {
-				if err != nil {
-					db, err = db.RecoverError(err)
-					return err
-				}
+// 	rr := httptest.NewRecorder()
+// 	conf := ServerErrorConfig{
+// 		RecoverConfig: RecoverConfig{
+// 			RecoverDB: func(err error) error {
+// 				if err != nil {
+// 					db, err = db.RecoverError()
+// 					return err
+// 				}
 
-				return nil
-			},
-		},
-	}
-	err = removeFn()
+// 				return nil
+// 			},
+// 		},
+// 	}
+// 	err = removeFn()
 
-	if err != nil {
-		t.Fatalf("err: %s\n", err.Error())
-	}
+// 	if err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
 
-	fmt.Printf("config: %v", db.currentConfig)
+// 	fmt.Printf("config: %v", db.currentConfig)
 
-	// defer func() {
-	// 	cmd = exec.Command(
-	// 		testConf.DBResetConf.DBRemoveCommand.Command,
-	// 		testConf.DBResetConf.DBRemoveCommand.Args...,
-	// 	)
-	// 	cmd.Run()
-	// }()
+// 	// defer func() {
+// 	// 	cmd = exec.Command(
+// 	// 		testConf.DBResetConf.DBRemoveCommand.Command,
+// 	// 		testConf.DBResetConf.DBRemoveCommand.Args...,
+// 	// 	)
+// 	// 	cmd.Run()
+// 	// }()
 
-	validateQuery := func() error {
-		rows, err = db.Query(testConf.DBResetConf.ValidateQuery)
-		return err
-	}
+// 	validateQuery := func() error {
+// 		rows, err = db.Query(testConf.DBResetConf.ValidateQuery)
+// 		return err
+// 	}
 
-	err = validateQuery()
+// 	err = validateQuery()
 
-	if err == nil {
-		t.Errorf("should have error\n")
-	}
+// 	if err == nil {
+// 		t.Errorf("should have error\n")
+// 	}
 
-	conf.RetryDB = validateQuery
+// 	conf.RetryDB = validateQuery
 
-	if HasDBError(rr, err, conf) {
-		t.Fatalf("could not recover")
-	}
+// 	// if HasDBError(rr, err, conf) {
+// 	// 	t.Fatalf("could not recover")
+// 	// }
 
-	if rows == nil {
-		t.Errorf("rows is nil\n")
-	}
+// 	if rows == nil {
+// 		t.Errorf("rows is nil\n")
+// 	}
 
-	results := make([]interface{}, 0)
+// 	results := make([]interface{}, 0)
 
-	for rows.Next() {
-		var result interface{}
-		err = rows.Scan(&result)
+// 	for rows.Next() {
+// 		var result interface{}
+// 		err = rows.Scan(&result)
 
-		if err != nil {
-			t.Fatalf("err: %s\n", err.Error())
-		}
+// 		if err != nil {
+// 			t.Fatalf("err: %s\n", err.Error())
+// 		}
 
-		results = append(results, result)
-	}
-}
+// 		results = append(results, result)
+// 	}
+// }
+
+// func TestRecoverAndRetryIntegrationTest(t *testing.T) {
+// 	var err error
+// 	var db *DB
+// 	var removeFn func() error
+
+// 	if db, _, removeFn, err = dbRecoverSetup(); err != nil {
+// 		t.Fatalf("err: %s\n", errors.Cause(err).Error())
+// 	}
+
+// 	if err = removeFn(); err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
+
+// 	var dbI DBInterface
+
+// 	dbI = db
+
+// 	validateQuery := func(innerDBI DBInterface) error {
+// 		_, err = innerDBI.Query(testConf.DBResetConf.ValidateQuery)
+// 		return err
+// 	}
+
+// 	if err = validateQuery(dbI); err == nil {
+// 		t.Fatalf("should have error\n")
+// 	}
+
+// 	recoverDB := func(err error) (*DB, error) {
+// 		if err != nil {
+// 			dbMutex.Lock()
+// 			defer dbMutex.Unlock()
+// 			return db.RecoverError()
+// 		}
+
+// 		return db, nil
+// 	}
+
+// 	retryDB := func(foo DBInterface) error {
+// 		return validateQuery(foo)
+// 	}
+
+// 	conf := RecoverConfig{
+// 		RecoverDB: recoverDB,
+// 		RetryDB:   retryDB,
+// 	}
+
+// 	if dbI, err = RecoverAndRetry(err, conf); err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
+
+// 	if err = validateQuery(dbI); err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
+// }

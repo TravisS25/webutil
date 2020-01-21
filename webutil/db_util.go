@@ -92,6 +92,22 @@ type QuerierExec interface {
 	Executer
 }
 
+// DBInterfaceRecover implements setting DBInterface
+// to struct that implements SetDBInterface
+// This is generally used in apis to recover from
+// database failure
+type DBInterfaceRecover interface {
+	SetDBInterface(DBInterface)
+}
+
+// EntityRecover implements setting Entity
+// to struct that implements SetEntity
+// This is generally used in form validators to
+// recover from database failure
+type EntityRecover interface {
+	SetEntity(Entity)
+}
+
 // Scanner will scan row returned from database
 // type Scanner interface {
 // 	Scan(dest ...interface{}) error
@@ -150,20 +166,12 @@ type Entity interface {
 type DBInterface interface {
 	Entity
 	Tx
-	// /Recover
 }
 
 // Recover implementation is used to recover from db failure
 type Recover interface {
 	RecoverError(err error) (*DB, error)
 }
-
-// // RecoverQuerier is used to be able to do basic querying
-// // and recover from db failure if neccessary
-// type RecoverQuerier interface {
-// 	Querier
-// 	Recover
-// }
 
 //////////////////////////////////////////////////////////////////
 //-------------------------- TYPES ----------------------------
@@ -173,12 +181,12 @@ type Recover interface {
 // to recover from db failure
 // This implementation can be used for any db but is made in
 // mind for distributed databases ie. CockroachDB
-type RecoverDB func(err error) error
+type RecoverDB func(err error) (*DB, error)
 
 // RetryDB implementation should query database that has
 // recovered from a failure and return whether you get
 // an error or not
-type RetryDB func() error
+type RetryDB func(DBInterface) error
 
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
@@ -187,11 +195,6 @@ type RetryDB func() error
 // Count is used to retrieve from count queries
 type Count struct {
 	Total int `json:"total"`
-}
-
-type RunQuery struct {
-	Query string
-	Args  []interface{}
 }
 
 //////////////////////////////////////////////////////////////////
@@ -216,47 +219,49 @@ type DB struct {
 // This function does not check what type of err is passed, just checks
 // if err is nil or not so it's up to user to use appropriately; however
 // we do a quick ping check just to make sure db is truly down
-func (db *DB) RecoverError(err error) (*DB, error) {
+func (db *DB) RecoverError() (*DB, error) {
+	var err error
+
+	// if err != nil {
+	dbInfo := fmt.Sprintf(
+		DBConnStr,
+		db.dbType,
+		db.currentConfig.User,
+		db.currentConfig.Password,
+		db.currentConfig.Host,
+		db.currentConfig.Port,
+		db.currentConfig.DBName,
+		db.currentConfig.SSL,
+		db.currentConfig.SSLMode,
+		db.currentConfig.SSLRootCert,
+		db.currentConfig.SSLKey,
+		db.currentConfig.SSLCert,
+	)
+
+	_, err = db.Driver().Open(dbInfo)
+
 	if err != nil {
-		dbInfo := fmt.Sprintf(
-			DBConnStr,
-			db.dbType,
-			db.currentConfig.User,
-			db.currentConfig.Password,
-			db.currentConfig.Host,
-			db.currentConfig.Port,
-			db.currentConfig.DBName,
-			db.currentConfig.SSL,
-			db.currentConfig.SSLMode,
-			db.currentConfig.SSLRootCert,
-			db.currentConfig.SSLKey,
-			db.currentConfig.SSLCert,
-		)
-
-		_, err = db.Driver().Open(dbInfo)
-
-		if err != nil {
-			fmt.Printf("connection officially failed\n")
-			if len(db.dbConfigList) == 0 {
-				return nil, ErrEmptyConfigList
-			}
-
-			newDB, err := NewDBWithList(db.dbConfigList, db.dbType)
-
-			if err != nil {
-				return nil, ErrNoConnection
-			}
-
-			return newDB, err
+		fmt.Printf("connection officially failed\n")
+		if len(db.dbConfigList) == 0 {
+			return nil, ErrEmptyConfigList
 		}
 
-		return db, nil
+		newDB, err := NewDBWithList(db.dbConfigList, db.dbType)
+
+		if err != nil {
+			return nil, ErrNoConnection
+		}
+
+		return newDB, err
 	}
+
 	return db, nil
+	// }
+	//return db, nil
 }
 
 // Commit is just a wrapper for sql.Tx Commit function
-// to implement SqlxDB interface
+// to implement Tx interface
 func (db *DB) Commit(tx *sql.Tx) error {
 	return tx.Commit()
 }
@@ -335,11 +340,8 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerErrorConf
 	defaultDBErrors(&config)
 
 	if err == sql.ErrNoRows {
-		http.Error(
-			w,
-			string(config.ClientErrorResponse.HTTPResponse),
-			*config.ClientErrorResponse.HTTPStatus,
-		)
+		w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
+		w.Write(config.ClientErrorResponse.HTTPResponse)
 		return true
 	}
 
@@ -366,11 +368,12 @@ func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
 			fmt.Printf("made to recover\n")
-			if err = config.RecoverDB(err); err == nil {
+			if db, err := config.RecoverDB(err); err == nil {
+				config.DBInterfaceRecover.SetDBInterface(db)
 				fmt.Printf("past recover\n")
 				if config.RetryDB != nil {
 					fmt.Printf("made to retry\n")
-					if err = config.RetryDB(); err == nil {
+					if err = config.RetryDB(db); err == nil {
 						fmt.Printf("past retry\n")
 						return false
 					} else {
@@ -380,11 +383,8 @@ func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 			}
 		}
 
-		http.Error(
-			w,
-			string(config.ServerErrorResponse.HTTPResponse),
-			*config.ServerErrorResponse.HTTPStatus,
-		)
+		w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
+		w.Write(config.ServerErrorResponse.HTTPResponse)
 		return true
 	}
 

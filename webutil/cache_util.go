@@ -77,15 +77,25 @@ type CacheConfig struct {
 	Key string
 }
 
+// CacheKey is config struct used to be apart of
+// CacheSet to set global cache
 type CacheKey struct {
+	// Key used in cache
 	Key string
 
+	// PlaceHolderPositions should be the indexes to place
+	// returned values from database to the formated key
 	PlaceHolderPositions []int
 
+	// Expire is Duration in which the key will stay
+	// alive in cache
+	// This is depended on cache backend and whether your
+	// cache backend supports timed caching
 	Expire time.Duration
 }
 
 // CacheSet is config struct used in CacheSetup config struct
+// to set global cache
 type CacheSet struct {
 	CacheKey CacheKey
 

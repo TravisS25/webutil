@@ -82,6 +82,10 @@ var (
 	FormDateTimeRegex = regexp.MustCompile("^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4} [0-9]{1,2}:[0-9]{2} (?i)(AM|PM)$")
 )
 
+//////////////////////////////////////////////////////////////////
+//----------------------- PRE-BUILT RULES ----------------------
+//////////////////////////////////////////////////////////////////
+
 var (
 	// RequiredRule makes field required and does NOT allow just spaces
 	RequiredRule = &validateRequiredRule{err: errors.New(RequiredTxt)}
@@ -113,11 +117,54 @@ var (
 // mux is quite complex without spinning up an entire server
 type PathRegex func(r *http.Request) (string, error)
 
+// type RecoverEntity func(error, Entityer) error
+
+// // type FormDBRecover func(*FormValidation) error
+
+// // type validatorDBRecover func(*validator) error
+
+//////////////////////////////////////////////////////////////////
+//---------------------- CONFIG STRUCTS ------------------------
+//////////////////////////////////////////////////////////////////
+
+// FormValidationConfig is config struct used in the initialization
+// of *FormValidation
+type FormValidationConfig struct {
+	Cache     CacheStore
+	RecoverDB RecoverDB
+	PathRegex PathRegex
+}
+
+// CacheValidateKey is config struct used in form validators
+type CacheValidateKey struct {
+	// Key is key used in cache to retreive value
+	// Key can be string format such as "email-%s"
+	// in which case the Args property will be used
+	// to dynamically fill in to be used as key for cache
+	Key string
+
+	// Args is used against the Key property dynamically
+	// change the key for cache as the validator functions
+	// will use fmt.Sprint(key, args...) to format the key
+	Args []interface{}
+
+	// ValueIdx is used if current value being validated
+	// in a validator function should be used as apart of
+	// the key
+	//
+	// If it is, it will be added to given index of the Args property
+	// If ValueIdx is below 0, validated value won't be added key
+	ValueIdx int
+
+	// IgnoreCacheNil will ignore cache nil error and still query db
+	IgnoreCacheNil bool
+}
+
 //////////////////////////////////////////////////////////////////
 //----------------------- INTERFACES --------------------------
 //////////////////////////////////////////////////////////////////
 
-// RequestValidator should implement validating fields sent from
+// Requestvalidator should implement validating fields sent from
 // request and return form or error if one occurs
 type RequestValidator interface {
 	Validate(req *http.Request, instance interface{}) (interface{}, error)
@@ -205,32 +252,16 @@ type FormSelection struct {
 // embed to validate json data
 type FormValidation struct {
 	entity Entity
-	cache  CacheStore
+	config FormValidationConfig
+	//cache  CacheStore
 }
 
 // NewFormValidation returns *FormValidation instance
-func NewFormValidation(entity Entity) *FormValidation {
+func NewFormValidation(entity Entity, config FormValidationConfig) *FormValidation {
 	return &FormValidation{
 		entity: entity,
+		config: config,
 	}
-}
-
-// NewFormValidationCache returns *FormValidation instance with
-// the cache also set
-func NewFormValidationCache(entity Entity, cache CacheStore) *FormValidation {
-	return &FormValidation{
-		entity: entity,
-		cache:  cache,
-	}
-}
-
-// GetPathRegex returns path template of currently passed request
-//
-// This function is mainly used for testing purposes as injecting
-// and retrieving a route into mux is quite complex without
-// spinning up an entire server
-func (f *FormValidation) GetPathRegex(r *http.Request, pathReg PathRegex) (string, error) {
-	return pathReg(r)
 }
 
 // IsValid returns *validRule based on isValid parameter
@@ -282,21 +313,25 @@ func (f *FormValidation) ValidateDate(
 // If the ids passed happen to be type formutil#Int64, it will extract the values so it
 // can be used against the query properly
 func (f *FormValidation) ValidateIDs(
-	recoverCacheConf RecoverCacheConfig,
-	placeHolderPosition,
+	cacheValidateKey *CacheValidateKey,
+	recoverDB RecoverDB,
+	placeHolderIdx,
 	bindVar int,
 	query string,
 	args ...interface{},
 ) *validateIDsRule {
 	return &validateIDsRule{
-		validator: validator{
-			querier:             f.entity,
-			recoverCacheConf:    recoverCacheConf,
-			placeHolderPosition: placeHolderPosition,
-			bindVar:             bindVar,
-			query:               query,
-			args:                args,
-			err:                 errors.New(InvalidTxt),
+		validator: &validator{
+			querier:          f.entity,
+			cache:            f.config.Cache,
+			entityRecover:    f,
+			recoverDB:        recoverDB,
+			cacheValidateKey: cacheValidateKey,
+			placeHolderIdx:   placeHolderIdx,
+			bindVar:          bindVar,
+			query:            query,
+			args:             args,
+			err:              errors.New(InvalidTxt),
 		},
 	}
 }
@@ -304,23 +339,25 @@ func (f *FormValidation) ValidateIDs(
 // ValidateUniqueness determines whether passed field is unique
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
-	recoverCacheConf RecoverCacheConfig,
+	cacheValidateKey *CacheValidateKey,
 	instanceValue interface{},
-	placeHolderPosition,
+	placeHolderIdx,
 	bindVar int,
 	query string,
 	args ...interface{},
 ) *validateUniquenessRule {
 	return &validateUniquenessRule{
 		instanceValue: instanceValue,
-		validator: validator{
-			querier:             f.entity,
-			recoverCacheConf:    recoverCacheConf,
-			placeHolderPosition: placeHolderPosition,
-			bindVar:             bindVar,
-			query:               query,
-			args:                args,
-			err:                 errors.New(AlreadyExistsTxt),
+		validator: &validator{
+			querier:          f.entity,
+			cache:            f.config.Cache,
+			entityRecover:    f,
+			cacheValidateKey: cacheValidateKey,
+			placeHolderIdx:   placeHolderIdx,
+			bindVar:          bindVar,
+			query:            query,
+			args:             args,
+			err:              errors.New(AlreadyExistsTxt),
 		},
 	}
 }
@@ -328,21 +365,23 @@ func (f *FormValidation) ValidateUniqueness(
 // ValidateExists determines whether passed field exists
 // within database or cache if set
 func (f *FormValidation) ValidateExists(
-	recoverCacheConf RecoverCacheConfig,
-	placeHolderPosition,
+	cacheValidateKey *CacheValidateKey,
+	placeHolderIdx,
 	bindVar int,
 	query string,
 	args ...interface{},
 ) *validateExistsRule {
 	return &validateExistsRule{
-		validator: validator{
-			querier:             f.entity,
-			recoverCacheConf:    recoverCacheConf,
-			placeHolderPosition: placeHolderPosition,
-			bindVar:             bindVar,
-			query:               query,
-			args:                args,
-			err:                 errors.New(DoesNotExistTxt),
+		validator: &validator{
+			querier:          f.entity,
+			cache:            f.config.Cache,
+			entityRecover:    f,
+			cacheValidateKey: cacheValidateKey,
+			placeHolderIdx:   placeHolderIdx,
+			bindVar:          bindVar,
+			query:            query,
+			args:             args,
+			err:              errors.New(DoesNotExistTxt),
 		},
 	}
 }
@@ -354,7 +393,12 @@ func (f *FormValidation) GetEntity() Entity {
 
 // GetCache returns CacheStore
 func (f *FormValidation) GetCache() CacheStore {
-	return f.cache
+	return f.config.Cache
+}
+
+// GetConfig return FormValidationConfig
+func (f *FormValidation) GetConfig() FormValidationConfig {
+	return f.config
 }
 
 // SetEntity sets Entity
@@ -364,17 +408,25 @@ func (f *FormValidation) SetEntity(entity Entity) {
 
 // SetCache sets CacheStore
 func (f *FormValidation) SetCache(cache CacheStore) {
-	f.cache = cache
+	f.config.Cache = cache
+}
+
+// SetConfig sets FormValidationConfig
+func (f *FormValidation) SetConfig(config FormValidationConfig) {
+	f.config = config
 }
 
 type validator struct {
-	querier             Querier
-	args                []interface{}
-	query               string
-	bindVar             int
-	placeHolderPosition int
-	err                 error
-	recoverCacheConf    RecoverCacheConfig
+	entityRecover    EntityRecover
+	querier          Querier
+	cache            CacheStore
+	args             []interface{}
+	query            string
+	bindVar          int
+	placeHolderIdx   int
+	err              error
+	recoverDB        RecoverDB
+	cacheValidateKey *CacheValidateKey
 }
 
 type validateRequiredRule struct {
@@ -491,7 +543,7 @@ func (v *validRule) Error(message string) *validRule {
 }
 
 type validateExistsRule struct {
-	validator
+	*validator
 }
 
 func (v *validateExistsRule) Validate(value interface{}) error {
@@ -504,7 +556,7 @@ func (v *validateExistsRule) Error(message string) *validateExistsRule {
 }
 
 type validateUniquenessRule struct {
-	validator
+	*validator
 	instanceValue interface{}
 }
 
@@ -524,7 +576,7 @@ func (v *validateUniquenessRule) Error(message string) *validateUniquenessRule {
 }
 
 type validateIDsRule struct {
-	validator
+	*validator
 }
 
 func (v *validateIDsRule) Validate(value interface{}) error {
@@ -545,7 +597,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		s := reflect.ValueOf(value)
 
 		for i := 0; i < s.Len(); i++ {
-			ids = append(ids, s.Index(i))
+			ids = append(ids, s.Index(i).Interface())
 		}
 
 		expectedLen = len(ids)
@@ -556,22 +608,24 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 
 	// If type is slice and is empty, simply return nil as we will get an error
 	// when trying to query with empty slice
-	if len(ids) == 0 {
+	if isSlice && len(ids) == 0 {
 		return nil
 	}
 
-	args := make([]interface{}, 0, len(v.args))
+	var args []interface{}
 
-	if len(v.args) != 0 {
+	if v.placeHolderIdx > -1 {
+		args = make([]interface{}, 0, len(args)+1)
 		args = append(args, v.args...)
-	}
 
-	if v.placeHolderPosition > 0 {
 		if isSlice {
-			args = InsertAt(args, ids, v.placeHolderPosition-1)
+			args = InsertAt(args, ids, v.placeHolderIdx)
 		} else {
-			args = InsertAt(args, singleVal, v.placeHolderPosition-1)
+			args = InsertAt(args, singleVal, v.placeHolderIdx)
 		}
+	} else {
+		args = make([]interface{}, 0, len(args))
+		args = append(args, v.args...)
 	}
 
 	q, arguments, err := InQueryRebind(v.bindVar, v.query, args...)
@@ -582,17 +636,38 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 	}
 
 	queryFunc := func() error {
-		rower, err := v.querier.Query(q, arguments...)
+		var rows *sql.Rows
+		isValidQuery := false
 
-		if err != nil {
-			errS := fmt.Errorf("query: %s  err: %s", q, err.Error())
-			return validation.NewInternalError(errS)
+		if rows, err = v.querier.Query(q, arguments...); err != nil {
+			if v.recoverDB != nil {
+				if db, err := v.recoverDB(err); err == nil {
+					v.querier = db
+					v.entityRecover.SetEntity(db)
+
+					if rows, err = v.querier.Query(q, arguments...); err != nil {
+						return validation.NewInternalError(err)
+					}
+
+					isValidQuery = true
+				}
+			}
+		} else {
+			isValidQuery = true
+		}
+
+		if !isValidQuery {
+			return validation.NewInternalError(err)
 		}
 
 		counter := 0
-		for rower.Next() {
+
+		for rows.Next() {
 			counter++
 		}
+
+		fmt.Printf("expected len: %d\n", expectedLen)
+		fmt.Printf("counter: %d\n", counter)
 
 		if expectedLen != counter {
 			return v.err
@@ -601,23 +676,31 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		return nil
 	}
 
-	if v.recoverCacheConf.Cache != nil {
-		//var validID bool
+	if v.cache != nil && v.cacheValidateKey != nil {
 		var singleID bool
 		var cacheBytes []byte
 
 		if !isSlice {
 			singleID = true
-			// validID, err = v.cacheConfig.Cache.HasKey(v.cacheConfig.Key)
-		} else {
-			// cacheBytes, err = v.cacheConfig.Cache.Get(v.cacheConfig.Key)
 		}
 
-		cacheBytes, err = v.recoverCacheConf.Cache.Get(v.recoverCacheConf.Key)
+		var cacheArgs []interface{}
+
+		if v.cacheValidateKey.ValueIdx > -1 {
+			cacheArgs = make([]interface{}, 0, len(v.cacheValidateKey.Args)+1)
+			cacheArgs = append(cacheArgs, v.cacheValidateKey.Args...)
+			cacheArgs = InsertAt(v.cacheValidateKey.Args, value, v.cacheValidateKey.ValueIdx)
+		} else {
+			cacheArgs = make([]interface{}, 0, len(cacheArgs))
+			cacheArgs = append(cacheArgs, v.cacheValidateKey.Args...)
+		}
+
+		key := fmt.Sprintf(v.cacheValidateKey.Key, cacheArgs...)
+		cacheBytes, err = v.cache.Get(key)
 
 		if err != nil {
 			if err == ErrCacheNil {
-				if v.recoverCacheConf.IgnoreCacheNil {
+				if v.cacheValidateKey.IgnoreCacheNil {
 					err = queryFunc()
 				}
 			} else {
@@ -626,9 +709,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		} else {
 			if !singleID {
 				var cacheIDs []interface{}
-				err = json.Unmarshal(cacheBytes, &cacheIDs)
-
-				if err != nil {
+				if err = json.Unmarshal(cacheBytes, &cacheIDs); err != nil {
 					return validation.NewInternalError(err)
 				}
 
@@ -692,10 +773,6 @@ func HasFormErrors(
 				jsonString, _ := json.Marshal(payload)
 				w.Write(jsonString)
 			} else {
-				if config.RecoverDB != nil {
-					config.RecoverDB(err)
-				}
-
 				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
 				w.Write(config.ServerErrorResponse.HTTPResponse)
 			}
@@ -724,6 +801,7 @@ func GetFormSelections(
 	args ...interface{},
 ) ([]FormSelection, error) {
 	var err error
+	var newDB *DB
 
 	SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(ErrServer.Error()))
 
@@ -739,7 +817,8 @@ func GetFormSelections(
 			canRecover := false
 
 			if config.RecoverDB != nil {
-				if err = config.RecoverDB(err); err == nil {
+				if newDB, err = config.RecoverDB(err); err == nil {
+					config.DBInterfaceRecover.SetDBInterface(newDB)
 					rower, err = db.Query(query, args...)
 
 					if err == nil {
@@ -841,8 +920,7 @@ func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...s
 
 // checkIfExists determines whether the passed query returns any
 // results and returns error depending on the wantExists parameter
-func checkIfExists(v validator, value interface{}, wantExists bool) error {
-	var filler interface{}
+func checkIfExists(v *validator, value interface{}, wantExists bool) error {
 	var err error
 	var q string
 
@@ -851,54 +929,59 @@ func checkIfExists(v validator, value interface{}, wantExists bool) error {
 	}
 
 	dbCall := func() error {
-		queryArgs := make([]interface{}, 0)
+		var rows *sql.Rows
+		queryArgs := make([]interface{}, 0, len(v.args)+1)
 
 		if len(v.args) != 0 {
 			queryArgs = append(queryArgs, v.args...)
 		}
 
-		v.args = InsertAt(v.args, value, v.placeHolderPosition)
-		q, queryArgs, err = InQueryRebind(v.bindVar, v.query, queryArgs...)
-
-		if err != nil {
+		queryArgs = InsertAt(queryArgs, value, v.placeHolderIdx)
+		if q, queryArgs, err = InQueryRebind(v.bindVar, v.query, queryArgs...); err != nil {
 			return validation.NewInternalError(err)
 		}
 
-		row := v.querier.QueryRow(q, queryArgs...)
+		count := 0
 
-		if err = row.Scan(&filler); err != nil {
-			if err == sql.ErrNoRows {
-				if wantExists {
-					return v.err
-				}
-			} else {
-				if v.recoverCacheConf.RecoverDB == nil {
-					return validation.NewInternalError(err)
-				}
+		if rows, err = v.querier.Query(q, queryArgs...); err != nil {
+			if v.recoverDB == nil {
+				return validation.NewInternalError(err)
+			}
+			if db, err := v.recoverDB(err); err != nil {
+				v.entityRecover.SetEntity(db)
 
-				if err = v.recoverCacheConf.RecoverDB(err); err != nil {
+				if rows, err = v.querier.Query(q, queryArgs...); err != nil {
 					return validation.NewInternalError(err)
 				}
 			}
+		}
 
-			// if wantExists {
-			// 	if err == sql.ErrNoRows {
-			// 		return v.err
-			// 	}
+		for rows.Next() {
+			count++
+		}
 
-			// 	return validation.NewInternalError(err)
-			// }
-
-			// if err != sql.ErrNoRows {
-			// 	return validation.NewInternalError(err)
-			// }
+		if count == 0 {
+			if wantExists {
+				return v.err
+			}
+		} else {
+			if !wantExists {
+				return v.err
+			}
 		}
 
 		return nil
 	}
 
-	if v.recoverCacheConf.Cache != nil {
-		_, err = v.recoverCacheConf.Cache.Get(v.recoverCacheConf.Key)
+	if v.cache != nil && v.cacheValidateKey != nil {
+		cacheArgs := make([]interface{}, 0)
+
+		if v.cacheValidateKey.ValueIdx > -1 {
+			cacheArgs = InsertAt(v.cacheValidateKey.Args, value, v.cacheValidateKey.ValueIdx)
+		}
+
+		key := fmt.Sprintf(v.cacheValidateKey.Key, cacheArgs...)
+		_, err = v.cache.Get(key)
 
 		if err != nil {
 			if err != ErrCacheNil {
@@ -906,7 +989,7 @@ func checkIfExists(v validator, value interface{}, wantExists bool) error {
 					return err
 				}
 			} else {
-				if v.recoverCacheConf.IgnoreCacheNil {
+				if v.cacheValidateKey.IgnoreCacheNil {
 					if err = dbCall(); err != nil {
 						return err
 					}
@@ -916,6 +999,10 @@ func checkIfExists(v validator, value interface{}, wantExists bool) error {
 			if !wantExists {
 				return v.err
 			}
+		}
+	} else {
+		if err = dbCall(); err != nil {
+			return err
 		}
 	}
 
