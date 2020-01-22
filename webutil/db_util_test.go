@@ -221,7 +221,7 @@ func dbRecoverSetup() (*DB, func(err error) (*DB, error), func() error, error) {
 	return db, func(err error) (*DB, error) {
 			if err != nil {
 				db, err = db.RecoverError()
-				return nil, errors.Wrap(err, "")
+				return db, errors.Wrap(err, "")
 			}
 
 			return db, nil
@@ -240,26 +240,6 @@ func dbRecoverSetup() (*DB, func(err error) (*DB, error), func() error, error) {
 			)
 			return cmd.Run()
 		}, nil
-}
-
-func TestHasDBErrorIntegrationTest(t *testing.T) {
-	api := testAPI{}
-	r := mux.NewRouter()
-	r.HandleFunc("/test", api.Index)
-
-	s := httptest.NewServer(r)
-	c := s.Client()
-
-	res, err := c.Get(s.URL + "/test")
-
-	if err != nil {
-		t.Errorf("%s\n", err.Error())
-	}
-
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("did not return status ok\n")
-		t.Errorf("status: %s\n", err.Error())
-	}
 }
 
 func TestHasDBErrorUnitTest(t *testing.T) {
@@ -309,6 +289,155 @@ func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 
 	if !HasNoRowsOrDBError(rr, sql.ErrNoRows, conf) {
 		t.Errorf("should have db error\n")
+	}
+}
+
+// func TestPopulateDatabaseTablesUnitTest(t *testing.T) {
+// 	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+// 	if err != nil {
+// 		t.Fatalf("fatal err: %s\n", err.Error())
+// 	}
+
+// 	rows := sqlmock.NewRows([]string{"tableName"}).
+// 		AddRow("phone").
+// 		AddRow("phone_status")
+// 	mockDB.ExpectQuery("select").WillReturnRows()
+// 	mockDB.ExpectBegin()
+// }
+
+func TestPopulateDatabaseTablesIntegrationTest(t *testing.T) {
+	var err error
+	var recoverFn func(err error) (*DB, error)
+	var db *DB
+	var removeFn func() error
+
+	if db, recoverFn, removeFn, err = dbRecoverSetup(); err != nil {
+		t.Fatalf("err: %s\n", errors.Cause(err).Error())
+	}
+
+	if err = removeFn(); err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	fooCreate :=
+		`
+	create table IF NOT EXISTS foo(
+		id serial primary key,
+		name text not null
+	);
+	`
+
+	if db, err = recoverFn(errors.New("foo")); err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	// barCreate :=
+	// 	`
+	// create table IF NOT EXISTS bar(
+	// 	id serial primary key,
+	// 	name text not null
+	// );
+	// `
+
+	// bazCreate :=
+	// 	`
+	// create table IF NOT EXISTS baz(
+	// 	id serial primary key,
+	// 	name text not null
+	// );
+	// `
+
+	// databaseTableCreate :=
+	// 	`
+	// CREATE TABLE IF NOT EXISTS database_table(
+	// 	id serial primary key,
+	// 	name text not null unique,
+	// 	display_name text not null unique,
+	// 	column_name text not null
+	// );
+	// `
+
+	// tableCreate :=
+	// 	`
+	// create table IF NOT EXISTS foo(
+	// 	id serial primary key,
+	// 	name text not null
+	// );
+
+	// create table IF NOT EXISTS bar(
+	// 	id serial primary key,
+	// 	name text not null
+	// );
+
+	// create table IF NOT EXISTS baz(
+	// 	id serial primary key,
+	// 	name text not null
+	// );
+
+	// CREATE TABLE IF NOT EXISTS database_table(
+	// 	id serial primary key,
+	// 	name text not null unique,
+	// 	display_name text not null unique,
+	// 	column_name text not null
+	// );
+	// `
+
+	if _, err = db.Exec(fooCreate); err != nil {
+		removeFn()
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	// if _, err = db.Exec(barCreate); err != nil {
+	// 	removeFn()
+	// 	t.Fatalf("err: %s\n", err.Error())
+	// }
+
+	// if _, err = db.Exec(bazCreate); err != nil {
+	// 	removeFn()
+	// 	t.Fatalf("err: %s\n", err.Error())
+	// }
+
+	// if _, err = db.Exec(databaseTableCreate); err != nil {
+	// 	removeFn()
+	// 	t.Fatalf("err: %s\n", err.Error())
+	// }
+
+	if err = PopulateDatabaseTables(
+		db,
+		Postgres,
+		map[string]string{
+			"foo": "name",
+		},
+		[]string{"baz"},
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	if err = removeFn(); err != nil {
+		t.Errorf("err: %s\n", err.Error())
+	}
+}
+
+func TestHasDBErrorIntegrationTest(t *testing.T) {
+	api := testAPI{}
+	r := mux.NewRouter()
+	r.HandleFunc("/test", api.Index)
+
+	s := httptest.NewServer(r)
+	c := s.Client()
+
+	res, err := c.Get(s.URL + "/test")
+
+	if err != nil {
+		t.Errorf("%s\n", err.Error())
+	}
+
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("did not return status ok\n")
+		t.Errorf("status: %s\n", err.Error())
 	}
 }
 

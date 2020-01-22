@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -69,6 +70,10 @@ var (
 	// ErrNoConnection is error returned when there is no
 	// connection to database available
 	ErrNoConnection = errors.New("connection could not be established")
+
+	// ErrInvalidDBType is error returned when trying to pass an invalid
+	// database type string to function
+	ErrInvalidDBType = errors.New("webutil: invalid database type")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -342,6 +347,220 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerErrorConf
 	}
 
 	return dbError(w, err, config)
+}
+
+func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[string]string, exclusionTables []string) error {
+	var err error
+	var bindVar int
+	var publicInclusionQuery, publicExclusionQuery string
+	var exclusions, args []interface{}
+	var query string
+
+	inclusions := make([]interface{}, 0, len(inclusionTables))
+	dbQuery := `select * from public.database_table where name = ?;`
+	dbTableInsertQuery :=
+		`
+	insert into database_table(name, display_name, column_name)
+	values (?, ?, ?);
+	`
+	dbTableDeleteQuery :=
+		`
+	delete from table database_table where name = ?;
+	`
+
+	switch dbType {
+	case Postgres:
+		bindVar = sqlx.DOLLAR
+		publicInclusionQuery =
+			`
+		select
+			tablename
+		from
+			pg_tables
+		where
+			schemaname = 'public'
+		and
+			tablename in (?);
+		`
+		publicExclusionQuery =
+			`
+		select
+			tablename
+		from
+			pg_tables
+		where
+			schemaname = 'public'
+		and
+			tablename not in (?);
+		`
+	case MySQL:
+		bindVar = sqlx.QUESTION
+	default:
+		return ErrInvalidDBType
+	}
+
+	for k := range inclusionTables {
+		inclusions = append(inclusions, k)
+	}
+
+	publicInclusionQuery, inclusions, err = InQueryRebind(bindVar, publicInclusionQuery, inclusions)
+
+	if err != nil {
+		return err
+	}
+
+	inclusionRower, err := db.Query(publicInclusionQuery, inclusions...)
+
+	if err != nil {
+		return err
+	}
+
+	publicExclusionQuery, exclusions, err = InQueryRebind(bindVar, publicExclusionQuery, inclusions)
+
+	if err != nil {
+		return err
+	}
+
+	exclusionRower, err := db.Query(publicExclusionQuery, exclusions...)
+
+	if err != nil {
+		return err
+	}
+
+	tx, err := db.Begin()
+
+	if err != nil {
+		return err
+	}
+
+	invalidInclusionTables := make([]string, 0)
+
+	for inclusionRower.Next() {
+		var tableName, filler string
+		err = inclusionRower.Scan(
+			&tableName,
+		)
+
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		query = dbQuery
+
+		if query, args, err = InQueryRebind(bindVar, query, tableName); err != nil {
+			return err
+		}
+
+		row := tx.QueryRow(query, args...)
+		err = row.Scan(&filler)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				if val, ok := inclusionTables[tableName]; ok {
+					displayName := strings.Title(strings.Replace(tableName, "_", " ", -1))
+					query = dbTableInsertQuery
+
+					if query, args, err = InQueryRebind(
+						bindVar,
+						query,
+						tableName,
+						displayName,
+						val,
+					); err != nil {
+						return err
+					}
+
+					if _, err = tx.Exec(query, args...); err != nil {
+						return err
+					}
+				} else {
+					invalidInclusionTables = append(invalidInclusionTables, tableName)
+				}
+			} else {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	if len(invalidInclusionTables) > 0 {
+		errStr := "Table(s): \n"
+
+		for _, v := range invalidInclusionTables {
+			errStr += "\t" + v + "\n"
+		}
+
+		errStr += "are not in inclusionTables\n"
+		tx.Rollback()
+		return errors.New(errStr)
+	}
+
+	invalidExclusionTables := make([]string, 0)
+
+	for exclusionRower.Next() {
+		var tableName, filler string
+
+		if err = exclusionRower.Scan(
+			&tableName,
+		); err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		query = dbQuery
+		row := tx.QueryRow(query, tableName)
+		err = row.Scan(&filler)
+
+		if err == nil {
+			query = dbTableDeleteQuery
+
+			if _, err = tx.Exec(dbTableDeleteQuery, tableName); err != nil {
+				tx.Rollback()
+				return err
+			}
+		} else {
+			if err == sql.ErrNoRows {
+				exists := false
+
+				for _, v := range exclusionTables {
+					if v == tableName {
+						exists = true
+					}
+				}
+
+				if !exists {
+					invalidExclusionTables = append(
+						invalidExclusionTables,
+						tableName,
+					)
+				}
+			} else {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	if len(invalidExclusionTables) > 0 {
+		errStr := "Table(s): \n"
+
+		for _, v := range invalidExclusionTables {
+			errStr += "\t" + v + "\n"
+		}
+
+		errStr += "are not in either inclusion or exclusion lists\n"
+		tx.Rollback()
+		return errors.New(errStr)
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // QueryCount is used for queries that consist of count in select statement
