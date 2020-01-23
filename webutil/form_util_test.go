@@ -365,7 +365,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
 			RecoverConfig: RecoverConfig{
-				RecoverDB: func(err error) (*DB, error) {
+				RecoverDB: func(err error) (*sqlx.DB, error) {
 					return nil, ErrServer
 				},
 			},
@@ -580,8 +580,8 @@ func TestValidateIDsRuleUnitTest(t *testing.T) {
 
 	mockDB.ExpectQuery("select").WillReturnError(queryErr)
 	mockDB.ExpectQuery("select").WillReturnError(queryErr)
-	idValidator.recoverDB = func(err error) (*DB, error) {
-		return &DB{DB: &sqlx.DB{DB: db}}, nil
+	idValidator.recoverDB = func(err error) (*sqlx.DB, error) {
+		return &sqlx.DB{DB: db}, nil
 	}
 
 	if err = idValidator.Validate(validateVal); err == nil {

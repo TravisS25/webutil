@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 
 	validation "github.com/go-ozzo/ozzo-validation"
@@ -801,7 +802,7 @@ func GetFormSelections(
 	args ...interface{},
 ) ([]FormSelection, error) {
 	var err error
-	var newDB *DB
+	var newDB *sqlx.DB
 
 	SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(ErrServer.Error()))
 

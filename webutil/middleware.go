@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
+	"github.com/jmoiron/sqlx"
 )
 
 //////////////////////////////////////////////////////////////////
@@ -167,7 +168,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 		var middlewareUser MiddlewareUser
 		var session *sessions.Session
 		var err error
-		var db *DB
+		var db *sqlx.DB
 
 		// Setting up default values from passed configs if none are set
 		SetHTTPResponseDefaults(
@@ -370,7 +371,7 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var groupMap map[string]bool
 			var err error
 			var groupBytes []byte
-			var db *DB
+			var db *sqlx.DB
 
 			// Setting up default values from passed configs if none are set
 			SetHTTPResponseDefaults(
@@ -512,7 +513,7 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var urlBytes []byte
 			var urls map[string]bool
 			var err error
-			var db *DB
+			var db *sqlx.DB
 
 			SetHTTPResponseDefaults(
 				&routing.config.ClientErrorResponse,

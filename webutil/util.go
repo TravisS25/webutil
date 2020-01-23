@@ -32,13 +32,6 @@ type RecoverConfig struct {
 	DBInterfaceRecover DBInterfaceRecover
 }
 
-// RecoverCacheConfig is config struct that combines RecoverConfig
-// and CacheConfig config structs
-// type RecoverCacheConfig struct {
-// 	RecoverConfig
-// 	CacheConfig
-// }
-
 // ServerErrorCacheConfig is config struct used to respond to server
 // error but also have ability to use cache
 type ServerErrorCacheConfig struct {

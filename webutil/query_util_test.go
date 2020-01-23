@@ -1358,7 +1358,7 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	conf.RecoverDB = func(err error) (*DB, error) {
+	conf.RecoverDB = func(err error) (*sqlx.DB, error) {
 		return nil, err
 	}
 
@@ -1371,8 +1371,8 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	conf.RecoverDB = func(err error) (*DB, error) {
-		return &DB{}, nil
+	conf.RecoverDB = func(err error) (*sqlx.DB, error) {
+		return &sqlx.DB{}, nil
 	}
 	conf.RetryDB = func(db DBInterface) error {
 		return err
@@ -1387,8 +1387,8 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	conf.RecoverDB = func(err error) (*DB, error) {
-		return &DB{}, nil
+	conf.RecoverDB = func(err error) (*sqlx.DB, error) {
+		return &sqlx.DB{}, nil
 	}
 	conf.RetryDB = func(db DBInterface) error {
 		return nil

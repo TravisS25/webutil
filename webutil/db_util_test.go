@@ -10,11 +10,13 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
@@ -22,13 +24,13 @@ var _ DBInterfaceRecover = (*testAPI)(nil)
 
 var (
 	dbMutex sync.Mutex
-	//db      *DB
+	//db      *sqlx.DB
 
 	errDB     = errors.New("db error")
-	recoverDB = func(err error) (*DB, error) {
-		return &DB{}, nil
+	recoverDB = func(err error) (*sqlx.DB, error) {
+		return &sqlx.DB{}, nil
 	}
-	failedRecoverDB = func(err error) (*DB, error) {
+	failedRecoverDB = func(err error) (*sqlx.DB, error) {
 		return nil, err
 	}
 )
@@ -58,9 +60,9 @@ func (f *testAPI) SetDBInterface(db DBInterface) {
 }
 
 func (f *testAPI) Index(w http.ResponseWriter, r *http.Request) {
-	var db *DB
+	var db *sqlx.DB
 	var err error
-	//var recoverFn func(err error) (*DB, error)
+	//var recoverFn func(err error) (*sqlx.DB, error)
 	var removeFn func() error
 
 	//initDB()
@@ -91,11 +93,11 @@ func (f *testAPI) Index(w http.ResponseWriter, r *http.Request) {
 
 	conf := ServerErrorConfig{
 		RecoverConfig: RecoverConfig{
-			RecoverDB: func(err error) (*DB, error) {
+			RecoverDB: func(err error) (*sqlx.DB, error) {
 				if err != nil {
 					dbMutex.Lock()
 					defer dbMutex.Unlock()
-					db, err = db.RecoverError()
+					db, err = NewDBWithList(testConf.DBResetConf.DBConnections, Postgres)
 					return db, err
 				}
 
@@ -117,8 +119,8 @@ func (f *testAPI) Index(w http.ResponseWriter, r *http.Request) {
 }
 
 // dbRecoverSetup sets up and returns new db with implemented RecoverDB function
-func dbRecoverSetup() (*DB, func(err error) (*DB, error), func() error, error) {
-	var db *DB
+func dbRecoverSetup() (*sqlx.DB, func(err error) (*sqlx.DB, error), func() error, error) {
+	var db *sqlx.DB
 	var err error
 	var chosenPort int
 	var dockerName string
@@ -218,9 +220,9 @@ func dbRecoverSetup() (*DB, func(err error) (*DB, error), func() error, error) {
 		return nil, nil, nil, errors.Wrap(err, "")
 	}
 
-	return db, func(err error) (*DB, error) {
+	return db, func(err error) (*sqlx.DB, error) {
 			if err != nil {
-				db, err = db.RecoverError()
+				db, err = NewDBWithList(dbSettings, Postgres)
 				return db, errors.Wrap(err, "")
 			}
 
@@ -292,24 +294,10 @@ func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 	}
 }
 
-// func TestPopulateDatabaseTablesUnitTest(t *testing.T) {
-// 	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
-
-// 	if err != nil {
-// 		t.Fatalf("fatal err: %s\n", err.Error())
-// 	}
-
-// 	rows := sqlmock.NewRows([]string{"tableName"}).
-// 		AddRow("phone").
-// 		AddRow("phone_status")
-// 	mockDB.ExpectQuery("select").WillReturnRows()
-// 	mockDB.ExpectBegin()
-// }
-
 func TestPopulateDatabaseTablesIntegrationTest(t *testing.T) {
 	var err error
-	var recoverFn func(err error) (*DB, error)
-	var db *DB
+	var recoverFn func(err error) (*sqlx.DB, error)
+	var db *sqlx.DB
 	var removeFn func() error
 
 	if db, recoverFn, removeFn, err = dbRecoverSetup(); err != nil {
@@ -320,88 +308,52 @@ func TestPopulateDatabaseTablesIntegrationTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	fooCreate :=
+	if db, err = recoverFn(errors.New("foo")); err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	tableCreate :=
 		`
 	create table IF NOT EXISTS foo(
 		id serial primary key,
 		name text not null
 	);
+
+	create table IF NOT EXISTS bar(
+		id serial primary key,
+		name text not null
+	);
+
+	create table IF NOT EXISTS baz(
+		id serial primary key,
+		name text not null
+	);
+
+	create table IF NOT EXISTS database_table(
+		id serial primary key,
+		name text not null unique,
+		display_name text not null unique,
+		column_name text not null
+	);
 	`
 
-	if db, err = recoverFn(errors.New("foo")); err != nil {
-		t.Fatalf("err: %s\n", err.Error())
-	}
-
-	// barCreate :=
-	// 	`
-	// create table IF NOT EXISTS bar(
-	// 	id serial primary key,
-	// 	name text not null
-	// );
-	// `
-
-	// bazCreate :=
-	// 	`
-	// create table IF NOT EXISTS baz(
-	// 	id serial primary key,
-	// 	name text not null
-	// );
-	// `
-
-	// databaseTableCreate :=
-	// 	`
-	// CREATE TABLE IF NOT EXISTS database_table(
-	// 	id serial primary key,
-	// 	name text not null unique,
-	// 	display_name text not null unique,
-	// 	column_name text not null
-	// );
-	// `
-
-	// tableCreate :=
-	// 	`
-	// create table IF NOT EXISTS foo(
-	// 	id serial primary key,
-	// 	name text not null
-	// );
-
-	// create table IF NOT EXISTS bar(
-	// 	id serial primary key,
-	// 	name text not null
-	// );
-
-	// create table IF NOT EXISTS baz(
-	// 	id serial primary key,
-	// 	name text not null
-	// );
-
-	// CREATE TABLE IF NOT EXISTS database_table(
-	// 	id serial primary key,
-	// 	name text not null unique,
-	// 	display_name text not null unique,
-	// 	column_name text not null
-	// );
-	// `
-
-	if _, err = db.Exec(fooCreate); err != nil {
+	if _, err = db.Exec(tableCreate); err != nil {
 		removeFn()
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	// if _, err = db.Exec(barCreate); err != nil {
-	// 	removeFn()
-	// 	t.Fatalf("err: %s\n", err.Error())
-	// }
-
-	// if _, err = db.Exec(bazCreate); err != nil {
-	// 	removeFn()
-	// 	t.Fatalf("err: %s\n", err.Error())
-	// }
-
-	// if _, err = db.Exec(databaseTableCreate); err != nil {
-	// 	removeFn()
-	// 	t.Fatalf("err: %s\n", err.Error())
-	// }
+	if err = PopulateDatabaseTables(
+		db,
+		Postgres,
+		nil,
+		[]string{"baz", "database_table"},
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != "can not have empty inclusion map" {
+			t.Errorf("error should be '%s'", "can not have empty inclusion map")
+		}
+	}
 
 	if err = PopulateDatabaseTables(
 		db,
@@ -409,15 +361,13 @@ func TestPopulateDatabaseTablesIntegrationTest(t *testing.T) {
 		map[string]string{
 			"foo": "name",
 		},
-		[]string{"baz"},
+		[]string{"baz", "database_table"},
 	); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		t.Errorf("err: %s\n", err.Error())
-	}
-
-	if err = removeFn(); err != nil {
-		t.Errorf("err: %s\n", err.Error())
+		if strings.Contains(err.Error(), "bar") {
+			t.Errorf("error should contain bar table")
+		}
 	}
 }
 
@@ -443,8 +393,8 @@ func TestHasDBErrorIntegrationTest(t *testing.T) {
 
 func TestRecoveryErrorIntegrationTest(t *testing.T) {
 	var err error
-	var recoverFn func(err error) (*DB, error)
-	var db *DB
+	var recoverFn func(err error) (*sqlx.DB, error)
+	var db *sqlx.DB
 	var wg sync.WaitGroup
 	var removeFn func() error
 
@@ -548,7 +498,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 // 	var err error
 // 	//var recoverFn RecoverDB
 // 	var rows *sql.Rows
-// 	var db *DB
+// 	var db *sqlx.DB
 // 	var removeFn func() error
 
 // 	if db, _, removeFn, err = dbRecoverSetup(); err != nil {
@@ -621,7 +571,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 
 // func TestRecoverAndRetryIntegrationTest(t *testing.T) {
 // 	var err error
-// 	var db *DB
+// 	var db *sqlx.DB
 // 	var removeFn func() error
 
 // 	if db, _, removeFn, err = dbRecoverSetup(); err != nil {
@@ -645,7 +595,7 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 // 		t.Fatalf("should have error\n")
 // 	}
 
-// 	recoverDB := func(err error) (*DB, error) {
+// 	recoverDB := func(err error) (*sqlx.DB, error) {
 // 		if err != nil {
 // 			dbMutex.Lock()
 // 			defer dbMutex.Unlock()
