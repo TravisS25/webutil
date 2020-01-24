@@ -17,6 +17,11 @@ import (
 
 var _ DBInterface = (*sqlx.DB)(nil)
 
+type runQuery struct {
+	Query string
+	Args  []interface{}
+}
+
 //////////////////////////////////////////////////////////////////
 //------------------------ SSL MODES ---------------------------
 //////////////////////////////////////////////////////////////////
@@ -170,75 +175,6 @@ type Count struct {
 }
 
 //////////////////////////////////////////////////////////////////
-//-------------------------- STRUCTS ---------------------------
-//////////////////////////////////////////////////////////////////
-
-// DB extends sqlx.DB with some extra functions
-type DB struct {
-	*sqlx.DB
-	dbConfigList  []DatabaseSetting
-	currentConfig DatabaseSetting
-	dbType        string
-}
-
-// RecoverError will check if given err is not nil and if it is
-// it will loop through dbConfigList, if any, and try to establish
-// a new connection with a different database
-//
-// This function should be used if you have a distributed type database
-// i.e. CockroachDB and don't want any interruptions if a node goes down
-//
-// This function does not check what type of err is passed, just checks
-// if err is nil or not so it's up to user to use appropriately; however
-// we do a quick ping check just to make sure db is truly down
-// func (db *sqlx.DB) RecoverError() (*sqlx.DB, error) {
-// 	var err error
-
-// 	// if err != nil {
-// 	dbInfo := fmt.Sprintf(
-// 		DBConnStr,
-// 		db.dbType,
-// 		db.currentConfig.User,
-// 		db.currentConfig.Password,
-// 		db.currentConfig.Host,
-// 		db.currentConfig.Port,
-// 		db.currentConfig.DBName,
-// 		db.currentConfig.SSL,
-// 		db.currentConfig.SSLMode,
-// 		db.currentConfig.SSLRootCert,
-// 		db.currentConfig.SSLKey,
-// 		db.currentConfig.SSLCert,
-// 	)
-
-// 	_, err = db.Driver().Open(dbInfo)
-
-// 	if err != nil {
-// 		fmt.Printf("connection officially failed\n")
-// 		if len(db.dbConfigList) == 0 {
-// 			return nil, ErrEmptyConfigList
-// 		}
-
-// 		newDB, err := NewDBWithList(db.dbConfigList, db.dbType)
-
-// 		if err != nil {
-// 			return nil, ErrNoConnection
-// 		}
-
-// 		return newDB, err
-// 	}
-
-// 	return db, nil
-// 	// }
-// 	//return db, nil
-// }
-
-// // Commit is just a wrapper for sql.Tx Commit function
-// // to implement Tx interface
-// func (db *sqlx.DB) Commit(tx *sql.Tx) error {
-// 	return tx.Commit()
-// }
-
-//////////////////////////////////////////////////////////////////
 //------------------------ FUNCTIONS ---------------------------
 //////////////////////////////////////////////////////////////////
 
@@ -313,188 +249,21 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerErrorConf
 	return dbError(w, err, config)
 }
 
-// func PopulateDatabaseTables(db DBInterface, dbType string, recoverDB RecoverDB) error {
-// 	var err error
-// 	var bindVar int
-// 	var query string
-
-// 	switch dbType {
-// 	case Postgres:
-// 		bindVar = sqlx.DOLLAR
-// 		query =
-// 			`
-// 		select
-// 			tablename
-// 		from
-// 			pg_tables
-// 		where
-// 			schemaname = 'public'
-// 		`
-// 	case MySQL:
-// 		bindVar = sqlx.QUESTION
-// 	default:
-// 		return ErrInvalidDBType
-// 	}
-
-// 	rows, err := db.Query(query)
-
-// 	if db, err = recoverDB(err); err != nil {
-// 		return errors.Wrap(err, "")
-// 	}
-
-// 	tx, err := db.Begin()
-
-// 	if db, err = recoverDB(err); err != nil {
-// 		return errors.Wrap(err, "")
-// 	}
-
-// 	for rows.Next() {
-// 		var tableName, filler string
-// 		err = rows.Scan(&tableName)
-
-// 		if err != nil {
-// 			tx.Rollback()
-// 			return errors.Wrap(err, "")
-// 		}
-
-// 		dbTableInsertQuery :=
-// 			`
-// 		insert into database_table(name, display_name, column_name)
-// 		values (?, ?, ?);
-// 		`
-
-// 		if query, args, err = InQueryRebind(bindVar, query, tableName); err != nil {
-// 			return errors.Wrap(err, "")
-// 		}
-
-// 		row := tx.QueryRow(query, args...)
-// 		err = row.Scan(&filler)
-
-// 		if err != nil {
-// 			if err == sql.ErrNoRows {
-// 				if val, ok := inclusionTables[tableName]; ok {
-// 					displayName := strings.Title(strings.Replace(tableName, "_", " ", -1))
-// 					query = dbTableInsertQuery
-
-// 					if query, args, err = InQueryRebind(
-// 						bindVar,
-// 						query,
-// 						tableName,
-// 						displayName,
-// 						val,
-// 					); err != nil {
-// 						return errors.Wrap(err, "")
-// 					}
-
-// 					if _, err = tx.Exec(query, args...); err != nil {
-// 						return errors.Wrap(err, "")
-// 					}
-// 				} else {
-// 					invalidInclusionTables = append(invalidInclusionTables, tableName)
-// 				}
-// 			} else {
-// 				tx.Rollback()
-// 				return errors.Wrap(err, "")
-// 			}
-// 		}
-// 	}
-
-// 	if len(invalidInclusionTables) > 0 {
-// 		errStr := "Table(s): \n"
-
-// 		for _, v := range invalidInclusionTables {
-// 			errStr += "\t" + v + "\n"
-// 		}
-
-// 		errStr += "are not in inclusionTables\n"
-// 		tx.Rollback()
-// 		return errors.Wrap(errors.New(errStr), "")
-// 	}
-
-// 	invalidExclusionTables := make([]string, 0)
-
-// 	for exclusionRower.Next() {
-// 		var tableName, filler string
-
-// 		if err = exclusionRower.Scan(
-// 			&tableName,
-// 		); err != nil {
-// 			tx.Rollback()
-// 			return errors.Wrap(err, "")
-// 		}
-
-// 		query = dbQuery
-
-// 		if query, args, err = InQueryRebind(bindVar, query, tableName); err != nil {
-// 			return err
-// 		}
-
-// 		row := tx.QueryRow(query, args...)
-// 		err = row.Scan(&filler)
-
-// 		if err == nil {
-// 			query = dbTableDeleteQuery
-
-// 			if _, err = tx.Exec(dbTableDeleteQuery, tableName); err != nil {
-// 				tx.Rollback()
-// 				return err
-// 			}
-// 		} else {
-// 			if err == sql.ErrNoRows {
-// 				exists := false
-
-// 				for _, v := range exclusionTables {
-// 					if v == tableName {
-// 						exists = true
-// 					}
-// 				}
-
-// 				if !exists {
-// 					invalidExclusionTables = append(
-// 						invalidExclusionTables,
-// 						tableName,
-// 					)
-// 				}
-// 			} else {
-// 				tx.Rollback()
-// 				return errors.Wrap(err, "")
-// 			}
-// 		}
-// 	}
-
-// 	if len(invalidExclusionTables) > 0 {
-// 		errStr := "Table(s): \n"
-
-// 		for _, v := range invalidExclusionTables {
-// 			errStr += "\t" + v + "\n"
-// 		}
-
-// 		errStr += "are not in either inclusion or exclusion lists\n"
-// 		tx.Rollback()
-// 		return errors.Wrap(errors.New(errStr), "")
-// 	}
-
-// 	err = tx.Commit()
-
-// 	if err != nil {
-// 		return errors.Wrap(err, "")
-// 	}
-
-// 	return nil
-// }
-
-func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[string]string, exclusionTables []string) error {
+// PopulateDatabaseTables populates "database_table" in a database which
+// should reference the tables in the database
+//
+// The dbTables parameter should be a map where the key is name of database
+// table and the value is the string representation of the table
+func PopulateDatabaseTables(db DBInterface, dbType string, dbTables map[string]string) error {
 	var err error
 	var bindVar int
-	var publicInclusionQuery, publicExclusionQuery string
-	var exclusions, args []interface{}
+	var publicQuery, columnQuery string
+	var args []interface{}
 	var query string
 
-	if len(inclusionTables) == 0 {
+	if len(dbTables) == 0 {
 		return errors.New("can not have empty inclusion map")
 	}
-
-	inclusions := make([]interface{}, 0, len(inclusionTables))
 
 	dbQuery := `select name from public.database_table where name = ?;`
 	dbTableInsertQuery :=
@@ -502,26 +271,22 @@ func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[s
 	insert into database_table(name, display_name, column_name)
 	values (?, ?, ?);
 	`
-	dbTableDeleteQuery :=
-		`
-	delete from table database_table where name = ?;
-	`
 
 	switch dbType {
 	case Postgres:
 		bindVar = sqlx.DOLLAR
-		publicInclusionQuery =
+		columnQuery =
 			`
-		select
-			tablename
-		from
-			pg_tables
-		where
-			schemaname = 'public'
-		and
-			tablename in (?);
+		SELECT 
+			column_name
+		FROM 
+			information_schema.columns
+		WHERE 
+			table_schema = 'public'
+		AND 
+			table_name = ?
 		`
-		publicExclusionQuery =
+		publicQuery =
 			`
 		select
 			tablename
@@ -529,8 +294,6 @@ func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[s
 			pg_tables
 		where
 			schemaname = 'public'
-		and
-			tablename not in (?);
 		`
 	case MySQL:
 		bindVar = sqlx.QUESTION
@@ -538,41 +301,14 @@ func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[s
 		return ErrInvalidDBType
 	}
 
-	for k := range inclusionTables {
-		inclusions = append(inclusions, k)
-	}
-
-	publicInclusionQuery, inclusions, err = InQueryRebind(bindVar, publicInclusionQuery, inclusions)
-
-	if err != nil {
-		return errors.Wrap(err, "")
-	}
-
-	inclusionRower, err := db.Query(publicInclusionQuery, inclusions...)
-
-	if err != nil {
-		return errors.Wrap(err, "")
-	}
-
-	publicExclusionQuery, exclusions, err = InQueryRebind(bindVar, publicExclusionQuery, inclusions)
-
-	if err != nil {
-		return errors.Wrap(err, "")
-	}
-
-	exclusionRower, err := db.Query(publicExclusionQuery, exclusions...)
-
-	if err != nil {
-		return errors.Wrap(err, "")
-	}
-
-	tx, err := db.Begin()
+	inclusionRower, err := db.Query(publicQuery)
 
 	if err != nil {
 		return errors.Wrap(err, "")
 	}
 
 	invalidInclusionTables := make([]string, 0)
+	runQueries := make([]runQuery, 0)
 
 	for inclusionRower.Next() {
 		var tableName, filler string
@@ -581,7 +317,7 @@ func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[s
 		)
 
 		if err != nil {
-			tx.Rollback()
+			//tx.Rollback()
 			return errors.Wrap(err, "")
 		}
 
@@ -591,12 +327,42 @@ func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[s
 			return errors.Wrap(err, "")
 		}
 
-		row := tx.QueryRow(query, args...)
+		row := db.QueryRow(query, args...)
 		err = row.Scan(&filler)
 
 		if err != nil {
 			if err == sql.ErrNoRows {
-				if val, ok := inclusionTables[tableName]; ok {
+				if val, ok := dbTables[tableName]; ok {
+					var columnName string
+					query := columnQuery
+
+					if query, args, err = InQueryRebind(bindVar, query, tableName); err != nil {
+						return errors.Wrap(err, "")
+					}
+
+					rows, err := db.Query(query, args...)
+
+					if err != nil {
+						return errors.Wrap(err, "")
+					}
+
+					containsName := false
+
+					for rows.Next() {
+						if err = rows.Scan(&columnName); err != nil {
+							return errors.Wrap(err, "")
+						}
+
+						if val == columnName {
+							containsName = true
+						}
+					}
+
+					if !containsName {
+						errStr := fmt.Sprintf("table %s does not contain column '%s'", tableName, val)
+						return errors.New(errStr)
+					}
+
 					displayName := strings.Title(strings.Replace(tableName, "_", " ", -1))
 					query = dbTableInsertQuery
 
@@ -610,14 +376,16 @@ func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[s
 						return errors.Wrap(err, "")
 					}
 
-					if _, err = tx.Exec(query, args...); err != nil {
-						return errors.Wrap(err, "")
-					}
+					runQueries = append(runQueries, runQuery{Query: query, Args: args})
+
+					// if _, err = tx.Exec(query, args...); err != nil {
+					// 	return errors.Wrap(err, "")
+					// }
 				} else {
 					invalidInclusionTables = append(invalidInclusionTables, tableName)
 				}
 			} else {
-				tx.Rollback()
+				//tx.Rollback()
 				return errors.Wrap(err, "")
 			}
 		}
@@ -630,78 +398,26 @@ func PopulateDatabaseTables(db DBInterface, dbType string, inclusionTables map[s
 			errStr += "\t" + v + "\n"
 		}
 
-		errStr += "are not in inclusionTables\n"
-		tx.Rollback()
+		errStr += "are not in dbTables\n"
+		//tx.Rollback()
 		return errors.Wrap(errors.New(errStr), "")
 	}
 
-	invalidExclusionTables := make([]string, 0)
-
-	for exclusionRower.Next() {
-		var tableName, filler string
-
-		if err = exclusionRower.Scan(
-			&tableName,
-		); err != nil {
-			tx.Rollback()
-			return errors.Wrap(err, "")
-		}
-
-		query = dbQuery
-
-		if query, args, err = InQueryRebind(bindVar, query, tableName); err != nil {
-			return err
-		}
-
-		row := tx.QueryRow(query, args...)
-		err = row.Scan(&filler)
-
-		if err == nil {
-			query = dbTableDeleteQuery
-
-			if _, err = tx.Exec(dbTableDeleteQuery, tableName); err != nil {
-				tx.Rollback()
-				return err
-			}
-		} else {
-			if err == sql.ErrNoRows {
-				exists := false
-
-				for _, v := range exclusionTables {
-					if v == tableName {
-						exists = true
-					}
-				}
-
-				if !exists {
-					invalidExclusionTables = append(
-						invalidExclusionTables,
-						tableName,
-					)
-				}
-			} else {
-				tx.Rollback()
-				return errors.Wrap(err, "")
-			}
-		}
-	}
-
-	if len(invalidExclusionTables) > 0 {
-		errStr := "Table(s): \n"
-
-		for _, v := range invalidExclusionTables {
-			errStr += "\t" + v + "\n"
-		}
-
-		errStr += "are not in either inclusion or exclusion lists\n"
-		tx.Rollback()
-		return errors.Wrap(errors.New(errStr), "")
-	}
-
-	err = tx.Commit()
+	tx, err := db.Begin()
 
 	if err != nil {
-		return errors.Wrap(err, "")
+		return err
+	}
+
+	for _, v := range runQueries {
+		if _, err = tx.Exec(v.Query, v.Args...); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
 	}
 
 	return nil

@@ -36,20 +36,6 @@ func (_m *DBInterface) Begin() (*sql.Tx, error) {
 	return r0, r1
 }
 
-// Commit provides a mock function with given fields: tx
-func (_m *DBInterface) Commit(tx *sql.Tx) error {
-	ret := _m.Called(tx)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*sql.Tx) error); ok {
-		r0 = rf(tx)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 // Exec provides a mock function with given fields: _a0, _a1
 func (_m *DBInterface) Exec(_a0 string, _a1 ...interface{}) (sql.Result, error) {
 	var _ca []interface{}

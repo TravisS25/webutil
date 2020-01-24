@@ -79,30 +79,6 @@ func SetToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(TokenHeader, csrf.Token(r))
 }
 
-// // ServerError takes given err along with customMessage and writes back to client
-// // then logs the error given the logFile
-// func ServerError(w http.ResponseWriter, err error, customMessage string) {
-// 	w.WriteHeader(http.StatusInternalServerError)
-
-// 	if customMessage != "" {
-// 		w.Write([]byte(customMessage))
-// 	} else {
-// 		w.Write([]byte(ErrServer.Error()))
-// 	}
-// }
-
-// // HasServerError is wrapper for ServerError that returns if error passed
-// // is nil or not.  Point of function is simply to reduce code lines by
-// // a caller function
-// func HasServerError(w http.ResponseWriter, err error, customMessage string) bool {
-// 	if err != nil {
-// 		ServerError(w, err, customMessage)
-// 		return true
-// 	}
-
-// 	return false
-// }
-
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
 func SendPayload(w http.ResponseWriter, payload interface{}, errResp HTTPResponseConfig) error {
@@ -137,27 +113,13 @@ func GetMiddlewareUser(r *http.Request) *MiddlewareUser {
 	return r.Context().Value(MiddlewareUserCtxKey).(*MiddlewareUser)
 }
 
-// // HasBodyError checks if the "Body" field of the request parameter is nil or not
-// // If nil, we write to client with error message, 406 status and return true
-// // Else return false
-// func HasBodyError(w http.ResponseWriter, r *http.Request, bodyRespConfig HTTPResponseConfig) bool {
-// 	SetHTTPResponseDefaults(&bodyRespConfig, http.StatusNotAcceptable, []byte(ErrBodyRequired.Error()))
-
-// 	if r.Body == nil || r.Body == http.NoBody {
-// 		w.WriteHeader(*bodyRespConfig.HTTPStatus)
-// 		w.Write(bodyRespConfig.HTTPResponse)
-// 		return true
-// 	}
-
-// 	return false
-// }
-
 // LogoutUser deletes user session based on session object passed along with userSession parameter
 // If userSession is empty string, then string "user" will be used to delete from session object
 func LogoutUser(w http.ResponseWriter, r *http.Request, sessionStore sessions.Store, userSession string) error {
+	var err error
+
 	if r.Context().Value(UserCtxKey) != nil {
 		var session *sessions.Session
-		var err error
 
 		if userSession == "" {
 			session, err = sessionStore.Get(r, "user")
@@ -172,10 +134,10 @@ func LogoutUser(w http.ResponseWriter, r *http.Request, sessionStore sessions.St
 		session.Options = &sessions.Options{
 			MaxAge: -1,
 		}
-		session.Save(r, w)
+		err = session.Save(r, w)
 	}
 
-	return nil
+	return err
 }
 
 // GetUserGroups is wrapper for to returning group map from context of request
@@ -205,63 +167,6 @@ func HasGroup(r *http.Request, searchGroups ...string) bool {
 
 	return false
 }
-
-// PanicHandlerFunc is wrapper util function for using
-// against negroni#Recovery#PanicHandlerFunc function
-//
-// This function gives functionality of emailing a panic
-// error message to desired parties along with slight
-// formatting abilities of the sent message
-//
-// emailConfig:
-//		Config struct for emailing error message.  If email
-//		can't be sent, function will panic with error message
-// subSearchStrings:
-// 		Substring list of a library(s) path you wish to search for
-// 		which will be taken from full stack trace and narrowed down
-// 		to only display that library(s) in the message.  This is just
-//		to help reduce the clutter of a stacktrace that you don't
-//		care about
-// func PanicHandlerFunc(to []string, from, subject string, subSearchStrings []string, mail SendMessage) func(*negroni.PanicInformation) {
-// 	return func(info *negroni.PanicInformation) {
-// 		var stack string
-// 		ss := strings.Fields(info.StackAsString())
-
-// 		if subSearchStrings == nil {
-// 			for _, v := range ss {
-// 				stack += v + "<br />"
-// 			}
-// 		} else {
-// 			if len(subSearchStrings) == 0 {
-// 				for _, v := range ss {
-// 					stack += v + "<br />"
-// 				}
-// 			} else {
-// 				for _, v := range ss {
-// 					for _, t := range subSearchStrings {
-// 						if strings.Contains(v, t) {
-// 							stack += v + "<br />"
-// 						}
-// 					}
-// 				}
-// 			}
-// 		}
-
-// 		html := info.RequestDescription() + "<br /><br />" + stack
-// 		err := SendEmail(
-// 			to,
-// 			from,
-// 			subject,
-// 			nil,
-// 			[]byte(html),
-// 			mail,
-// 		)
-
-// 		if err != nil {
-// 			panic("sending mail error: " + err.Error())
-// 		}
-// 	}
-// }
 
 // DecodeCookie takes in a cookie name which value should be encoded and then takes the
 // authKey and encryptKey variables passed to decode the value of the cookie
@@ -306,11 +211,3 @@ func SetSecureCookie(w http.ResponseWriter, session *sessions.Session, keyPairs 
 	http.SetCookie(w, sessions.NewCookie(session.Name(), encoded, session.Options))
 	return nil
 }
-
-// func WriteError(w http.ResponseWriter, res HTTPResponseConfig) {
-// 	http.Error(
-// 		w,
-// 		string(res.HTTPResponse),
-// 		*res.HTTPStatus,
-// 	)
-// }

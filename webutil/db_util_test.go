@@ -346,7 +346,6 @@ func TestPopulateDatabaseTablesIntegrationTest(t *testing.T) {
 		db,
 		Postgres,
 		nil,
-		[]string{"baz", "database_table"},
 	); err == nil {
 		t.Errorf("should have error\n")
 	} else {
@@ -360,13 +359,29 @@ func TestPopulateDatabaseTablesIntegrationTest(t *testing.T) {
 		Postgres,
 		map[string]string{
 			"foo": "name",
+			"baz": "name",
 		},
-		[]string{"baz", "database_table"},
 	); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if strings.Contains(err.Error(), "bar") {
+		if strings.Contains(err.Error(), "baz") {
 			t.Errorf("error should contain bar table")
+		}
+	}
+
+	if err = PopulateDatabaseTables(
+		db,
+		Postgres,
+		map[string]string{
+			"foo": "name",
+			"baz": "nam",
+		},
+	); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != "table baz does not contain column 'nam'" {
+			t.Errorf("error should contain baz column being wrong\n")
+			t.Errorf("err: %s\n", err.Error())
 		}
 	}
 }
