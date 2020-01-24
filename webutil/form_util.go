@@ -118,12 +118,6 @@ var (
 // mux is quite complex without spinning up an entire server
 type PathRegex func(r *http.Request) (string, error)
 
-// type RecoverEntity func(error, Entityer) error
-
-// // type FormDBRecover func(*FormValidation) error
-
-// // type validatorDBRecover func(*validator) error
-
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
 //////////////////////////////////////////////////////////////////
@@ -165,7 +159,7 @@ type CacheValidateKey struct {
 //----------------------- INTERFACES --------------------------
 //////////////////////////////////////////////////////////////////
 
-// Requestvalidator should implement validating fields sent from
+// RequestValidator should implement validating fields sent from
 // request and return form or error if one occurs
 type RequestValidator interface {
 	Validate(req *http.Request, instance interface{}) (interface{}, error)
@@ -341,6 +335,7 @@ func (f *FormValidation) ValidateIDs(
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
 	cacheValidateKey *CacheValidateKey,
+	recoverDB RecoverDB,
 	instanceValue interface{},
 	placeHolderIdx,
 	bindVar int,
@@ -353,6 +348,7 @@ func (f *FormValidation) ValidateUniqueness(
 			querier:          f.entity,
 			cache:            f.config.Cache,
 			entityRecover:    f,
+			recoverDB:        recoverDB,
 			cacheValidateKey: cacheValidateKey,
 			placeHolderIdx:   placeHolderIdx,
 			bindVar:          bindVar,
@@ -367,6 +363,7 @@ func (f *FormValidation) ValidateUniqueness(
 // within database or cache if set
 func (f *FormValidation) ValidateExists(
 	cacheValidateKey *CacheValidateKey,
+	recoverDB RecoverDB,
 	placeHolderIdx,
 	bindVar int,
 	query string,
@@ -377,6 +374,7 @@ func (f *FormValidation) ValidateExists(
 			querier:          f.entity,
 			cache:            f.config.Cache,
 			entityRecover:    f,
+			recoverDB:        recoverDB,
 			cacheValidateKey: cacheValidateKey,
 			placeHolderIdx:   placeHolderIdx,
 			bindVar:          bindVar,
@@ -666,9 +664,6 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		for rows.Next() {
 			counter++
 		}
-
-		fmt.Printf("expected len: %d\n", expectedLen)
-		fmt.Printf("counter: %d\n", counter)
 
 		if expectedLen != counter {
 			return v.err
