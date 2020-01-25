@@ -81,7 +81,7 @@ func (f *testAPI) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	retry := func(innerDB DBInterface) error {
-		_, err = innerDB.Query(testConf.DBResetConf.ValidateQuery)
+		_, err = innerDB.Queryx(testConf.DBResetConf.ValidateQuery)
 		return err
 	}
 
@@ -112,7 +112,7 @@ func (f *testAPI) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err = f.DB.Query(testConf.DBResetConf.ValidateQuery); err != nil {
+	if _, err = f.DB.Queryx(testConf.DBResetConf.ValidateQuery); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("didn't recovery right"))
 	}

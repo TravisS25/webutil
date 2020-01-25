@@ -598,7 +598,7 @@ func GetQueriedAndCountResults(
 	db Querier,
 	paramConf ParamConfig,
 	queryConf QueryConfig,
-) (*sql.Rows, int, error) {
+) (*sqlx.Rows, int, error) {
 	rower, err := GetQueriedResults(
 		query,
 		fields,
@@ -653,7 +653,7 @@ func GetCountResults(
 		return 0, errors.Wrap(err, "")
 	}
 
-	rower, err := db.Query(*countQuery, results...)
+	rower, err := db.Queryx(*countQuery, results...)
 
 	if err != nil {
 		return 0, err
@@ -717,7 +717,7 @@ func GetQueriedResults(
 	db Querier,
 	paramConf ParamConfig,
 	queryConf QueryConfig,
-) (*sql.Rows, error) {
+) (*sqlx.Rows, error) {
 	values, err := GetPreQueryResults(
 		query,
 		fields,
@@ -730,7 +730,7 @@ func GetQueriedResults(
 		return nil, errors.Wrap(err, "")
 	}
 
-	return db.Query(*query, values...)
+	return db.Queryx(*query, values...)
 }
 
 ////////////////////////////////////////////////////////////

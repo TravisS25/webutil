@@ -192,7 +192,7 @@ func (r *ClientSession) Ping() error {
 // the results to cache
 func SetCacheFromDB(cacheSetup CacheSetup, db Querier) error {
 	for _, v := range cacheSetup.CacheSets {
-		rows, err := db.Query(v.Query, v.QueryArgs...)
+		rows, err := db.Queryx(v.Query, v.QueryArgs...)
 
 		if err != nil {
 			return err

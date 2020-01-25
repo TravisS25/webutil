@@ -4,7 +4,6 @@ package webutil
 //go:generate mockgen -source=form_util.go -destination=form_util_mock_test.go -package=webutil
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -635,16 +634,16 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 	}
 
 	queryFunc := func() error {
-		var rows *sql.Rows
+		var rows *sqlx.Rows
 		isValidQuery := false
 
-		if rows, err = v.querier.Query(q, arguments...); err != nil {
+		if rows, err = v.querier.Queryx(q, arguments...); err != nil {
 			if v.recoverDB != nil {
 				if db, err := v.recoverDB(err); err == nil {
 					v.querier = db
 					v.entityRecover.SetEntity(db)
 
-					if rows, err = v.querier.Query(q, arguments...); err != nil {
+					if rows, err = v.querier.Queryx(q, arguments...); err != nil {
 						return validation.NewInternalError(err)
 					}
 
@@ -807,7 +806,7 @@ func GetFormSelections(
 			return nil, err
 		}
 
-		rower, err := db.Query(query, args...)
+		rower, err := db.Queryx(query, args...)
 
 		if err != nil {
 			canRecover := false
@@ -815,7 +814,7 @@ func GetFormSelections(
 			if config.RecoverDB != nil {
 				if newDB, err = config.RecoverDB(err); err == nil {
 					config.DBInterfaceRecover.SetDBInterface(newDB)
-					rower, err = db.Query(query, args...)
+					rower, err = db.Queryx(query, args...)
 
 					if err == nil {
 						canRecover = true
@@ -925,7 +924,7 @@ func checkIfExists(v *validator, value interface{}, wantExists bool) error {
 	}
 
 	dbCall := func() error {
-		var rows *sql.Rows
+		var rows *sqlx.Rows
 		queryArgs := make([]interface{}, 0, len(v.args)+1)
 
 		if len(v.args) != 0 {
@@ -939,14 +938,14 @@ func checkIfExists(v *validator, value interface{}, wantExists bool) error {
 
 		count := 0
 
-		if rows, err = v.querier.Query(q, queryArgs...); err != nil {
+		if rows, err = v.querier.Queryx(q, queryArgs...); err != nil {
 			if v.recoverDB == nil {
 				return validation.NewInternalError(err)
 			}
 			if db, err := v.recoverDB(err); err != nil {
 				v.entityRecover.SetEntity(db)
 
-				if rows, err = v.querier.Query(q, queryArgs...); err != nil {
+				if rows, err = v.querier.Queryx(q, queryArgs...); err != nil {
 					return validation.NewInternalError(err)
 				}
 			}

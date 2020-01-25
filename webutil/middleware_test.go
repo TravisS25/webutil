@@ -227,12 +227,16 @@ func TestAuthHandlerUnitTest(t *testing.T) {
 		},
 	}
 
+	newDB := &sqlx.DB{
+		DB: db,
+	}
+
 	mockStore := &Store{}
 	session := sessions.NewSession(mockStore, config.SessionConfig.SessionName)
 	session.IsNew = true
 
 	middlewareState := &middlewareState{}
-	authHandler := NewAuthHandler(db, middlewareState.queryForUser, config)
+	authHandler := NewAuthHandler(newDB, middlewareState.queryForUser, config)
 
 	mockHandler := &Handler{}
 	mockHandler.On("ServeHTTP", testifymock.Anything, testifymock.Anything)
@@ -511,6 +515,10 @@ func TestGroupHandlerUnitTest(t *testing.T) {
 		t.Fatalf("fatal err: %s\n", err.Error())
 	}
 
+	newDB := &sqlx.DB{
+		DB: db,
+	}
+
 	state := &middlewareState{}
 	config := ServerErrorCacheConfig{
 		ServerErrorConfig: ServerErrorConfig{
@@ -525,7 +533,7 @@ func TestGroupHandlerUnitTest(t *testing.T) {
 	mockHandler.On("ServeHTTP", testifymock.Anything, testifymock.Anything)
 	defer mockHandler.AssertExpectations(t)
 
-	groupHandler := NewGroupHandler(db, state.queryForGroups, config)
+	groupHandler := NewGroupHandler(newDB, state.queryForGroups, config)
 	h := groupHandler.MiddlewareFunc(mockHandler)
 
 	// Testing default settings without cache and recoverdb
@@ -687,13 +695,16 @@ func TestRoutingHandlerUnitTest(t *testing.T) {
 		},
 	}
 
+	newDB := &sqlx.DB{
+		DB: db,
+	}
 	mockHandler := &Handler{}
 	defer mockHandler.AssertExpectations(t)
 	mockHandler.On("ServeHTTP", testifymock.Anything, testifymock.Anything)
 
 	state.pRegex = generalErr
 	routingHandler := NewRoutingHandler(
-		db,
+		newDB,
 		state.queryForGroups,
 		state.pathRegex,
 		map[string]bool{

@@ -403,11 +403,15 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 		t.Fatalf("fatal err: %s\n", err.Error())
 	}
 
+	newDB := &sqlx.DB{
+		DB: db,
+	}
+
 	if _, err = GetQueriedResults(
 		&query,
 		invalidSortFields,
 		mockRequest11,
-		db,
+		newDB,
 		ParamConfig{},
 		QueryConfig{},
 	); err == nil {
@@ -439,7 +443,7 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 		&query,
 		filterFields,
 		mockRequest12,
-		db,
+		newDB,
 		ParamConfig{},
 		QueryConfig{},
 	); err != nil {
@@ -458,7 +462,7 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 		&query,
 		filterFields,
 		mockRequest13,
-		db,
+		newDB,
 		ParamConfig{},
 		QueryConfig{},
 	); err != nil {

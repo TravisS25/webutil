@@ -5,6 +5,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	gomock "github.com/golang/mock/gomock"
+	"github.com/jmoiron/sqlx"
 	testifymock "github.com/stretchr/testify/mock"
 	redistore "gopkg.in/boj/redistore.v1"
 )
@@ -213,7 +214,11 @@ func TestSetCachingUnitTest(t *testing.T) {
 		},
 	}
 
-	if err = SetCacheFromDB(setup, db); err != nil {
+	newDB := &sqlx.DB{
+		DB: db,
+	}
+
+	if err = SetCacheFromDB(setup, newDB); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
@@ -224,7 +229,7 @@ func TestSetCachingUnitTest(t *testing.T) {
 	mockDB.ExpectQuery("").WillReturnRows(rows)
 	setup.CacheSets[0].IsSingleKey = false
 
-	if err = SetCacheFromDB(setup, db); err != nil {
+	if err = SetCacheFromDB(setup, newDB); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}

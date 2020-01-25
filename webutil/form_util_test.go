@@ -148,10 +148,12 @@ func TestCheckIfExistsUnitTest(t *testing.T) {
 	defer mockCacheStore1.AssertExpectations(t)
 	mockCacheStore1.On("Get", testifymock.Anything).Return([]byte("foo"), nil)
 
-	//mockCacheStore.EXPECT().Get(gomock.Any()).Return([]byte("foo"), nil)
+	newDB := &sqlx.DB{
+		DB: db,
+	}
 
 	rule := &validator{
-		querier: db,
+		querier: newDB,
 		cache:   mockCacheStore1,
 		cacheValidateKey: &CacheValidateKey{
 			IgnoreCacheNil: true,
@@ -379,10 +381,14 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 
 	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
 
+	newDB := &sqlx.DB{
+		DB: db,
+	}
+
 	if _, err = GetFormSelections(
 		rr,
 		config,
-		db,
+		newDB,
 		sqlx.DOLLAR,
 		"",
 	); err == nil {
@@ -405,7 +411,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	if _, err = GetFormSelections(
 		rr,
 		config,
-		db,
+		newDB,
 		sqlx.DOLLAR,
 		"",
 	); err == nil {
@@ -430,7 +436,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	if _, err = GetFormSelections(
 		rr,
 		config,
-		db,
+		newDB,
 		sqlx.DOLLAR,
 		"",
 	); err != nil {
@@ -449,7 +455,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	if _, err = GetFormSelections(
 		rr,
 		config,
-		db,
+		newDB,
 		sqlx.DOLLAR,
 		"",
 	); err != nil {
@@ -469,7 +475,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	if _, err = GetFormSelections(
 		rr,
 		config,
-		db,
+		newDB,
 		sqlx.DOLLAR,
 		"",
 	); err != nil {
@@ -488,7 +494,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	if _, err = GetFormSelections(
 		rr,
 		config,
-		db,
+		newDB,
 		sqlx.DOLLAR,
 		"",
 	); err == nil {
@@ -521,7 +527,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	if _, err = GetFormSelections(
 		rr,
 		config,
-		db,
+		newDB,
 		sqlx.DOLLAR,
 		"",
 	); err != nil {
@@ -547,9 +553,13 @@ func TestValidateIDsRuleUnitTest(t *testing.T) {
 
 	mockDB.ExpectQuery("select").WillReturnError(queryErr)
 
+	newDB := &sqlx.DB{
+		DB: db,
+	}
+
 	formValidator := &FormValidation{}
 	validator := &validator{
-		querier:        db,
+		querier:        newDB,
 		cache:          mockCache1,
 		bindVar:        sqlx.DOLLAR,
 		placeHolderIdx: -1,

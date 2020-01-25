@@ -92,8 +92,8 @@ type Executer interface {
 
 // Querier implementation is basic querying of a db
 type Querier interface {
-	QueryRow(query string, args ...interface{}) *sql.Row
-	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowx(query string, args ...interface{}) *sqlx.Row
+	Queryx(query string, args ...interface{}) (*sqlx.Rows, error)
 }
 
 // QuerierExec is for querying and executing against db
@@ -120,7 +120,7 @@ type EntityRecover interface {
 
 // TxBeginner is for ability to create database transaction
 type TxBeginner interface {
-	Begin() (tx *sql.Tx, err error)
+	Beginx() (tx *sqlx.Tx, err error)
 }
 
 // QuerierTx is used for basic querying but also
@@ -301,7 +301,7 @@ func PopulateDatabaseTables(db DBInterface, dbType string, dbTables map[string]s
 		return ErrInvalidDBType
 	}
 
-	inclusionRower, err := db.Query(publicQuery)
+	inclusionRower, err := db.Queryx(publicQuery)
 
 	if err != nil {
 		return errors.Wrap(err, "")
@@ -327,7 +327,7 @@ func PopulateDatabaseTables(db DBInterface, dbType string, dbTables map[string]s
 			return errors.Wrap(err, "")
 		}
 
-		row := db.QueryRow(query, args...)
+		row := db.QueryRowx(query, args...)
 		err = row.Scan(&filler)
 
 		if err != nil {
@@ -340,7 +340,7 @@ func PopulateDatabaseTables(db DBInterface, dbType string, dbTables map[string]s
 						return errors.Wrap(err, "")
 					}
 
-					rows, err := db.Query(query, args...)
+					rows, err := db.Queryx(query, args...)
 
 					if err != nil {
 						return errors.Wrap(err, "")
@@ -403,7 +403,7 @@ func PopulateDatabaseTables(db DBInterface, dbType string, dbTables map[string]s
 		return errors.Wrap(errors.New(errStr), "")
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.Beginx()
 
 	if err != nil {
 		return err
