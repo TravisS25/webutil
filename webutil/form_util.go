@@ -129,29 +129,39 @@ type FormValidationConfig struct {
 	PathRegex PathRegex
 }
 
-// CacheValidateKey is config struct used in form validators
-type CacheValidateKey struct {
+// CacheValidate is config struct used in form validators
+type CacheValidate struct {
 	// Key is key used in cache to retreive value
 	// Key can be string format such as "email-%s"
-	// in which case the Args property will be used
+	// in which case the KeyArgs property and/or current validated
+	// value (if property KeyIdx > 0) will be used
 	// to dynamically fill in to be used as key for cache
 	Key string
 
-	// Args is used against the Key property dynamically
-	// change the key for cache as the validator functions
+	// KeyArgs is used against the Key property dynamically
+	// to change the key for cache as the validator functions
 	// will use fmt.Sprint(key, args...) to format the key
-	Args []interface{}
+	KeyArgs []interface{}
 
-	// ValueIdx is used if current value being validated
+	// KeyIdx is used if current value being validated
 	// in a validator function should be used as apart of
 	// the key
 	//
-	// If it is, it will be added to given index of the Args property
-	// If ValueIdx is below 0, validated value won't be added key
-	ValueIdx int
+	// If it is, it will be added to given index of the KeyArgs property
+	// If KeyIdx is below 0, validated value won't be added to key
+	KeyIdx int
 
 	// IgnoreCacheNil will ignore cache nil error and still query db
 	IgnoreCacheNil bool
+
+	// ValueFieldName is the name of field that we are searching
+	// for to compare our Value property with that returned from cache
+	ValueFieldName string
+
+	// IgnoreValueFieldName is flag to indicate whether we ignore
+	// that the value in property ValueFieldName could not be found
+	// in unmarshaled map from cache and continue to query db
+	IgnoreValueFieldName bool
 }
 
 //////////////////////////////////////////////////////////////////
@@ -307,7 +317,7 @@ func (f *FormValidation) ValidateDate(
 // If the ids passed happen to be type formutil#Int64, it will extract the values so it
 // can be used against the query properly
 func (f *FormValidation) ValidateIDs(
-	cacheValidateKey *CacheValidateKey,
+	cacheValidate *CacheValidate,
 	recoverDB RecoverDB,
 	placeHolderIdx,
 	bindVar int,
@@ -316,16 +326,16 @@ func (f *FormValidation) ValidateIDs(
 ) *validateIDsRule {
 	return &validateIDsRule{
 		validator: &validator{
-			querier:          f.entity,
-			cache:            f.config.Cache,
-			entityRecover:    f,
-			recoverDB:        recoverDB,
-			cacheValidateKey: cacheValidateKey,
-			placeHolderIdx:   placeHolderIdx,
-			bindVar:          bindVar,
-			query:            query,
-			args:             args,
-			err:              errors.New(InvalidTxt),
+			querier:        f.entity,
+			cache:          f.config.Cache,
+			entityRecover:  f,
+			recoverDB:      recoverDB,
+			cacheValidate:  cacheValidate,
+			placeHolderIdx: placeHolderIdx,
+			bindVar:        bindVar,
+			query:          query,
+			args:           args,
+			err:            errors.New(InvalidTxt),
 		},
 	}
 }
@@ -333,7 +343,7 @@ func (f *FormValidation) ValidateIDs(
 // ValidateUniqueness determines whether passed field is unique
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
-	cacheValidateKey *CacheValidateKey,
+	cacheValidate *CacheValidate,
 	recoverDB RecoverDB,
 	instanceValue interface{},
 	placeHolderIdx,
@@ -344,16 +354,16 @@ func (f *FormValidation) ValidateUniqueness(
 	return &validateUniquenessRule{
 		instanceValue: instanceValue,
 		validator: &validator{
-			querier:          f.entity,
-			cache:            f.config.Cache,
-			entityRecover:    f,
-			recoverDB:        recoverDB,
-			cacheValidateKey: cacheValidateKey,
-			placeHolderIdx:   placeHolderIdx,
-			bindVar:          bindVar,
-			query:            query,
-			args:             args,
-			err:              errors.New(AlreadyExistsTxt),
+			querier:        f.entity,
+			cache:          f.config.Cache,
+			entityRecover:  f,
+			recoverDB:      recoverDB,
+			cacheValidate:  cacheValidate,
+			placeHolderIdx: placeHolderIdx,
+			bindVar:        bindVar,
+			query:          query,
+			args:           args,
+			err:            errors.New(AlreadyExistsTxt),
 		},
 	}
 }
@@ -361,7 +371,7 @@ func (f *FormValidation) ValidateUniqueness(
 // ValidateExists determines whether passed field exists
 // within database or cache if set
 func (f *FormValidation) ValidateExists(
-	cacheValidateKey *CacheValidateKey,
+	cacheValidate *CacheValidate,
 	recoverDB RecoverDB,
 	placeHolderIdx,
 	bindVar int,
@@ -370,16 +380,16 @@ func (f *FormValidation) ValidateExists(
 ) *validateExistsRule {
 	return &validateExistsRule{
 		validator: &validator{
-			querier:          f.entity,
-			cache:            f.config.Cache,
-			entityRecover:    f,
-			recoverDB:        recoverDB,
-			cacheValidateKey: cacheValidateKey,
-			placeHolderIdx:   placeHolderIdx,
-			bindVar:          bindVar,
-			query:            query,
-			args:             args,
-			err:              errors.New(DoesNotExistTxt),
+			querier:        f.entity,
+			cache:          f.config.Cache,
+			entityRecover:  f,
+			recoverDB:      recoverDB,
+			cacheValidate:  cacheValidate,
+			placeHolderIdx: placeHolderIdx,
+			bindVar:        bindVar,
+			query:          query,
+			args:           args,
+			err:            errors.New(DoesNotExistTxt),
 		},
 	}
 }
@@ -415,16 +425,16 @@ func (f *FormValidation) SetConfig(config FormValidationConfig) {
 }
 
 type validator struct {
-	entityRecover    EntityRecover
-	querier          Querier
-	cache            CacheStore
-	args             []interface{}
-	query            string
-	bindVar          int
-	placeHolderIdx   int
-	err              error
-	recoverDB        RecoverDB
-	cacheValidateKey *CacheValidateKey
+	entityRecover  EntityRecover
+	querier        Querier
+	cache          CacheStore
+	args           []interface{}
+	query          string
+	bindVar        int
+	placeHolderIdx int
+	err            error
+	recoverDB      RecoverDB
+	cacheValidate  *CacheValidate
 }
 
 type validateRequiredRule struct {
@@ -579,7 +589,7 @@ type validateIDsRule struct {
 
 func (v *validateIDsRule) Validate(value interface{}) error {
 	var err error
-	var ids []interface{}
+	var searchVals []interface{}
 	var expectedLen int
 	var singleVal interface{}
 
@@ -594,11 +604,12 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		isSlice = true
 		s := reflect.ValueOf(value)
 
-		for i := 0; i < s.Len(); i++ {
-			ids = append(ids, s.Index(i).Interface())
+		for k := 0; k < s.Len(); k++ {
+			t := s.Index(k).Interface()
+			searchVals = append(searchVals, applyTypeToInterface(t))
 		}
 
-		expectedLen = len(ids)
+		expectedLen = len(searchVals)
 	default:
 		expectedLen = 1
 		singleVal = value
@@ -606,7 +617,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 
 	// If type is slice and is empty, simply return nil as we will get an error
 	// when trying to query with empty slice
-	if isSlice && len(ids) == 0 {
+	if isSlice && len(searchVals) == 0 {
 		return nil
 	}
 
@@ -617,7 +628,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		args = append(args, v.args...)
 
 		if isSlice {
-			args = InsertAt(args, ids, v.placeHolderIdx)
+			args = InsertAt(args, searchVals, v.placeHolderIdx)
 		} else {
 			args = InsertAt(args, singleVal, v.placeHolderIdx)
 		}
@@ -671,7 +682,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		return nil
 	}
 
-	if v.cache != nil && v.cacheValidateKey != nil {
+	if v.cache != nil && v.cacheValidate != nil {
 		var singleID bool
 		var cacheBytes []byte
 
@@ -681,45 +692,96 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 
 		var cacheArgs []interface{}
 
-		if v.cacheValidateKey.ValueIdx > -1 {
-			cacheArgs = make([]interface{}, 0, len(v.cacheValidateKey.Args)+1)
-			cacheArgs = append(cacheArgs, v.cacheValidateKey.Args...)
-			cacheArgs = InsertAt(v.cacheValidateKey.Args, value, v.cacheValidateKey.ValueIdx)
+		if v.cacheValidate.KeyIdx > -1 {
+			cacheArgs = make([]interface{}, 0, len(v.cacheValidate.KeyArgs)+1)
+			cacheArgs = append(cacheArgs, v.cacheValidate.KeyArgs...)
+			cacheArgs = InsertAt(v.cacheValidate.KeyArgs, value, v.cacheValidate.KeyIdx)
 		} else {
 			cacheArgs = make([]interface{}, 0, len(cacheArgs))
-			cacheArgs = append(cacheArgs, v.cacheValidateKey.Args...)
+			cacheArgs = append(cacheArgs, v.cacheValidate.KeyArgs...)
 		}
 
-		key := fmt.Sprintf(v.cacheValidateKey.Key, cacheArgs...)
+		key := fmt.Sprintf(v.cacheValidate.Key, cacheArgs...)
 		cacheBytes, err = v.cache.Get(key)
 
 		if err != nil {
 			if err == ErrCacheNil {
-				if v.cacheValidateKey.IgnoreCacheNil {
+				if v.cacheValidate.IgnoreCacheNil {
 					err = queryFunc()
 				}
 			} else {
 				err = queryFunc()
 			}
 		} else {
-			if !singleID {
-				var cacheIDs []interface{}
-				if err = json.Unmarshal(cacheBytes, &cacheIDs); err != nil {
+			if singleID {
+				var cacheMap map[string]interface{}
+
+				if err = json.Unmarshal(cacheBytes, &cacheMap); err != nil {
 					return validation.NewInternalError(err)
 				}
 
+				if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
+					switch val.(type) {
+					case float64:
+						val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+					}
+
+					value = applyTypeToInterface(value)
+
+					if val != value {
+						return v.err
+					}
+				} else {
+					if v.cacheValidate.IgnoreValueFieldName {
+						err = queryFunc()
+					} else {
+						return v.err
+					}
+				}
+			} else {
+				var cacheSlice []map[string]interface{}
+				var valSlice []interface{}
+
 				count := 0
 
-				for _, v := range ids {
-					for _, t := range cacheIDs {
-						if v == t {
-							count++
+				if err = json.Unmarshal(cacheBytes, &cacheSlice); err != nil {
+					return validation.NewInternalError(err)
+				}
+
+				validField := true
+
+				for _, t := range cacheSlice {
+					if val, ok := t[v.cacheValidate.ValueFieldName]; ok {
+						switch val.(type) {
+						case float64:
+							str := strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+							valSlice = append(valSlice, str)
+						default:
+							valSlice = append(valSlice, val)
+						}
+					} else {
+						if v.cacheValidate.IgnoreValueFieldName {
+							err = queryFunc()
+							validField = false
+							break
+						} else {
+							return v.err
 						}
 					}
 				}
 
-				if count != len(ids) {
-					err = v.err
+				if validField {
+					for _, i := range searchVals {
+						for _, t := range valSlice {
+							if i == t {
+								count++
+							}
+						}
+					}
+
+					if count != len(searchVals) {
+						err = v.err
+					}
 				}
 			}
 		}
@@ -968,14 +1030,14 @@ func checkIfExists(v *validator, value interface{}, wantExists bool) error {
 		return nil
 	}
 
-	if v.cache != nil && v.cacheValidateKey != nil {
+	if v.cache != nil && v.cacheValidate != nil {
 		cacheArgs := make([]interface{}, 0)
 
-		if v.cacheValidateKey.ValueIdx > -1 {
-			cacheArgs = InsertAt(v.cacheValidateKey.Args, value, v.cacheValidateKey.ValueIdx)
+		if v.cacheValidate.KeyIdx > -1 {
+			cacheArgs = InsertAt(v.cacheValidate.KeyArgs, value, v.cacheValidate.KeyIdx)
 		}
 
-		key := fmt.Sprintf(v.cacheValidateKey.Key, cacheArgs...)
+		key := fmt.Sprintf(v.cacheValidate.Key, cacheArgs...)
 		_, err = v.cache.Get(key)
 
 		if err != nil {
@@ -984,7 +1046,7 @@ func checkIfExists(v *validator, value interface{}, wantExists bool) error {
 					return err
 				}
 			} else {
-				if v.cacheValidateKey.IgnoreCacheNil {
+				if v.cacheValidate.IgnoreCacheNil {
 					if err = dbCall(); err != nil {
 						return err
 					}
@@ -1036,4 +1098,28 @@ func getStringFromValue(value interface{}) (string, error) {
 	}
 
 	return dateValue, err
+}
+
+func applyTypeToInterface(typ interface{}) interface{} {
+	var t interface{}
+
+	switch typ.(type) {
+	case int:
+		t = strconv.Itoa(typ.(int))
+	case *int:
+		i := typ.(*int)
+		t = strconv.Itoa(*i)
+	case int64:
+		t = strconv.FormatInt(typ.(int64), IntBase)
+	case *int64:
+		i := typ.(*int64)
+		t = strconv.FormatInt(*i, IntBase)
+	case float64:
+		t = strconv.FormatFloat(typ.(float64), 'e', -1, IntBitSize)
+	case *float64:
+		i := typ.(*float64)
+		t = strconv.FormatFloat(*i, 'e', -1, IntBitSize)
+	}
+
+	return t
 }
