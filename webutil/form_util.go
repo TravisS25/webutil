@@ -158,10 +158,10 @@ type CacheValidate struct {
 	// for to compare our Value property with that returned from cache
 	ValueFieldName string
 
-	// IgnoreValueFieldName is flag to indicate whether we ignore
+	// IgnoreInvalidValueField is flag to indicate whether we ignore
 	// that the value in property ValueFieldName could not be found
 	// in unmarshaled map from cache and continue to query db
-	IgnoreValueFieldName bool
+	IgnoreInvalidValueField bool
 }
 
 //////////////////////////////////////////////////////////////////
@@ -713,29 +713,65 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 				err = queryFunc()
 			}
 		} else {
+			var cacheHolding interface{}
+
+			if err = json.Unmarshal(cacheBytes, &cacheHolding); err != nil {
+				return validation.NewInternalError(err)
+			}
+
 			if singleID {
-				var cacheMap map[string]interface{}
+				switch reflect.TypeOf(cacheHolding).Kind() {
+				case reflect.Slice:
+					cacheSlice := cacheHolding.([]interface{})
+					canContinue := false
 
-				if err = json.Unmarshal(cacheBytes, &cacheMap); err != nil {
-					return validation.NewInternalError(err)
-				}
+					for _, f := range cacheSlice {
+						cacheMap := f.(map[string]interface{})
 
-				if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
-					switch val.(type) {
-					case float64:
-						val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+						if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
+							switch val.(type) {
+							case float64:
+								val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+							}
+
+							value = applyTypeToInterface(value)
+
+							if val == value {
+								canContinue = true
+								break
+							}
+						} else {
+							if v.cacheValidate.IgnoreInvalidValueField {
+								err = queryFunc()
+								canContinue = true
+								break
+							}
+						}
 					}
 
-					value = applyTypeToInterface(value)
-
-					if val != value {
-						return v.err
+					if !canContinue {
+						err = v.err
 					}
-				} else {
-					if v.cacheValidate.IgnoreValueFieldName {
-						err = queryFunc()
+				default:
+					cacheMap := cacheHolding.(map[string]interface{})
+
+					if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
+						switch val.(type) {
+						case float64:
+							val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+						}
+
+						value = applyTypeToInterface(value)
+
+						if val != value {
+							return v.err
+						}
 					} else {
-						return v.err
+						if v.cacheValidate.IgnoreInvalidValueField {
+							err = queryFunc()
+						} else {
+							return v.err
+						}
 					}
 				}
 			} else {
@@ -760,7 +796,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 							valSlice = append(valSlice, val)
 						}
 					} else {
-						if v.cacheValidate.IgnoreValueFieldName {
+						if v.cacheValidate.IgnoreInvalidValueField {
 							err = queryFunc()
 							validField = false
 							break

@@ -712,7 +712,7 @@ func TestValidateIDsRuleUnitTest(t *testing.T) {
 
 	idValidator.cache = mockCache4
 	idValidator.cacheValidate.ValueFieldName = "invalid"
-	idValidator.cacheValidate.IgnoreValueFieldName = true
+	idValidator.cacheValidate.IgnoreInvalidValueField = true
 
 	if err = idValidator.Validate(validateVal); err != nil {
 		t.Errorf("should not have error\n")
@@ -730,9 +730,45 @@ func TestValidateIDsRuleUnitTest(t *testing.T) {
 
 	idValidator.cache = mockCache5
 	idValidator.cacheValidate.ValueFieldName = "invalid"
-	idValidator.cacheValidate.IgnoreValueFieldName = true
+	idValidator.cacheValidate.IgnoreInvalidValueField = true
 
 	if err = idValidator.Validate(validateSliceVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	// -----------------------------------------------------------
+
+	mockCache6 := &MockCacheStore{}
+	defer mockCache6.AssertExpectations(t)
+	mockCache6.On("Get", mock.Anything, mock.Anything).Return(valSliceBytes, nil)
+
+	rows = sqlmock.NewRows([]string{"id"}).AddRow(1)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
+
+	idValidator.cache = mockCache6
+	idValidator.cacheValidate.ValueFieldName = "id"
+	idValidator.cacheValidate.IgnoreInvalidValueField = true
+
+	if err = idValidator.Validate(validateVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	// -----------------------------------------------------------
+
+	mockCache7 := &MockCacheStore{}
+	defer mockCache7.AssertExpectations(t)
+	mockCache7.On("Get", mock.Anything, mock.Anything).Return(valSliceBytes, nil)
+
+	rows = sqlmock.NewRows([]string{"id"}).AddRow(1)
+	mockDB.ExpectQuery("select").WillReturnRows(rows)
+
+	idValidator.cache = mockCache7
+	idValidator.cacheValidate.ValueFieldName = "invalid"
+	idValidator.cacheValidate.IgnoreInvalidValueField = true
+
+	if err = idValidator.Validate(validateVal); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
