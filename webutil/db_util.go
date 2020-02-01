@@ -230,8 +230,15 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*sqlx.DB, err
 	return nil, ErrNoConnection
 }
 
+// IsDBError takes passed error and determines if error is recoverable
+// based on the settings passed in config
+func IsDBError(err error, config RecoverConfig) bool {
+	return isDBError(err, config)
+}
+
 // HasDBError takes passed error and determines what to write
-// back to client depending on settings set in config
+// back to client depending on settings set in config or
+// if able, will recover db based on the settings passed in config
 func HasDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 	defaultDBErrors(&config)
 	return dbError(w, err, config)
@@ -444,7 +451,7 @@ func defaultDBErrors(config *ServerErrorConfig) {
 	)
 }
 
-func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
+func isDBError(err error, config RecoverConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
 			if db, err := config.RecoverDB(err); err == nil {
@@ -464,6 +471,14 @@ func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 			}
 		}
 
+		return true
+	}
+
+	return false
+}
+
+func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
+	if isDBError(err, config.RecoverConfig) {
 		w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
 		w.Write(config.ServerErrorResponse.HTTPResponse)
 		return true

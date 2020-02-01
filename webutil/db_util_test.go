@@ -244,6 +244,14 @@ func dbRecoverSetup() (*sqlx.DB, func(err error) (*sqlx.DB, error), func() error
 		}, nil
 }
 
+func TestIsDBError(t *testing.T) {
+	conf := RecoverConfig{}
+
+	if IsDBError(nil, conf) {
+		t.Errorf("should not have db error\n")
+	}
+}
+
 func TestHasDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	conf := ServerErrorConfig{}
