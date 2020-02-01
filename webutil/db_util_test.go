@@ -279,6 +279,20 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 	if !HasDBError(rr, errDB, conf) {
 		t.Errorf("should have db error\n")
 	}
+
+	conf.RetryDB = nil
+	conf.RecoverDB = recoverDB
+	conf.RetryQuerier = func(db Querier) error {
+		return nil
+	}
+
+	if HasDBError(rr, errDB, conf) {
+		buf := &bytes.Buffer{}
+		buf.ReadFrom(rr.Result().Body)
+		rr.Result().Body.Close()
+		t.Errorf("should not have db error\n")
+		t.Errorf("response: %s\n", buf.String())
+	}
 }
 
 func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {

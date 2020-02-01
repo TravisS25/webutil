@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.4.0
-	github.com/TravisS25/httputil v0.0.0-20191211025323-6cc0eb3297d8
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/garyburd/redigo v1.6.0 // indirect
 	github.com/go-ini/ini v1.51.1 // indirect
@@ -26,5 +25,5 @@ require (
 	github.com/spf13/viper v1.6.1
 	github.com/stretchr/testify v1.4.0
 	gopkg.in/boj/redistore.v1 v1.0.0-20160128113310-fc113767cd6b
-	gopkg.in/yaml.v2 v2.2.7
+	gopkg.in/yaml.v2 v2.2.7 // indirect
 )

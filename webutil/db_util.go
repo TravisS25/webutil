@@ -165,6 +165,11 @@ type RecoverDB func(err error) (*sqlx.DB, error)
 // an error or not
 type RetryDB func(DBInterface) error
 
+// RetryQuerier implementation should query database that has
+// recovered from a failure and return whether you get
+// an error or not
+type RetryQuerier func(Querier) error
+
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
 //////////////////////////////////////////////////////////////////
@@ -445,10 +450,15 @@ func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
 			if db, err := config.RecoverDB(err); err == nil {
 				if config.DBInterfaceRecover != nil {
 					config.DBInterfaceRecover.SetDBInterface(db)
-					if config.RetryDB != nil {
-						if err = config.RetryDB(db); err == nil {
-							return false
-						}
+				}
+				if config.RetryDB != nil {
+					if err = config.RetryDB(db); err == nil {
+						return false
+					}
+				}
+				if config.RetryQuerier != nil {
+					if err = config.RetryQuerier(db); err == nil {
+						return false
 					}
 				}
 			}

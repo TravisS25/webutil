@@ -47,13 +47,13 @@ func DBSetup(db webutil.QuerierTx, bindVar int) func() error {
 			min(logging.date_created) desc;
 		`
 
-		rower, err := db.Query(query)
+		rower, err := db.Queryx(query)
 
 		if err != nil {
 			return errors.Wrap(err, "")
 		}
 
-		tx, _ := db.Begin()
+		tx, _ := db.Beginx()
 
 		for rower.Next() {
 			var logID, dbTableUUID, dbTableID interface{}
@@ -104,7 +104,7 @@ func DBSetup(db webutil.QuerierTx, bindVar int) func() error {
 			return errors.Wrap(err, "")
 		}
 
-		_, err = db.Query(`delete from logging;`)
+		_, err = db.Queryx(`delete from logging;`)
 
 		if err != nil {
 			return errors.Wrap(err, "")
