@@ -1378,9 +1378,6 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	conf.RecoverDB = func(err error) (*sqlx.DB, error) {
 		return &sqlx.DB{}, nil
 	}
-	conf.RetryDB = func(db DBInterface) error {
-		return err
-	}
 
 	if !HasFilterOrServerError(rr, err, conf) {
 		t.Errorf("should have error\n")
@@ -1393,9 +1390,6 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	rr = httptest.NewRecorder()
 	conf.RecoverDB = func(err error) (*sqlx.DB, error) {
 		return &sqlx.DB{}, nil
-	}
-	conf.RetryDB = func(db DBInterface) error {
-		return nil
 	}
 
 	if HasFilterOrServerError(rr, err, conf) {

@@ -20,6 +20,16 @@ import (
 )
 
 //////////////////////////////////////////////////////////////////
+//---------------------- VALIDATOR TYPES -----------------------
+//////////////////////////////////////////////////////////////////
+
+const (
+	validateIDsType = iota + 1
+	validateUniquenessType
+	validateExistsType
+)
+
+//////////////////////////////////////////////////////////////////
 //--------------------------- CONSTS -------------------------
 //////////////////////////////////////////////////////////////////
 
@@ -637,7 +647,7 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 		args = append(args, v.args...)
 	}
 
-	q, arguments, err := InQueryRebind(v.bindVar, v.query, args...)
+	q, args, err := InQueryRebind(v.bindVar, v.query, args...)
 
 	if err != nil {
 		messageErr := fmt.Errorf(err.Error()+"\n query: %s\n args:%v\n", q, args)
@@ -646,26 +656,8 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 
 	queryFunc := func() error {
 		var rows *sqlx.Rows
-		isValidQuery := false
 
-		if rows, err = v.querier.Queryx(q, arguments...); err != nil {
-			if v.recoverDB != nil {
-				if db, err := v.recoverDB(err); err == nil {
-					v.querier = db
-					v.entityRecover.SetEntity(db)
-
-					if rows, err = v.querier.Queryx(q, arguments...); err != nil {
-						return validation.NewInternalError(err)
-					}
-
-					isValidQuery = true
-				}
-			}
-		} else {
-			isValidQuery = true
-		}
-
-		if !isValidQuery {
+		if rows, err = queryValidatorRows(v.validator, q, args); err != nil {
 			return validation.NewInternalError(err)
 		}
 
@@ -827,6 +819,229 @@ func (v *validateIDsRule) Validate(value interface{}) error {
 
 	return err
 }
+
+// func (v *validateIDsRule) Validate(value interface{}) error {
+// 	var err error
+// 	var searchVals []interface{}
+// 	var expectedLen int
+// 	var singleVal interface{}
+
+// 	isSlice := false
+
+// 	if isNilValue(value) {
+// 		return nil
+// 	}
+
+// 	switch reflect.TypeOf(value).Kind() {
+// 	case reflect.Slice:
+// 		isSlice = true
+// 		s := reflect.ValueOf(value)
+
+// 		for k := 0; k < s.Len(); k++ {
+// 			t := s.Index(k).Interface()
+// 			searchVals = append(searchVals, applyTypeToInterface(t))
+// 		}
+
+// 		expectedLen = len(searchVals)
+// 	default:
+// 		expectedLen = 1
+// 		singleVal = value
+// 	}
+
+// 	// If type is slice and is empty, simply return nil as we will get an error
+// 	// when trying to query with empty slice
+// 	if isSlice && len(searchVals) == 0 {
+// 		return nil
+// 	}
+
+// 	var args []interface{}
+
+// 	if v.placeHolderIdx > -1 {
+// 		args = make([]interface{}, 0, len(args)+1)
+// 		args = append(args, v.args...)
+
+// 		if isSlice {
+// 			args = InsertAt(args, searchVals, v.placeHolderIdx)
+// 		} else {
+// 			args = InsertAt(args, singleVal, v.placeHolderIdx)
+// 		}
+// 	} else {
+// 		args = make([]interface{}, 0, len(args))
+// 		args = append(args, v.args...)
+// 	}
+
+// 	q, args, err := InQueryRebind(v.bindVar, v.query, args...)
+
+// 	if err != nil {
+// 		messageErr := fmt.Errorf(err.Error()+"\n query: %s\n args:%v\n", q, args)
+// 		return validation.NewInternalError(messageErr)
+// 	}
+
+// 	queryFunc := func() error {
+// 		var rows *sqlx.Rows
+
+// 		if rows, err = queryValidatorRows(v.validator, q, args); err != nil {
+// 			return validation.NewInternalError(err)
+// 		}
+
+// 		counter := 0
+
+// 		for rows.Next() {
+// 			counter++
+// 		}
+
+// 		if expectedLen != counter {
+// 			return v.err
+// 		}
+
+// 		return nil
+// 	}
+
+// 	if v.cache != nil && v.cacheValidate != nil {
+// 		var singleID bool
+// 		var cacheBytes []byte
+
+// 		if !isSlice {
+// 			singleID = true
+// 		}
+
+// 		var cacheArgs []interface{}
+
+// 		if v.cacheValidate.KeyIdx > -1 {
+// 			cacheArgs = make([]interface{}, 0, len(v.cacheValidate.KeyArgs)+1)
+// 			cacheArgs = append(cacheArgs, v.cacheValidate.KeyArgs...)
+// 			cacheArgs = InsertAt(v.cacheValidate.KeyArgs, value, v.cacheValidate.KeyIdx)
+// 		} else {
+// 			cacheArgs = make([]interface{}, 0, len(cacheArgs))
+// 			cacheArgs = append(cacheArgs, v.cacheValidate.KeyArgs...)
+// 		}
+
+// 		key := fmt.Sprintf(v.cacheValidate.Key, cacheArgs...)
+// 		cacheBytes, err = v.cache.Get(key)
+
+// 		if err != nil {
+// 			if err == ErrCacheNil {
+// 				if v.cacheValidate.IgnoreCacheNil {
+// 					err = queryFunc()
+// 				}
+// 			} else {
+// 				err = queryFunc()
+// 			}
+// 		} else {
+// 			var cacheHolding interface{}
+
+// 			if err = json.Unmarshal(cacheBytes, &cacheHolding); err != nil {
+// 				return validation.NewInternalError(err)
+// 			}
+
+// 			if singleID {
+// 				switch reflect.TypeOf(cacheHolding).Kind() {
+// 				case reflect.Slice:
+// 					cacheSlice := cacheHolding.([]interface{})
+// 					canContinue := false
+
+// 					for _, f := range cacheSlice {
+// 						cacheMap := f.(map[string]interface{})
+
+// 						if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
+// 							switch val.(type) {
+// 							case float64:
+// 								val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+// 							}
+
+// 							value = applyTypeToInterface(value)
+
+// 							if val == value {
+// 								canContinue = true
+// 								break
+// 							}
+// 						} else {
+// 							if v.cacheValidate.IgnoreInvalidValueField {
+// 								err = queryFunc()
+// 								canContinue = true
+// 								break
+// 							}
+// 						}
+// 					}
+
+// 					if !canContinue {
+// 						err = v.err
+// 					}
+// 				default:
+// 					cacheMap := cacheHolding.(map[string]interface{})
+
+// 					if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
+// 						switch val.(type) {
+// 						case float64:
+// 							val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+// 						}
+
+// 						value = applyTypeToInterface(value)
+
+// 						if val != value {
+// 							return v.err
+// 						}
+// 					} else {
+// 						if v.cacheValidate.IgnoreInvalidValueField {
+// 							err = queryFunc()
+// 						} else {
+// 							return v.err
+// 						}
+// 					}
+// 				}
+// 			} else {
+// 				var cacheSlice []map[string]interface{}
+// 				var valSlice []interface{}
+
+// 				count := 0
+
+// 				if err = json.Unmarshal(cacheBytes, &cacheSlice); err != nil {
+// 					return validation.NewInternalError(err)
+// 				}
+
+// 				validField := true
+
+// 				for _, t := range cacheSlice {
+// 					if val, ok := t[v.cacheValidate.ValueFieldName]; ok {
+// 						switch val.(type) {
+// 						case float64:
+// 							str := strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+// 							valSlice = append(valSlice, str)
+// 						default:
+// 							valSlice = append(valSlice, val)
+// 						}
+// 					} else {
+// 						if v.cacheValidate.IgnoreInvalidValueField {
+// 							err = queryFunc()
+// 							validField = false
+// 							break
+// 						} else {
+// 							return v.err
+// 						}
+// 					}
+// 				}
+
+// 				if validField {
+// 					for _, i := range searchVals {
+// 						for _, t := range valSlice {
+// 							if i == t {
+// 								count++
+// 							}
+// 						}
+// 					}
+
+// 					if count != len(searchVals) {
+// 						err = v.err
+// 					}
+// 				}
+// 			}
+// 		}
+// 	} else {
+// 		err = queryFunc()
+// 	}
+
+// 	return err
+// }
 
 func (v *validateIDsRule) Error(message string) *validateIDsRule {
 	v.err = errors.New(message)
@@ -1102,6 +1317,97 @@ func checkIfExists(v *validator, value interface{}, wantExists bool) error {
 	return nil
 }
 
+// // checkIfExists determines whether the passed query returns any
+// // results and returns error depending on the wantExists parameter
+// func checkIfExists(v *validator, value interface{}, wantExists bool) error {
+// 	var err error
+// 	var q string
+
+// 	if isNilValue(value) {
+// 		return nil
+// 	}
+
+// 	dbCall := func() error {
+// 		var rows *sqlx.Rows
+// 		queryArgs := make([]interface{}, 0, len(v.args)+1)
+
+// 		if len(v.args) != 0 {
+// 			queryArgs = append(queryArgs, v.args...)
+// 		}
+
+// 		queryArgs = InsertAt(queryArgs, value, v.placeHolderIdx)
+// 		if q, queryArgs, err = InQueryRebind(v.bindVar, v.query, queryArgs...); err != nil {
+// 			return validation.NewInternalError(err)
+// 		}
+
+// 		count := 0
+
+// 		if rows, err = v.querier.Queryx(q, queryArgs...); err != nil {
+// 			if v.recoverDB == nil {
+// 				return validation.NewInternalError(err)
+// 			}
+// 			if db, err := v.recoverDB(err); err != nil {
+// 				v.entityRecover.SetEntity(db)
+
+// 				if rows, err = v.querier.Queryx(q, queryArgs...); err != nil {
+// 					return validation.NewInternalError(err)
+// 				}
+// 			}
+// 		}
+
+// 		for rows.Next() {
+// 			count++
+// 		}
+
+// 		if count == 0 {
+// 			if wantExists {
+// 				return v.err
+// 			}
+// 		} else {
+// 			if !wantExists {
+// 				return v.err
+// 			}
+// 		}
+
+// 		return nil
+// 	}
+
+// 	if v.cache != nil && v.cacheValidate != nil {
+// 		cacheArgs := make([]interface{}, 0)
+
+// 		if v.cacheValidate.KeyIdx > -1 {
+// 			cacheArgs = InsertAt(v.cacheValidate.KeyArgs, value, v.cacheValidate.KeyIdx)
+// 		}
+
+// 		key := fmt.Sprintf(v.cacheValidate.Key, cacheArgs...)
+// 		_, err = v.cache.Get(key)
+
+// 		if err != nil {
+// 			if err != ErrCacheNil {
+// 				if err = dbCall(); err != nil {
+// 					return err
+// 				}
+// 			} else {
+// 				if v.cacheValidate.IgnoreCacheNil {
+// 					if err = dbCall(); err != nil {
+// 						return err
+// 					}
+// 				}
+// 			}
+// 		} else {
+// 			if !wantExists {
+// 				return v.err
+// 			}
+// 		}
+// 	} else {
+// 		if err = dbCall(); err != nil {
+// 			return err
+// 		}
+// 	}
+
+// 	return nil
+// }
+
 // isNilValue determines if passed value is truley nil
 func isNilValue(value interface{}) bool {
 	_, isNil := validation.Indirect(value)
@@ -1159,3 +1465,194 @@ func applyTypeToInterface(typ interface{}) interface{} {
 
 	return t
 }
+
+func queryValidatorRows(v *validator, q string, args ...interface{}) (*sqlx.Rows, error) {
+	var rows *sqlx.Rows
+	var err error
+
+	if rows, err = v.querier.Queryx(q, args...); err != nil {
+		if v.recoverDB != nil {
+			if db, err := v.recoverDB(err); err == nil {
+				v.querier = db
+				v.entityRecover.SetEntity(db)
+
+				return v.querier.Queryx(q, args...)
+			}
+		}
+	}
+
+	return rows, err
+}
+
+// func cacheResults(v *validator, value interface{}, queryFunc func() error, validatorType int) error {
+// 	var err error
+// 	var expectedLen int
+// 	var singleVal interface{}
+// 	var searchVals []interface{}
+// 	var cacheBytes []byte
+
+// 	switch reflect.TypeOf(value).Kind() {
+// 	case reflect.Slice:
+// 		s := reflect.ValueOf(value)
+
+// 		for k := 0; k < s.Len(); k++ {
+// 			t := s.Index(k).Interface()
+// 			searchVals = append(searchVals, applyTypeToInterface(t))
+// 		}
+
+// 		expectedLen = len(searchVals)
+// 	default:
+// 		expectedLen = 1
+// 		singleVal = value
+// 	}
+
+// 	var cacheArgs []interface{}
+
+// 	if v.cacheValidate.KeyIdx > -1 {
+// 		cacheArgs = make([]interface{}, 0, len(v.cacheValidate.KeyArgs)+1)
+// 		cacheArgs = append(cacheArgs, v.cacheValidate.KeyArgs...)
+// 		cacheArgs = InsertAt(v.cacheValidate.KeyArgs, value, v.cacheValidate.KeyIdx)
+// 	} else {
+// 		cacheArgs = make([]interface{}, 0, len(cacheArgs))
+// 		cacheArgs = append(cacheArgs, v.cacheValidate.KeyArgs...)
+// 	}
+
+// 	key := fmt.Sprintf(v.cacheValidate.Key, cacheArgs...)
+// 	cacheBytes, err = v.cache.Get(key)
+
+// 	if err != nil {
+// 		if err == ErrCacheNil {
+// 			if v.cacheValidate.IgnoreCacheNil {
+// 				err = queryFunc()
+// 			}
+// 		} else {
+// 			err = queryFunc()
+// 		}
+// 	} else {
+// 		var cacheHolding interface{}
+
+// 		if err = json.Unmarshal(cacheBytes, &cacheHolding); err != nil {
+// 			return validation.NewInternalError(err)
+// 		}
+
+// 		if singleVal != nil {
+// 			switch reflect.TypeOf(cacheHolding).Kind() {
+// 			case reflect.Slice:
+// 				cacheSlice := cacheHolding.([]interface{})
+// 				canContinue := false
+
+// 				for _, f := range cacheSlice {
+// 					cacheMap := f.(map[string]interface{})
+
+// 					if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
+// 						switch val.(type) {
+// 						case float64:
+// 							val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+// 						}
+
+// 						value = applyTypeToInterface(value)
+
+// 						if val == value {
+// 							if validatorType == validateIDsType {
+// 								canContinue = true
+// 								break
+// 							} else if validatorType == validateExistsType {
+// 								canContinue = true
+// 								break
+// 							} else if validatorType == validateUniquenessType {
+// 								canContinue = false
+// 								break
+// 							}
+// 						}
+// 					} else {
+// 						if v.cacheValidate.IgnoreInvalidValueField {
+// 							err = queryFunc()
+// 							canContinue = true
+// 							break
+// 						} else {
+// 							return errors.New("webutil: invalid value field name")
+// 						}
+// 					}
+// 				}
+
+// 				if !canContinue {
+// 					err = v.err
+// 				}
+// 			default:
+// 				cacheMap := cacheHolding.(map[string]interface{})
+
+// 				if val, ok := cacheMap[v.cacheValidate.ValueFieldName]; ok {
+// 					switch val.(type) {
+// 					case float64:
+// 						val = strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+// 					}
+
+// 					value = applyTypeToInterface(value)
+
+// 					if val == value {
+// 						if validatorType == validateIDsType {
+// 							return nil
+// 						} else if validatorType == validateExistsType {
+// 							return nil
+// 						} else if validatorType == validateUniquenessType {
+// 							return v.err
+// 						}
+// 					}
+// 				} else {
+// 					if v.cacheValidate.IgnoreInvalidValueField {
+// 						err = queryFunc()
+// 					} else {
+// 						return v.err
+// 					}
+// 				}
+// 			}
+// 		} else {
+// 			var cacheSlice []map[string]interface{}
+// 			var valSlice []interface{}
+
+// 			count := 0
+
+// 			if err = json.Unmarshal(cacheBytes, &cacheSlice); err != nil {
+// 				return validation.NewInternalError(err)
+// 			}
+
+// 			validField := true
+
+// 			for _, t := range cacheSlice {
+// 				if val, ok := t[v.cacheValidate.ValueFieldName]; ok {
+// 					switch val.(type) {
+// 					case float64:
+// 						str := strconv.FormatFloat(val.(float64), 'e', -1, IntBitSize)
+// 						valSlice = append(valSlice, str)
+// 					default:
+// 						valSlice = append(valSlice, val)
+// 					}
+// 				} else {
+// 					if v.cacheValidate.IgnoreInvalidValueField {
+// 						err = queryFunc()
+// 						validField = false
+// 						break
+// 					} else {
+// 						return v.err
+// 					}
+// 				}
+// 			}
+
+// 			if validField {
+// 				for _, i := range searchVals {
+// 					for _, t := range valSlice {
+// 						if i == t {
+// 							count++
+// 						}
+// 					}
+// 				}
+
+// 				if count != len(searchVals) {
+// 					err = v.err
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	return err
+// }

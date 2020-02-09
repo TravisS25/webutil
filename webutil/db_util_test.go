@@ -103,12 +103,12 @@ func (f *testAPI) Index(w http.ResponseWriter, r *http.Request) {
 
 				return db, nil
 			},
-			RetryDB:            retry,
+			//RetryDB:            retry,
 			DBInterfaceRecover: f,
 		},
 	}
 
-	if HasDBError(w, err, conf) {
+	if HasDBError(w, err, retry, conf) {
 		return
 	}
 
@@ -247,7 +247,7 @@ func dbRecoverSetup() (*sqlx.DB, func(err error) (*sqlx.DB, error), func() error
 func TestIsDBError(t *testing.T) {
 	conf := RecoverConfig{}
 
-	if IsDBError(nil, conf) {
+	if IsDBError(nil, nil, conf) {
 		t.Errorf("should not have db error\n")
 	}
 }
@@ -256,11 +256,11 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	conf := ServerErrorConfig{}
 
-	if HasDBError(rr, nil, conf) {
+	if HasDBError(rr, nil, nil, conf) {
 		t.Errorf("should not have db error\n")
 	}
 
-	if !HasDBError(rr, errDB, conf) {
+	if !HasDBError(rr, errDB, nil, conf) {
 		t.Errorf("should have err\n")
 	}
 
@@ -268,11 +268,11 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 	// return false
 	conf.RecoverDB = recoverDB
 	conf.DBInterfaceRecover = &testAPI{}
-	conf.RetryDB = func(db DBInterface) error {
+	retryFn := func(db DBInterface) error {
 		return nil
 	}
 
-	if HasDBError(rr, errDB, conf) {
+	if HasDBError(rr, errDB, retryFn, conf) {
 		buf := &bytes.Buffer{}
 		buf.ReadFrom(rr.Result().Body)
 		rr.Result().Body.Close()
@@ -284,34 +284,34 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 	// return true
 	conf.RecoverDB = failedRecoverDB
 
-	if !HasDBError(rr, errDB, conf) {
+	if !HasDBError(rr, errDB, retryFn, conf) {
 		t.Errorf("should have db error\n")
 	}
 
-	conf.RetryDB = nil
+	retryFn = nil
 	conf.RecoverDB = recoverDB
-	conf.RetryQuerier = func(db Querier) error {
-		return nil
-	}
+	// conf.RetryQuerier = func(db Querier) error {
+	// 	return nil
+	// }
 
-	if HasDBError(rr, errDB, conf) {
-		buf := &bytes.Buffer{}
-		buf.ReadFrom(rr.Result().Body)
-		rr.Result().Body.Close()
-		t.Errorf("should not have db error\n")
-		t.Errorf("response: %s\n", buf.String())
-	}
+	// if HasDBError(rr, errDB, conf) {
+	// 	buf := &bytes.Buffer{}
+	// 	buf.ReadFrom(rr.Result().Body)
+	// 	rr.Result().Body.Close()
+	// 	t.Errorf("should not have db error\n")
+	// 	t.Errorf("response: %s\n", buf.String())
+	// }
 }
 
 func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	conf := ServerErrorConfig{}
 
-	if HasNoRowsOrDBError(rr, nil, conf) {
+	if HasNoRowsOrDBError(rr, nil, nil, conf) {
 		t.Errorf("should not have db error\n")
 	}
 
-	if !HasNoRowsOrDBError(rr, sql.ErrNoRows, conf) {
+	if !HasNoRowsOrDBError(rr, sql.ErrNoRows, nil, conf) {
 		t.Errorf("should have db error\n")
 	}
 }

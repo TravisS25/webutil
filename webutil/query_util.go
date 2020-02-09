@@ -1394,7 +1394,7 @@ func HasFilterOrServerError(w http.ResponseWriter, err error, config ServerError
 			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
 			w.Write(config.ClientErrorResponse.HTTPResponse)
 		default:
-			return dbError(w, err, config)
+			return dbError(w, err, nil, config)
 		}
 
 		return true

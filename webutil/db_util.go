@@ -232,24 +232,80 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*sqlx.DB, err
 
 // IsDBError takes passed error and determines if error is recoverable
 // based on the settings passed in config
-func IsDBError(err error, config RecoverConfig) bool {
-	return isDBError(err, config)
+func IsDBError(err error, retryDB RetryDB, config RecoverConfig) bool {
+	return isDBError(err, retryDB, config)
 }
 
 // HasDBError takes passed error and determines what to write
 // back to client depending on settings set in config or
-// if able, will recover db based on the settings passed in config
-func HasDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
+// if able, will recover db based on if the retryDB parameter
+// comes back with no errors
+//
+// This function will return false even if we are able to
+// recover from db if retryDB is not set and/or returns with error
+//
+// Example:
+//
+// ---------------------------------------------------------------------
+//
+// //... setting config
+//
+// var rows *sqlx.Rows
+// var err error
+//
+// retryFn := func(db webutil.DBInterface)error{
+//	rows, err = db.Queryx(<query>, <args>...)
+//	return err
+// }
+//
+// if webutil.HasDBError(w, retryFn(db), retryFn, conf){
+//	return
+// }
+//
+// //... use rows results
+//
+// -----------------------------------------------------------------------
+//
+func HasDBError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
 	defaultDBErrors(&config)
-	return dbError(w, err, config)
+	return dbError(w, err, retryDB, config)
 }
 
 // HasNoRowsOrDBError takes passed error and determines what to write
-// back to client depending on settings set in config
+// back to client depending on settings set in config or
+// if able, will recover db based on if the retryDB parameter
+// comes back with no errors
 //
-// If error is "sql.ErrNoRows", then another response is written
-// to client based on config passed
-func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
+// If error is "sql.ErrNoRows", then the property "ClientErrorResponse"
+// is written to the client based on what is set; default settings
+// will be used if not set
+//
+// This function will return false even if we are able to
+// recover from db if retryDB is not set and/or returns with error
+//
+// Example:
+//
+// ---------------------------------------------------------------------
+//
+// //... setting config
+//
+// var rows *sqlx.Rows
+// var err error
+//
+// retryFn := func(db webutil.DBInterface)error{
+//	rows, err = db.Queryx(<query>, <args>...)
+//	return err
+// }
+//
+// if webutil.HasNoRowsOrDBError(w, retryFn(db), retryFn, conf){
+//	return
+// }
+//
+// //... use rows results
+//
+// -----------------------------------------------------------------------
+//
+func HasNoRowsOrDBError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
 	defaultDBErrors(&config)
 
 	if err == sql.ErrNoRows {
@@ -258,7 +314,7 @@ func HasNoRowsOrDBError(w http.ResponseWriter, err error, config ServerErrorConf
 		return true
 	}
 
-	return dbError(w, err, config)
+	return dbError(w, err, retryDB, config)
 }
 
 // PopulateDatabaseTables populates "database_table" in a database which
@@ -451,20 +507,15 @@ func defaultDBErrors(config *ServerErrorConfig) {
 	)
 }
 
-func isDBError(err error, config RecoverConfig) bool {
+func isDBError(err error, retryDB RetryDB, config RecoverConfig) bool {
 	if err != nil {
 		if config.RecoverDB != nil {
 			if db, err := config.RecoverDB(err); err == nil {
 				if config.DBInterfaceRecover != nil {
 					config.DBInterfaceRecover.SetDBInterface(db)
 				}
-				if config.RetryDB != nil {
-					if err = config.RetryDB(db); err == nil {
-						return false
-					}
-				}
-				if config.RetryQuerier != nil {
-					if err = config.RetryQuerier(db); err == nil {
+				if retryDB != nil {
+					if err = retryDB(db); err == nil {
 						return false
 					}
 				}
@@ -477,8 +528,8 @@ func isDBError(err error, config RecoverConfig) bool {
 	return false
 }
 
-func dbError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
-	if isDBError(err, config.RecoverConfig) {
+func dbError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
+	if isDBError(err, retryDB, config.RecoverConfig) {
 		w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
 		w.Write(config.ServerErrorResponse.HTTPResponse)
 		return true
