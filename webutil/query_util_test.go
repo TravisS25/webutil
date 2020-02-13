@@ -1386,14 +1386,4 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 			t.Errorf("status should be http.StatusInternalServerError\n")
 		}
 	}
-
-	rr = httptest.NewRecorder()
-	conf.RecoverDB = func(err error) (*sqlx.DB, error) {
-		return &sqlx.DB{}, nil
-	}
-
-	if HasFilterOrServerError(rr, err, conf) {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %s\n", err.Error())
-	}
 }

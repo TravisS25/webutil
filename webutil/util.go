@@ -22,17 +22,6 @@ type RecoverConfig struct {
 	// from a db failure
 	RecoverDB RecoverDB
 
-	// // RetryDB is optional parameter used to try to re-query
-	// // from a recovered database failure
-	// RetryDB RetryDB
-
-	// // RetryQuerier is optional parameter used to try to re-query
-	// // from a recovered database failure
-	// //
-	// // RetryQuerier was added so our middleware handlers could
-	// // also recover from db error
-	// RetryQuerier RetryQuerier
-
 	// DBInterfaceRecover is optional parameter generally used in api
 	// enpoints or form validators to reset their DBInterface after
 	// being recovered from RecoverDB function
