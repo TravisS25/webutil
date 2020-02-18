@@ -355,8 +355,7 @@ func (f *FormValidation) ValidateDate(
 // length of slice
 func (f *FormValidation) ValidateArgs(
 	cacheValidate *CacheValidate,
-	queryValidate ValidateConfig,
-	//recoverDB RecoverDB,
+	validateConf ValidateConfig,
 	placeHolderIdx,
 	bindVar int,
 	query string,
@@ -369,6 +368,7 @@ func (f *FormValidation) ValidateArgs(
 			entityRecover:  f,
 			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
+			validateConf:   validateConf,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        bindVar,
 			query:          query,
@@ -382,7 +382,7 @@ func (f *FormValidation) ValidateArgs(
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
 	cacheValidate *CacheValidate,
-	recoverDB RecoverDB,
+	validateConf ValidateConfig,
 	instanceValue interface{},
 	placeHolderIdx,
 	bindVar int,
@@ -395,8 +395,9 @@ func (f *FormValidation) ValidateUniqueness(
 			querier:        f.entity,
 			cache:          f.config.Cache,
 			entityRecover:  f,
-			recoverDB:      recoverDB,
+			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
+			validateConf:   validateConf,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        bindVar,
 			query:          query,
@@ -411,7 +412,7 @@ func (f *FormValidation) ValidateUniqueness(
 // Only has to find one record to be true
 func (f *FormValidation) ValidateExists(
 	cacheValidate *CacheValidate,
-	recoverDB RecoverDB,
+	validateConf ValidateConfig,
 	placeHolderIdx,
 	bindVar int,
 	query string,
@@ -422,8 +423,9 @@ func (f *FormValidation) ValidateExists(
 			querier:        f.entity,
 			cache:          f.config.Cache,
 			entityRecover:  f,
-			recoverDB:      recoverDB,
+			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
+			validateConf:   validateConf,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        bindVar,
 			query:          query,
