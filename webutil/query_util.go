@@ -1384,7 +1384,7 @@ func InQueryRebind(bindType int, query string, args ...interface{}) (string, []i
 
 // HasFilterOrServerError determines if passed error is a filter based error
 // or a server type error and writes appropriate response to client
-func HasFilterOrServerError(w http.ResponseWriter, err error, config ServerErrorConfig) bool {
+func HasFilterOrServerError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
 	if err != nil {
 		SetHTTPResponseDefaults(&config.ClientErrorResponse, http.StatusNotAcceptable, []byte(err.Error()))
 		SetHTTPResponseDefaults(&config.ServerErrorResponse, http.StatusInternalServerError, []byte(ErrServer.Error()))
@@ -1394,7 +1394,7 @@ func HasFilterOrServerError(w http.ResponseWriter, err error, config ServerError
 			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
 			w.Write(config.ClientErrorResponse.HTTPResponse)
 		default:
-			return dbError(w, err, nil, config)
+			return dbError(w, err, retryDB, config)
 		}
 
 		return true

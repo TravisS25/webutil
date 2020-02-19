@@ -1334,7 +1334,7 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 		},
 	}
 
-	if HasFilterOrServerError(rr, nil, conf) {
+	if HasFilterOrServerError(rr, nil, nil, conf) {
 		t.Errorf("should not have error\n")
 	}
 
@@ -1343,7 +1343,7 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 	}
 	rr = httptest.NewRecorder()
 
-	if !HasFilterOrServerError(rr, filterErr, conf) {
+	if !HasFilterOrServerError(rr, filterErr, nil, conf) {
 		t.Errorf("should have error\n")
 	} else {
 		if rr.Code != http.StatusNotAcceptable {
@@ -1353,7 +1353,7 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 
 	rr = httptest.NewRecorder()
 
-	if !HasFilterOrServerError(rr, err, conf) {
+	if !HasFilterOrServerError(rr, err, nil, conf) {
 		t.Errorf("should have error\n")
 	} else {
 		if rr.Code != http.StatusInternalServerError {
@@ -1366,7 +1366,7 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 		return nil, err
 	}
 
-	if !HasFilterOrServerError(rr, err, conf) {
+	if !HasFilterOrServerError(rr, err, nil, conf) {
 		t.Errorf("should have error\n")
 	} else {
 		if rr.Code != http.StatusInternalServerError {
@@ -1379,7 +1379,7 @@ func TestHasFilterOrServerErrorUnitTest(t *testing.T) {
 		return &sqlx.DB{}, nil
 	}
 
-	if !HasFilterOrServerError(rr, err, conf) {
+	if !HasFilterOrServerError(rr, err, nil, conf) {
 		t.Errorf("should have error\n")
 	} else {
 		if rr.Code != http.StatusInternalServerError {
