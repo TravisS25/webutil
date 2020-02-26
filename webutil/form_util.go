@@ -492,7 +492,7 @@ func (v *validateRequiredRule) Validate(value interface{}) error {
 	}
 
 	if isNilValue(value) {
-		return errors.New(RequiredTxt)
+		return v.err
 	}
 
 	switch value.(type) {
