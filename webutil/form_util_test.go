@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -423,6 +424,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 
 func TestValidatorRulesUnitTest(t *testing.T) {
 	var err error
+	//var row *sqlmock.Rows
 
 	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
 
@@ -440,9 +442,7 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	formValidator := &FormValidation{
 		config: FormValidationConfig{},
 	}
-	cacheValidate := &CacheValidate{
-		Key: "key",
-	}
+
 	validator := &validator{
 		querier:        newDB,
 		bindVar:        sqlx.DOLLAR,
@@ -450,30 +450,57 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		query:          "select id from foo where id = ?;",
 		entityRecover:  formValidator,
 		err:            errors.New(InvalidTxt),
+		cacheValidate: &CacheValidate{
+			Key: "key",
+		},
 	}
-	singleRow := sqlmock.NewRows([]string{"id"}).AddRow(1)
+
 	mockCache := &MockCacheStore{}
 
 	type foo struct {
 		ID int64 `json:"id,string"`
 	}
 
-	cacheSetup := func(cacheVal interface{}, err error) {
+	// resetCache := func(cacheVal interface{}, cacheErr error) {
+	// 	mockCache = &MockCacheStore{}
+	// 	mockCache.On("Get", mock.Anything, mock.Anything).Return(cacheVal, cacheErr)
+	// 	validator.cache = mockCache
+	// }
+	// resetDB := func(dbErr error, numOfRows int) {
+	// 	if dbErr != nil {
+	// 		mockDB.ExpectQuery("select").WillReturnError(queryErr)
+	// 	} else {
+	// 		row = sqlmock.NewRows([]string{"id"})
+	// 		for i := 0; i < numOfRows; i++ {
+	// 			row.AddRow(1)
+	// 		}
+	// 		mockDB.ExpectQuery("select").WillReturnRows(row)
+	// 	}
+	// }
+
+	reset := func(cacheVal interface{}, cacheErr error, numOfRows int, dbErr error) {
 		mockCache = &MockCacheStore{}
-		mockCache.On("Get", mock.Anything, mock.Anything).Return(cacheVal, err)
-	}
-	dbSetup := func() {
-		singleRow = sqlmock.NewRows([]string{"id"}).AddRow(1)
-		mockDB.ExpectQuery("select").WillReturnRows(singleRow)
-	}
+		mockCache.On("Get", mock.Anything, mock.Anything).Return(cacheVal, cacheErr)
 
-	reset := func(cacheVal interface{}, err error) {
-		cacheSetup(cacheVal, err)
-		dbSetup()
+		if dbErr != nil {
+			mockDB.ExpectQuery("select").WillReturnError(dbErr)
+		} else {
+			if numOfRows > -1 {
+				row := sqlmock.NewRows([]string{"id"})
+				for i := 0; i < numOfRows; i++ {
+					row.AddRow(1)
+				}
+				mockDB.ExpectQuery("select").WillReturnRows(row)
+			}
+		}
+
 		validator.err = errors.New(InvalidTxt)
-	}
+		validator.cache = mockCache
 
-	//validator := &validateArgsRule{validator: validator}
+		if validator.cacheValidate != nil {
+			*validator.cacheValidate = CacheValidate{Key: "key"}
+		}
+	}
 
 	// -----------------------------------------------------------
 
@@ -494,7 +521,11 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// -----------------------------------------------------------
 
 	// Testing we have no cache and that db returns error
-	mockDB.ExpectQuery("select").WillReturnError(queryErr)
+
+	//mockDB.ExpectQuery("select").WillReturnError(queryErr)
+	reset(nil, ErrCacheNil, 0, queryErr)
+	validator.cacheValidate.IgnoreCacheNil = true
+
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
 		t.Errorf("should have error\n")
 	} else {
@@ -504,12 +535,18 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		}
 	}
 
+	mockCache.AssertExpectations(t)
+
 	// -----------------------------------------------------------
 
 	// Testing we get db error and recover but also fail
 	// on second attempt
-	mockDB.ExpectQuery("select").WillReturnError(queryErr)
-	mockDB.ExpectQuery("select").WillReturnError(queryErr)
+
+	// mockDB.ExpectQuery("select").WillReturnError(queryErr)
+	// mockDB.ExpectQuery("select").WillReturnError(queryErr)
+	reset(nil, ErrCacheNil, 0, queryErr)
+	reset(nil, ErrCacheNil, 0, queryErr)
+	validator.cacheValidate.IgnoreCacheNil = true
 	validator.recoverDB = func(err error) (*sqlx.DB, error) {
 		return &sqlx.DB{DB: db}, nil
 	}
@@ -523,22 +560,17 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		}
 	}
 
-	// -----------------------------------------------------------
-
-	// Testing a successful call to db with no errors
-	mockDB.ExpectQuery("select").WillReturnRows(singleRow)
-
-	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %s\n", err.Error())
-	}
+	mockCache.AssertExpectations(t)
 
 	// -----------------------------------------------------------
 
 	// Testing that if we get multiple results for single
 	// validation value, we get error
-	multiRow := sqlmock.NewRows([]string{"id"}).AddRow(1).AddRow(2)
-	mockDB.ExpectQuery("select").WillReturnRows(multiRow)
+
+	// multiRow := sqlmock.NewRows([]string{"id"}).AddRow(1).AddRow(2)
+	// mockDB.ExpectQuery("select").WillReturnRows(multiRow)
+
+	reset(nil, ErrCacheNil, 2, nil)
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
 		t.Errorf("should have error\n")
@@ -549,39 +581,13 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		}
 	}
 
-	// -----------------------------------------------------------
-
-	// Assign cache
-	validator.cacheValidate = cacheValidate
-
-	// -----------------------------------------------------------
-
-	// Testing that if we get ErrCacheNil from cache and use
-	// IgnoreCacheNil option, we query db and get no error
-	reset(nil, ErrCacheNil)
-
-	//mockCache.On("Get", mock.Anything, mock.Anything).Return(nil, ErrCacheNil)
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
-	validator.cacheValidate.IgnoreCacheNil = true
-
-	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %s\n", err.Error())
-	}
-
 	mockCache.AssertExpectations(t)
 
 	// -----------------------------------------------------------
 
 	// Testing that if we get err from cache, we resort to db
 	// and not get error
-	reset(nil, errors.New("error"))
-
-	//mockCache.On("Get", mock.Anything, mock.Anything).Return(nil, ErrCacheNil)
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
-	validator.cacheValidate.IgnoreCacheNil = true
+	reset(nil, errors.New("error"), 1, nil)
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
 		t.Errorf("should not have error\n")
@@ -601,10 +607,9 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	cacheSetup(valObjectBytes, nil)
+	//cacheSetup(valObjectBytes, nil)
+	reset(valObjectBytes, nil, -1, nil)
 
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
 	validator.cacheValidate.KeyIdx = -1
 	validator.placeHolderIdx = -1
 	validator.cacheValidate.PropertyName = "id"
@@ -622,9 +627,7 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// -----------------------------------------------------------
 
 	// Testing that if we ignore types, we will not get error
-	cacheSetup(valObjectBytes, nil)
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
+	reset(valObjectBytes, nil, -1, nil)
 	validator.cacheValidate.PropertyName = "id"
 	validator.validateConf.IgnoreTypes = true
 	validator.placeHolderIdx = 0
@@ -654,10 +657,7 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	cacheSetup(valObjectSliceBytes, nil)
-
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
+	reset(valObjectSliceBytes, nil, -1, nil)
 	validator.cacheValidate.PropertyName = "id"
 
 	if err = validatorRules(validator, validateSliceVal, validateArgsType); err != nil {
@@ -671,10 +671,9 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	// Testing that if we have wrong property type and
 	// set IgnoreInvalidCacheResults to false, we get error
-	cacheSetup(valObjectBytes, nil)
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
+	reset(valObjectBytes, nil, -1, nil)
 	validator.cacheValidate.PropertyName = "invalid"
+	validator.cacheValidate.IgnoreInvalidCacheResults = false
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
 		t.Errorf("should have error\n")
@@ -691,10 +690,7 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// Testing when we get array cache results and have invalid
 	// property name but IgnoreInvalidCacheResults is set for
 	// validateArgsType that we resort to db and not get error
-	reset(valObjectSliceBytes, nil)
-
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
+	reset(valObjectSliceBytes, nil, 1, nil)
 	validator.cacheValidate.PropertyName = "invalid"
 	validator.cacheValidate.IgnoreInvalidCacheResults = true
 
@@ -710,11 +706,9 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// Testing when we get array cache results and have invalid
 	// property name but IgnoreInvalidCacheResults is set false
 	// so we get error
-	reset(valObjectSliceBytes, nil)
+	reset(valObjectSliceBytes, nil, -1, nil)
 
-	validator.cache = mockCache
 	validator.err = errors.New(DoesNotExistTxt)
-	*validator.cacheValidate = *cacheValidate
 	validator.cacheValidate.PropertyName = "invalid"
 	validator.cacheValidate.IgnoreInvalidCacheResults = false
 
@@ -728,16 +722,20 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	mockCache.AssertExpectations(t)
 
+	if err = mockDB.ExpectationsWereMet(); err != nil {
+		t.Errorf("err: %s\n", err.Error())
+	}
+
 	// -----------------------------------------------------------
 
 	// Testing when we get array cache results and have invalid
 	// property name but IgnoreInvalidCacheResults is set
 	// for validateExistsType that we resort to db and not get error
-	reset(valObjectSliceBytes, nil)
+	reset(valObjectSliceBytes, nil, 1, nil)
 
-	validator.cache = mockCache
+	//validator.cache = mockCache
+	//*validator.cacheValidate = *cacheValidate
 	validator.err = errors.New(DoesNotExistTxt)
-	*validator.cacheValidate = *cacheValidate
 	validator.cacheValidate.PropertyName = "invalid"
 	validator.cacheValidate.IgnoreInvalidCacheResults = true
 
@@ -750,17 +748,14 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	// -----------------------------------------------------------
 
-	// Testing when we get array cache results and have valid
-	// property name but IgnoreInvalidCacheResults is set false
-	// we get error
-	cacheSetup(valObjectSliceBytes, nil)
-	emptyRow := sqlmock.NewRows([]string{"id"})
-	mockDB.ExpectQuery("select").WillReturnRows(emptyRow)
+	// Testing when we get array cache results and have invalid
+	// property name and IgnoreInvalidCacheResults is set false and db
+	// returns no rows, we get no error
+	reset(valObjectSliceBytes, nil, 0, nil)
 
-	validator.cache = mockCache
 	validator.err = errors.New(AlreadyExistsTxt)
-	*validator.cacheValidate = *cacheValidate
-	validator.cacheValidate.PropertyName = "id"
+	validator.cacheValidate.PropertyName = "invalid"
+	validator.cacheValidate.IgnoreInvalidCacheResults = false
 
 	if err = validatorRules(validator, validateVal, validateUniquenessType); err != nil {
 		t.Errorf("should not have error\n")
@@ -774,12 +769,10 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// Testing when we get array cache results and have invalid
 	// property name but IgnoreInvalidCacheResults is set
 	// for validateUniquenessType that we resort to db and not get error
-	reset(valObjectSliceBytes, nil)
+	reset(valObjectSliceBytes, nil, 0, nil)
 
-	validator.cache = mockCache
 	validator.err = errors.New(AlreadyExistsTxt)
-	*validator.cacheValidate = *cacheValidate
-	validator.cacheValidate.PropertyName = "invalid"
+	validator.cacheValidate.PropertyName = "id"
 	validator.cacheValidate.IgnoreInvalidCacheResults = true
 
 	if err = validatorRules(validator, validateVal, validateUniquenessType); err != nil {
@@ -793,10 +786,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	// Testing that if we get ErrCacheNil error and IgnoreCacheNil is false,
 	// we get error
-	reset(nil, ErrCacheNil)
+	reset(nil, ErrCacheNil, -1, nil)
 
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
 	validator.cacheValidate.IgnoreCacheNil = false
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
@@ -820,10 +811,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	reset(singleSliceBytes, nil)
+	reset(singleSliceBytes, nil, -1, nil)
 
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
 	validator.validateConf.IgnoreTypes = true
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
@@ -837,10 +826,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	// Testing that array cache results that is not objects
 	// with IgnoreTypes set false will return error
-	reset(singleSliceBytes, nil)
+	reset(singleSliceBytes, nil, -1, nil)
 
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
 	validator.validateConf.IgnoreTypes = false
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
@@ -863,10 +850,7 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	reset(boolSliceBytes, nil)
-
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
+	reset(boolSliceBytes, nil, -1, nil)
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
 		t.Errorf("should have error\n")
@@ -881,22 +865,23 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// -----------------------------------------------------------
 
 	// Testing that cache result that is not array or object is
-	// valid and does not return error
+	// not valid with IgnoreTypes = false so return error
 	singleValBytes, err := json.Marshal(1)
 
 	if err != nil {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 
-	reset(singleValBytes, nil)
+	reset(singleValBytes, nil, -1, nil)
 
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
 	validator.validateConf.IgnoreTypes = false
 
-	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %v\n", err.Error())
+	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != InvalidTxt {
+			t.Errorf("err should be %s; got %s", InvalidTxt, err.Error())
+		}
 	}
 
 	mockCache.AssertExpectations(t)
@@ -905,10 +890,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	// Testing that cache result that is not array or object with
 	// IgnoreTypes set is valid and does not return error
-	reset(singleValBytes, nil)
+	reset(singleValBytes, nil, -1, nil)
 
-	validator.cache = mockCache
-	*validator.cacheValidate = *cacheValidate
 	validator.validateConf.IgnoreTypes = true
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
@@ -917,4 +900,121 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	}
 
 	mockCache.AssertExpectations(t)
+}
+
+func TestFoobar(t *testing.T) {
+	var err error
+	var row *sqlmock.Rows
+
+	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+	if err != nil {
+		t.Fatalf("fatal err: %s\n", err.Error())
+	}
+
+	//queryErr := errors.New("query error")
+	validateVal := 1
+
+	newDB := &sqlx.DB{
+		DB: db,
+	}
+
+	formValidator := &FormValidation{
+		config: FormValidationConfig{},
+	}
+	cacheValidate := &CacheValidate{
+		Key: "key",
+	}
+	validator := &validator{
+		querier:        newDB,
+		bindVar:        sqlx.DOLLAR,
+		placeHolderIdx: -1,
+		query:          "select id from foo where id = ?;",
+		entityRecover:  formValidator,
+		err:            errors.New(InvalidTxt),
+		cacheValidate:  &CacheValidate{},
+	}
+
+	mockCache := &MockCacheStore{}
+
+	type foo struct {
+		ID int64 `json:"id,string"`
+	}
+
+	//validateSliceVal := []int{1}
+	fSlice := []foo{
+		{
+			ID: 1,
+		},
+	}
+
+	valObjectSliceBytes, err := json.Marshal(&fSlice)
+
+	if err != nil {
+		t.Fatalf("err: %s\n", err.Error())
+	}
+
+	reset := func(cacheVal interface{}, err error, isSingleRow bool) {
+		mockCache = &MockCacheStore{}
+		mockCache.On("Get", mock.Anything, mock.Anything).Return(cacheVal, err)
+
+		if isSingleRow {
+			row = sqlmock.NewRows([]string{"id"}).AddRow(1)
+		} else {
+			row = sqlmock.NewRows([]string{"id"})
+		}
+
+		fmt.Printf("row: %v\n", row)
+		mockDB.ExpectQuery("select").WillReturnRows(row)
+
+		validator.err = errors.New(InvalidTxt)
+		validator.cache = mockCache
+
+		if validator.cacheValidate != nil {
+			*validator.cacheValidate = *cacheValidate
+		}
+	}
+
+	// Testing when we get array cache results and have invalid
+	// property name but IgnoreInvalidCacheResults is set
+	// for validateExistsType that we resort to db and not get error
+	reset(valObjectSliceBytes, nil, true)
+
+	validator.err = errors.New(DoesNotExistTxt)
+	validator.cacheValidate.PropertyName = "exist"
+	validator.cacheValidate.IgnoreInvalidCacheResults = true
+
+	if err = validatorRules(validator, validateVal, validateExistsType); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	mockCache.AssertExpectations(t)
+
+	reset(valObjectSliceBytes, nil, true)
+	reset(valObjectSliceBytes, nil, false)
+
+	validator.err = errors.New(InvalidTxt)
+	validator.cacheValidate.PropertyName = "exist"
+	validator.cacheValidate.IgnoreInvalidCacheResults = true
+
+	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	mockCache.AssertExpectations(t)
+
+	validator.err = errors.New(AlreadyExistsTxt)
+	validator.cacheValidate.PropertyName = "invalid"
+	validator.cacheValidate.IgnoreInvalidCacheResults = true
+
+	if err = validatorRules(validator, validateVal, validateUniquenessType); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	mockCache.AssertExpectations(t)
+
+	//t.Error("boom")
 }

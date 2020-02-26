@@ -1,7 +1,6 @@
 package webutil
 
 import (
-	"fmt"
 	"time"
 
 	pkgerrors "github.com/pkg/errors"
@@ -52,7 +51,6 @@ func getUTC(timezone string, includeTime bool) (time.Time, error) {
 	location, err := time.LoadLocation(timezone)
 
 	if err != nil {
-		fmt.Printf("foo err: %s\n", err.Error())
 		return time.Time{}, pkgerrors.Wrap(err, "")
 	}
 

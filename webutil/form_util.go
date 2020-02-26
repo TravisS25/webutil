@@ -189,11 +189,6 @@ type CacheValidate struct {
 	// of primitive types, then this property will be ignored
 	PropertyName string
 
-	// IgnoreInvalidPropertyName is flag to indicate whether we ignore
-	// that the value in property PropertyName could not be found
-	// in unmarshaled json from cache and continue to query db
-	//IgnoreInvalidPropertyName bool
-
 	// IgnoreCacheNil will ignore cache nil error and still query db
 	IgnoreCacheNil bool
 
@@ -1163,7 +1158,7 @@ func convertToStr(typ interface{}) (interface{}, error) {
 	return t, nil
 }
 
-func validatorRules(v *validator, value interface{}, validateArgsType int) error {
+func validatorRules(v *validator, value interface{}, validateType int) error {
 	var err error
 	var q string
 	var expectedLen int
@@ -1190,7 +1185,7 @@ func validatorRules(v *validator, value interface{}, validateArgsType int) error
 			counter++
 		}
 
-		switch validateArgsType {
+		switch validateType {
 		case validateArgsType:
 			if counter != expectedLen {
 				return v.err
@@ -1209,7 +1204,7 @@ func validatorRules(v *validator, value interface{}, validateArgsType int) error
 	}
 
 	if v.cache != nil && v.cacheValidate != nil {
-		err = cacheResults(v, value, queryFunc, validateArgsType)
+		err = cacheResults(v, value, queryFunc, validateType)
 	} else {
 		err = queryFunc()
 	}

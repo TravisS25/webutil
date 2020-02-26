@@ -209,8 +209,6 @@ func SetCacheFromDB(cacheSetup CacheSetup, db Querier) error {
 		valuePtrs := make([]interface{}, colCount)
 		rowList := make([]interface{}, 0)
 
-		fmt.Printf("high val: %v\n", v.IsSingleKey)
-
 		for rows.Next() {
 			for i := range columns {
 				valuePtrs[i] = &values[i]

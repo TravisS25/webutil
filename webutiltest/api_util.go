@@ -798,8 +798,6 @@ func SetJSONFromResponse(bodyResponse io.Reader, item interface{}) error {
 		return err
 	}
 
-	fmt.Printf("response: %s", string(response))
-
 	err = json.Unmarshal(response, &item)
 
 	if err != nil {
@@ -856,7 +854,6 @@ func LoginUser(url string, loginForm interface{}) (string, error) {
 		return "", errors.New(errorMessage)
 	}
 
-	// fmt.Printf("cookies: %v\n\n", res.Cookies())
 	return res.Header.Get(webutil.SetCookieHeader), nil
 }
 

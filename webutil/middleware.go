@@ -274,16 +274,11 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			// If session is considered new, that means
 			// either current user is truly not logged in or cache was/is down
 			if session.IsNew {
-				//fmt.Printf("new session\n")
-
 				// First we determine if user is sending a cookie with our user cookie key
 				// If they are, try retrieving from db if AuthHandler#queryForUser is set
 				// Else, continue to next handler
 				if _, err = r.Cookie(a.config.SessionConfig.SessionName); err == nil {
-					fmt.Printf("has cookie\n")
-					//fmt.Printf("has cookie but not found in store\n")
 					if err = setUser(); err != nil {
-						//fmt.Printf("within user\n")
 						return
 					}
 
@@ -302,21 +297,17 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 
 							if err == nil {
 								session.ID = sessionStr
-								fmt.Printf("session id: %s\n", session.ID)
 								session.Values[a.config.SessionConfig.Keys.UserKey] = userBytes
 								session.Save(r, w)
 							}
 						}
 					}
 				} else {
-					//fmt.Printf("new session, no cookie\n")
 					next.ServeHTTP(w, r)
 					return
 				}
 			} else {
-				//fmt.Printf("not new session")
 				if val, ok := session.Values[a.config.SessionConfig.Keys.UserKey]; ok {
-					//fmt.Printf("found in session")
 					userBytes = val.([]byte)
 					err := json.Unmarshal(userBytes, &middlewareUser)
 
@@ -383,7 +374,6 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			groups := fmt.Sprintf(GroupKey, user.Email)
 
 			setGroupFromDB := func() error {
-				fmt.Printf("group middleware query db\n")
 				groupBytes, err = g.queryForGroups(r, g.db)
 
 				if err != nil {
@@ -508,7 +498,6 @@ func NewRoutingHandler(
 
 func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//fmt.Printf("routing middleware\n")
 		if r.Method != http.MethodOptions {
 			var urlBytes []byte
 			var urls map[string]bool
@@ -602,7 +591,6 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			user := r.Context().Value(MiddlewareUserCtxKey)
 
 			if user != nil {
-				//fmt.Printf("routing user\n")
 				user := user.(MiddlewareUser)
 				key := fmt.Sprintf(URLKey, user.Email)
 

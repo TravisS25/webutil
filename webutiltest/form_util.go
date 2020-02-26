@@ -135,8 +135,6 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 				}
 			} else {
 				if validationErrors, ok := formErr.(validation.Errors); ok {
-					//fmt.Printf("validation err: %v\n", validationErrors)
-
 					for key, expectedVal := range formTest.ValidationErrors {
 						if fErr, valid := validationErrors[key]; valid {
 							err := formValidation(t, key, fErr, expectedVal)
@@ -191,16 +189,12 @@ func formValidation(t *testing.T, mapKey string, formValidationErr error, expect
 
 					switch innerExpectedVal.(type) {
 					case map[string]interface{}:
-						//fmt.Printf("map val switch\n")
 						err = formValidation(t, innerExpectedKey, innerFormVal, innerExpectedVal)
 
 						if err != nil {
-							//fmt.Printf("form err\n")
 							return err
 						}
 					case string:
-						//fmt.Printf("string val switch\n")
-
 						if len(innerExpectedErr) != len(innerFormErr) {
 							if len(innerExpectedErr) > len(innerFormErr) {
 								for k := range innerExpectedErr {
@@ -241,7 +235,6 @@ func formValidation(t *testing.T, mapKey string, formValidationErr error, expect
 			return errors.New(message)
 		}
 	} else {
-		//fmt.Printf("made to non map\n")
 		if formValidationErr.Error() != expectedErr {
 			t.Errorf("form testing: Key \"%s\" threw err: \"%s\" \n expected: \"%s\" \n", mapKey, formValidationErr.Error(), expectedErr)
 		}

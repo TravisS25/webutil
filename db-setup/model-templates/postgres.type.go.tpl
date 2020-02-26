@@ -65,15 +65,11 @@ func ({{ $short }} *{{ .Name }}) MarshalJSON() ([]byte, error) {
 					return nil, err
 				}
 
-				//fmt.Printf("outter returned map: %v\n\n", vals)
-
 				if len(vals) != 0 {
 					values[structField] = vals
 				}
 			}
 		}
-
-		//fmt.Printf("final values: %v\n\n", values)
 
 		value = values
 	} else if len({{ $short }}.includeJSONFields) != 0 {

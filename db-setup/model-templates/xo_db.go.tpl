@@ -81,7 +81,6 @@ func exclusionMap(field *structs.Field, listField string, listVal interface{}) (
 
 				if _, ok := excludeMap[innerStructField]; !ok {
 					if f.IsExported() {
-						//fmt.Printf("innerstruct include: %s\n", innerStructField)
 						newVals[innerStructField] = f.Value()
 					}
 				} else {
@@ -91,18 +90,11 @@ func exclusionMap(field *structs.Field, listField string, listVal interface{}) (
 						return nil, err
 					}
 
-					// values[innerStructField] = vals
-					// fmt.Printf("inner vales: %v", values[innerStructField])
-
 					if vals != nil {
 						newVals[innerStructField] = vals
 					}
 				}
 			}
-
-			//fmt.Printf("inner returned map: %v\n\n", newVals)
-
-			//fmt.Printf("map values: %v", newVals)
 		}
 	} else {
 		return nil, nil
