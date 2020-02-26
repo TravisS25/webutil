@@ -152,15 +152,6 @@ type FormValidationConfig struct {
 	PathRegex PathRegex
 }
 
-// ValidateConfig is config struct used in form validators
-type ValidateConfig struct {
-	// IgnoreValidatedTypes will convert current value being
-	// validated and cache to string
-	// If value is slice, it will convert all values within slice
-	// to string
-	IgnoreTypes bool
-}
-
 // CacheValidate is config struct used in form validators
 type CacheValidate struct {
 	// Key is key used in cache to retrieve value
@@ -195,6 +186,12 @@ type CacheValidate struct {
 	// IgnoreInvalidCacheResults will ignore if we can't find
 	// any results in cache and query db anyways
 	IgnoreInvalidCacheResults bool
+
+	// IgnoreValidatedTypes will convert current value being
+	// validated and cache to string
+	// If value is slice, it will convert all values within slice
+	// to string
+	IgnoreTypes bool
 }
 
 //////////////////////////////////////////////////////////////////
@@ -350,7 +347,6 @@ func (f *FormValidation) ValidateDate(
 // length of slice
 func (f *FormValidation) ValidateArgs(
 	cacheValidate *CacheValidate,
-	validateConf ValidateConfig,
 	placeHolderIdx,
 	bindVar int,
 	query string,
@@ -363,7 +359,6 @@ func (f *FormValidation) ValidateArgs(
 			entityRecover:  f,
 			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
-			validateConf:   validateConf,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        bindVar,
 			query:          query,
@@ -377,7 +372,6 @@ func (f *FormValidation) ValidateArgs(
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
 	cacheValidate *CacheValidate,
-	validateConf ValidateConfig,
 	instanceValue interface{},
 	placeHolderIdx,
 	bindVar int,
@@ -392,7 +386,6 @@ func (f *FormValidation) ValidateUniqueness(
 			entityRecover:  f,
 			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
-			validateConf:   validateConf,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        bindVar,
 			query:          query,
@@ -407,7 +400,6 @@ func (f *FormValidation) ValidateUniqueness(
 // Only has to find one record to be true
 func (f *FormValidation) ValidateExists(
 	cacheValidate *CacheValidate,
-	validateConf ValidateConfig,
 	placeHolderIdx,
 	bindVar int,
 	query string,
@@ -420,7 +412,6 @@ func (f *FormValidation) ValidateExists(
 			entityRecover:  f,
 			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
-			validateConf:   validateConf,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        bindVar,
 			query:          query,
@@ -471,7 +462,7 @@ type validator struct {
 	err            error
 	recoverDB      RecoverDB
 	cacheValidate  *CacheValidate
-	validateConf   ValidateConfig
+	//validateConf   ValidateConfig
 }
 
 type validateRequiredRule struct {
@@ -883,7 +874,7 @@ func cacheResults(v *validator, value interface{}, queryFunc func() error, valid
 		for k := 0; k < s.Len(); k++ {
 			i := s.Index(k).Interface()
 
-			if v.validateConf.IgnoreTypes {
+			if v.cacheValidate.IgnoreTypes {
 				t, err := convertToStr(i)
 
 				if err != nil {
@@ -891,10 +882,12 @@ func cacheResults(v *validator, value interface{}, queryFunc func() error, valid
 				}
 
 				searchVals = append(searchVals, t)
+			} else {
+				searchVals = append(searchVals, i)
 			}
 		}
 	default:
-		if v.validateConf.IgnoreTypes {
+		if v.cacheValidate.IgnoreTypes {
 			singleVal, err = convertToStr(value)
 
 			if err != nil {
@@ -981,14 +974,14 @@ func cacheResults(v *validator, value interface{}, queryFunc func() error, valid
 					cacheMap := f.(map[string]interface{})
 
 					if val, ok = cacheMap[v.cacheValidate.PropertyName]; ok {
-						if v.validateConf.IgnoreTypes {
+						if v.cacheValidate.IgnoreTypes {
 							if val, err = convertToStr(val); err != nil {
 								return validation.NewInternalError(errInvalidCacheTypeInternal)
 							}
 						}
 					}
 				case float64, string:
-					if v.validateConf.IgnoreTypes {
+					if v.cacheValidate.IgnoreTypes {
 						if val, err = convertToStr(f); err != nil {
 							return validation.NewInternalError(errInvalidCacheTypeInternal)
 						}
@@ -1005,7 +998,7 @@ func cacheResults(v *validator, value interface{}, queryFunc func() error, valid
 			cacheMap := cacheHolding.(map[string]interface{})
 
 			if val, ok = cacheMap[v.cacheValidate.PropertyName]; ok {
-				if v.validateConf.IgnoreTypes {
+				if v.cacheValidate.IgnoreTypes {
 					if val, err = convertToStr(val); err != nil {
 						return validation.NewInternalError(errInvalidCacheTypeInternal)
 					}
@@ -1014,7 +1007,7 @@ func cacheResults(v *validator, value interface{}, queryFunc func() error, valid
 				counterFunc(val)
 			}
 		default:
-			if v.validateConf.IgnoreTypes {
+			if v.cacheValidate.IgnoreTypes {
 				if val, err = convertToStr(cacheHolding); err != nil {
 					return validation.NewInternalError(errInvalidCacheTypeInternal)
 				}

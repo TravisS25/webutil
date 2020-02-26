@@ -478,10 +478,7 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 		validator.err = errors.New(InvalidTxt)
 		validator.cache = mockCache
-
-		if validator.cacheValidate != nil {
-			*validator.cacheValidate = CacheValidate{Key: "key"}
-		}
+		validator.cacheValidate = &CacheValidate{Key: "key"}
 	}
 
 	assertExpectations := func() error {
@@ -635,7 +632,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// Testing that if we ignore types, we will not get error
 	reset(valObjectBytes, nil, -1, nil)
 	validator.cacheValidate.PropertyName = "id"
-	validator.validateConf.IgnoreTypes = true
+	validator.cacheValidate.IgnoreTypes = true
+	// validator.validateConf.IgnoreTypes = true
 	validator.placeHolderIdx = 0
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
@@ -651,7 +649,7 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	// Testing that when we pass slice values for validation and
 	// receive array from cache and they equal each other, we
-	// don't get error
+	// don't get error with IgnoreTypes set
 	validateSliceVal := []int{1}
 	fSlice := []foo{
 		{
@@ -667,6 +665,28 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	reset(valObjectSliceBytes, nil, -1, nil)
 	validator.cacheValidate.PropertyName = "id"
+
+	if err = validatorRules(validator, validateSliceVal, validateArgsType); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != InvalidTxt {
+			t.Errorf("err should be %s; got %s", InvalidTxt, err.Error())
+		}
+	}
+
+	if err = assertExpectations(); err != nil {
+		t.Error(err.Error())
+	}
+
+	// -----------------------------------------------------------
+
+	// Testing that when we pass slice values for validation and
+	// receive array from cache and they equal each other, we
+	// get error because they are not same type
+
+	reset(valObjectSliceBytes, nil, -1, nil)
+	validator.cacheValidate.PropertyName = "id"
+	validator.cacheValidate.IgnoreTypes = true
 
 	if err = validatorRules(validator, validateSliceVal, validateArgsType); err != nil {
 		t.Errorf("should not have error\n")
@@ -789,8 +809,28 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	reset(valObjectSliceBytes, nil, 0, nil)
 
 	validator.err = errors.New(AlreadyExistsTxt)
+	validator.cacheValidate.IgnoreTypes = true
 	validator.cacheValidate.PropertyName = "id"
 	validator.cacheValidate.IgnoreInvalidCacheResults = true
+
+	if err = validatorRules(validator, validateVal, validateUniquenessType); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	if err = assertExpectations(); err != nil {
+		t.Error(err.Error())
+	}
+
+	// -----------------------------------------------------------
+
+	// Testing when we get array cache results and have invalid
+	// property name but IgnoreInvalidCacheResults is set
+	// for validateUniquenessType that we resort to db and not get error
+	reset(nil, ErrCacheNil, -1, nil)
+
+	validator.err = errors.New(AlreadyExistsTxt)
+	validator.cacheValidate.IgnoreCacheNil = false
 
 	if err = validatorRules(validator, validateVal, validateUniquenessType); err != nil {
 		t.Errorf("should not have error\n")
@@ -834,7 +874,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	reset(singleSliceBytes, nil, -1, nil)
 
-	validator.validateConf.IgnoreTypes = true
+	//validator.validateConf.IgnoreTypes = true
+	validator.cacheValidate.IgnoreTypes = true
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
 		t.Errorf("should not have error\n")
@@ -851,7 +892,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// with IgnoreTypes set false will return error
 	reset(singleSliceBytes, nil, -1, nil)
 
-	validator.validateConf.IgnoreTypes = false
+	// validator.validateConf.IgnoreTypes = false
+	validator.cacheValidate.IgnoreTypes = false
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
 		t.Errorf("should have error\n")
@@ -901,7 +943,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 
 	reset(singleValBytes, nil, -1, nil)
 
-	validator.validateConf.IgnoreTypes = false
+	//validator.validateConf.IgnoreTypes = false
+	validator.cacheValidate.IgnoreTypes = false
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err == nil {
 		t.Errorf("should have error\n")
@@ -921,7 +964,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 	// IgnoreTypes set is valid and does not return error
 	reset(singleValBytes, nil, -1, nil)
 
-	validator.validateConf.IgnoreTypes = true
+	// validator.validateConf.IgnoreTypes = true
+	validator.cacheValidate.IgnoreTypes = true
 
 	if err = validatorRules(validator, validateVal, validateArgsType); err != nil {
 		t.Errorf("should not have error\n")
