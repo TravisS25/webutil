@@ -3,19 +3,19 @@ port: &main_port 26257
 db_type: postgres
 db_connections: &connections
   - base_auth_setting:
-      user: test
+      user: root
       host: *main_host
       port: *main_port
     db_name: test
     ssl_mode: disable
   - base_auth_setting:
-      user: test
+      user: root
       host: *main_host
       port: 26258
     db_name: test
     ssl_mode: disable
   - base_auth_setting:
-      user: test
+      user: root
       host: *main_host
       port: 26259
     db_name: test
@@ -30,23 +30,50 @@ db_reset_configuration:
       user: root
       host: *main_host
   db_remove_command:
-    command: docker
-    args:
-      - container
-      - rm
-      - "-f"
+    cmd_command:
+      command: docker
+      args:
+        - container
+        - rm
+        - "-f"
   db_start_command:
-    command: docker
-    args:
-      - run
-      - "-d"
-      - "--network"
-      - "roachnet"
-      - cockroachdb/cockroach:v19.2.2
-      - start
-      - "--insecure"
-      - "--join=roach1,roach2,roach3"
+    cmd_command:
+      command: docker
+      args:
+        - run
+        - "-d"
+        - "--network"
+        - "roachnet"
+        - cockroachdb/cockroach:v19.2.2
+        - start
+        - "--insecure"
+        - "--join=roach1,roach2,roach3"
     port_config:
       flag_key: "-p"
       docker_port: "26257"
-  
+db_test_config:
+  db_type: postgres
+  create_db_command:
+    command: docker
+    args:
+      - exec
+      - roach1
+      - bash
+      - "-c"
+      - /cockroach/cockroach sql --insecure --execute="create database log_test;"
+  load_data_command:
+    command: docker
+    args:
+      - exec
+      - roach1
+      - bash
+      - "-c"
+      - /cockroach/cockroach sql --insecure -d log_test < /cockroach/log_test_data.sql
+  remove_data_command:
+    command: docker
+    args:
+      - exec
+      - roach1
+      - bash
+      - "-c"
+      - /cockroach/cockroach sql --insecure --execute="drop database log_test cascade;"
