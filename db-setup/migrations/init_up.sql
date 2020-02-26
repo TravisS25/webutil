@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS user_profile(
 
 CREATE TABLE IF NOT EXISTS user_group(
     id serial primary key,
-    user_group text not null
+    user_group text not null unique,
 );
 
 CREATE TABLE IF NOT EXISTS database_table(
@@ -32,8 +32,9 @@ CREATE TABLE IF NOT EXISTS database_action(
 CREATE TABLE IF NOT EXISTS logging(
     id uuid primary key DEFAULT gen_random_uuid(),
     date_created TIMESTAMP default now(),
-    data text,
+    data json,
     primary_key_id int,
+    primary_key_uuid uuid,
     been_viewed boolean not null default false,
     database_action_id int REFERENCES database_action(id),
     database_table_id int default 1 REFERENCES database_table(id) ON UPDATE SET DEFAULT ON DELETE SET DEFAULT,

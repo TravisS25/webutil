@@ -180,7 +180,7 @@ func dbRecoverSetup() (*sqlx.DB, func(err error) (*sqlx.DB, error), func() error
 	startArgs := []string{}
 	hasDynamicArgs := false
 
-	for _, v := range testConf.DBResetConf.DBStartCommand.Args {
+	for _, v := range testConf.DBResetConf.DBStartCommand.CmdCommand.Args {
 		if v[0] == '-' && !hasDynamicArgs {
 			startArgs = append(startArgs, v)
 
@@ -194,11 +194,11 @@ func dbRecoverSetup() (*sqlx.DB, func(err error) (*sqlx.DB, error), func() error
 		}
 	}
 
-	fmt.Printf("command: %s\n", testConf.DBResetConf.DBStartCommand.Command)
+	fmt.Printf("command: %s\n", testConf.DBResetConf.DBStartCommand.CmdCommand.Command)
 	fmt.Printf("args: %v\n", startArgs)
 
 	cmd := exec.Command(
-		testConf.DBResetConf.DBStartCommand.Command,
+		testConf.DBResetConf.DBStartCommand.CmdCommand.Command,
 		startArgs...,
 	)
 	err = cmd.Run()
@@ -228,7 +228,7 @@ func dbRecoverSetup() (*sqlx.DB, func(err error) (*sqlx.DB, error), func() error
 
 			return db, nil
 		}, func() error {
-			stopArgs := testConf.DBResetConf.DBRemoveCommand.Args
+			stopArgs := testConf.DBResetConf.DBRemoveCommand.CmdCommand.Args
 
 			if conf.DockerName != "" {
 				stopArgs = append(stopArgs, conf.DockerName)
@@ -237,7 +237,7 @@ func dbRecoverSetup() (*sqlx.DB, func(err error) (*sqlx.DB, error), func() error
 			}
 
 			cmd := exec.Command(
-				testConf.DBResetConf.DBRemoveCommand.Command,
+				testConf.DBResetConf.DBRemoveCommand.CmdCommand.Command,
 				stopArgs...,
 			)
 			return cmd.Run()
@@ -521,8 +521,8 @@ func TestRecoveryErrorIntegrationTest(t *testing.T) {
 		t.Errorf("Could not quit database: %s\n", err.Error())
 		t.Errorf(
 			"command: %s, args: %v\n",
-			testConf.DBResetConf.DBRemoveCommand.Command,
-			testConf.DBResetConf.DBRemoveCommand.Args,
+			testConf.DBResetConf.DBRemoveCommand.CmdCommand.Command,
+			testConf.DBResetConf.DBRemoveCommand.CmdCommand.Args,
 		)
 		t.Fatalf("err: %s", err.Error())
 	}

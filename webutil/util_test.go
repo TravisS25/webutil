@@ -22,7 +22,13 @@ var (
 
 type testConfig struct {
 	DBResetConf dbResetConfig `yaml:"db_reset_configuration" mapstructure:"db_reset_configuration"`
-	//DBConnections        []DatabaseSetting    `yaml:"db_connections" mapstructure:"db_connections"`
+	DBTestConf  dbTestConfig  `yaml:"db_test_config" mapstructure:"db_test_config"`
+}
+
+type dbTestConfig struct {
+	CreateDBCommand   cmdCommand `yaml:"create_db_command" mapstructure:"create_db_command"`
+	LoadDataCommand   cmdCommand `yaml:"load_data_command" mapstructure:"load_data_command"`
+	RemoveDataCommand cmdCommand `yaml:"remove_data_command" mapstructure:"remove_data_command"`
 }
 
 type portConfig struct {
@@ -36,9 +42,13 @@ type teardownConfig struct {
 	DockerName string
 }
 
+type cmdCommand struct {
+	Command string   `yaml:"command" mapstructure:"command"`
+	Args    []string `yaml:"args" mapstructure:"args"`
+}
+
 type dbCommand struct {
-	Command    string     `yaml:"command" mapstructure:"command"`
-	Args       []string   `yaml:"args" mapstructure:"args"`
+	CmdCommand cmdCommand `yaml:"cmd_command" mapstructure:"cmd_command"`
 	PortConfig portConfig `yaml:"port_config" mapstructure:"port_config"`
 }
 
@@ -49,8 +59,7 @@ type dbResetConfig struct {
 	DBConnections   []DatabaseSetting `yaml:"db_connections" mapstructure:"db_connections"`
 	DBRemoveCommand dbCommand         `yaml:"db_remove_command" mapstructure:"db_remove_command"`
 	DBStartCommand  dbCommand         `yaml:"db_start_command" mapstructure:"db_start_command"`
-	//DBRunCommand    dbCommand         `yaml:"db_run_command" mapstructure:"db_run_command"`
-	ValidateQuery string `yaml:"validate_query" mapstructure:"validate_query"`
+	ValidateQuery   string            `yaml:"validate_query" mapstructure:"validate_query"`
 }
 
 func initTestConfig() {
@@ -72,22 +81,6 @@ func initTestConfig() {
 		panic(err.Error())
 	}
 }
-
-// func initDB() {
-// 	if db == nil {
-// 		dbMutex.Lock()
-// 		defer dbMutex.Unlock()
-// 		if db == nil {
-// 			var err error
-// 			db, err = NewDBWithList(testConf.DBConnections, Postgres)
-
-// 			if err != nil {
-// 				panic(err.Error())
-// 			}
-
-// 		}
-// 	}
-// }
 
 func init() {
 	initTestConfig()

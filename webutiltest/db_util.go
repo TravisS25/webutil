@@ -67,7 +67,7 @@ func DBSetup(db webutil.QuerierTx, bindVar int) func() error {
 			}
 
 			logQuery := `delete from logging where id = ?;`
-			logQuery, args, err = webutil.InQueryRebind(bindVar, query, logID)
+			logQuery, args, err = webutil.InQueryRebind(bindVar, logQuery, logID)
 
 			if err != nil {
 				return errors.Wrap(err, "")
@@ -82,9 +82,9 @@ func DBSetup(db webutil.QuerierTx, bindVar int) func() error {
 			tableQuery := `delete from ` + dbTableName + ` where id = ?;`
 
 			if dbTableID != nil {
-				tableQuery, args, err = webutil.InQueryRebind(bindVar, query, dbTableID)
+				tableQuery, args, err = webutil.InQueryRebind(bindVar, tableQuery, dbTableID)
 			} else {
-				tableQuery, args, err = webutil.InQueryRebind(bindVar, query, dbTableUUID)
+				tableQuery, args, err = webutil.InQueryRebind(bindVar, tableQuery, dbTableUUID)
 			}
 
 			if err != nil {
