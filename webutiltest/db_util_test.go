@@ -1,11 +1,15 @@
 package webutiltest
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"testing"
 
 	"github.com/TravisS25/webutil/webutil"
+	"github.com/gofrs/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/viper"
 )
@@ -63,32 +67,42 @@ func TestDBSetupIntegrationTest(t *testing.T) {
 	var err error
 	var args []interface{}
 
+	buf := &bytes.Buffer{}
+
+	removeFn := func() error {
+		cmd := exec.Command(
+			testConf.DBTestConfig.RemoveDataCommand.Command,
+			testConf.DBTestConfig.RemoveDataCommand.Args...,
+		)
+		return cmd.Run()
+	}
+	defer removeFn()
+
 	cmd := exec.Command(
 		testConf.DBTestConfig.CreateDBCommand.Command,
 		testConf.DBTestConfig.CreateDBCommand.Args...,
 	)
+	cmd.Stderr = buf
 
 	if err = cmd.Run(); err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf(buf.String())
 	}
 
 	cmd = exec.Command(
 		testConf.DBTestConfig.LoadDataCommand.Command,
 		testConf.DBTestConfig.LoadDataCommand.Args...,
 	)
+	cmd.Stderr = buf
 
 	if err = cmd.Run(); err != nil {
-		cmd = exec.Command(
-			testConf.DBTestConfig.RemoveDataCommand.Command,
-			testConf.DBTestConfig.RemoveDataCommand.Args...,
-		)
-		cmd.Run()
-		t.Fatalf(err.Error())
+		removeFn()
+		t.Fatalf(buf.String())
 	}
 
 	db, err := webutil.NewDB(testConf.DBTestConfig.DBConnection, testConf.DBTestConfig.DBType)
 
 	if err != nil {
+		removeFn()
 		t.Fatalf(err.Error())
 	}
 
@@ -98,12 +112,46 @@ func TestDBSetupIntegrationTest(t *testing.T) {
 		values(1, 'user_profile', 'User Profile', 'last_name');
 		`,
 	); err != nil {
+		removeFn()
+		t.Fatalf(err.Error())
+	}
+
+	id, _ := uuid.NewV4()
+
+	type userProfile struct {
+		ID        int64   `json:"id,string"`
+		FirstName string  `json:"firstName"`
+		LastName  string  `json:"lastName"`
+		IsActive  bool    `json:"isActive"`
+		LastLogin *string `json:"lastLogin"`
+	}
+
+	user := userProfile{
+		ID:        1,
+		FirstName: "first",
+		LastName:  "last",
+		IsActive:  true,
+	}
+
+	userBytes, err := json.Marshal(user)
+
+	if err != nil {
+		removeFn()
+		t.Fatal(err.Error())
+	}
+
+	if _, err = db.Exec(
+		`
+		insert into user_profile(id, email, first_name, last_name, is_active, last_login)
+		values(1, 'test@email.com', 'first', 'last', true, null);
+		`,
+	); err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	query :=
 		`
-	insert into logging (id, data_created, data, primary_key_id, primary_key_uuid, been_viewed, database_action_id, database_table_id, user_profile_id)
+	insert into public.logging (id, date_created, data, primary_key_id, primary_key_uuid, been_viewed, database_action_id, database_table_id, user_profile_id)
 	values(?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 
@@ -116,12 +164,42 @@ func TestDBSetupIntegrationTest(t *testing.T) {
 		bindVar = sqlx.QUESTION
 	}
 
-	query, args, err = webutil.InQueryRebind(bindVar, query)
+	var emptyStr *string
 
-	_, err = db.Exec(
-		`
-		insert into logging (id, data_created, data, primary_key_id, primary_key_uuid, been_viewed, database_action_id, database_table_id, user_profile_id)
-		values();
-		`,
-	)
+	if query, args, err = webutil.InQueryRebind(
+		bindVar,
+		query,
+		id.String(),
+		emptyStr,
+		userBytes,
+		1,
+		emptyStr,
+		false,
+		1,
+		1,
+		1,
+	); err != nil {
+		removeFn()
+		t.Fatalf(err.Error())
+	}
+
+	fmt.Printf("made past rebind")
+	fmt.Printf("query: %s\n", query)
+	fmt.Printf("args: %v\n", args)
+
+	if _, err = db.Exec(query, args...); err != nil {
+		removeFn()
+		t.Fatalf(err.Error())
+	}
+
+	fmt.Printf("made past exec")
+
+	teardown := DBSetup(db, sqlx.DOLLAR)
+
+	if err = teardown(); err != nil {
+		removeFn()
+		t.Fatalf(err.Error())
+	}
+
+	fmt.Printf("made past teardown")
 }

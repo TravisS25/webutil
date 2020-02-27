@@ -2,12 +2,14 @@ CREATE TABLE IF NOT EXISTS user_profile(
     id serial primary key,
     email text not null unique,
     first_name text not null,
-    last_name text not null
+    last_name text not null,
+    is_active boolean not null,
+    last_login TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS user_group(
     id serial primary key,
-    user_group text not null unique,
+    user_group text not null unique
 );
 
 CREATE TABLE IF NOT EXISTS database_table(
