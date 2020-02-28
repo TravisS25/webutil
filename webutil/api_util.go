@@ -140,7 +140,18 @@ func LogoutUser(w http.ResponseWriter, r *http.Request, sessionStore sessions.St
 	return err
 }
 
-// GetUserGroups is wrapper for to returning group map from context of request
+// GetRouting is wrapper for returning routing map where
+// keys in map should be url templates of all routes
+// current user is allowed to access
+func GetRouting(r *http.Request) map[string]bool {
+	if r.Context().Value(RoutingCtxKey) != nil {
+		return r.Context().Value(RoutingCtxKey).(map[string]bool)
+	}
+
+	return nil
+}
+
+// GetUserGroups is wrapper for returning group map from context of request
 // where the keys are the groups the current user is in
 // If there is no groupctx, returns nil
 func GetUserGroups(r *http.Request) map[string]bool {
@@ -157,11 +168,11 @@ func GetUserGroups(r *http.Request) map[string]bool {
 // The search is based on OR logic so if any one of the given strings
 // is found, function will return true
 func HasGroup(r *http.Request, searchGroups ...string) bool {
-	groupMap := r.Context().Value(GroupCtxKey).(map[string]bool)
-
-	for _, searchGroup := range searchGroups {
-		if _, ok := groupMap[searchGroup]; ok {
-			return true
+	if groupMap := GetUserGroups(r); groupMap != nil {
+		for _, searchGroup := range searchGroups {
+			if _, ok := groupMap[searchGroup]; ok {
+				return true
+			}
 		}
 	}
 

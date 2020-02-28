@@ -47,6 +47,10 @@ var (
 	// to get all user groups current logged in user is in
 	GroupCtxKey = MiddlewareKey{KeyName: "groupName"}
 
+	// RoutingCtxKey is variable used as context key in middleware functions
+	// to extract what urls a logged in user is allowed to access
+	RoutingCtxKey = MiddlewareKey{KeyName: "routing"}
+
 	// MiddlewareUserCtxKey is variable used as context key in middleware
 	// functions to get a subset of user information of current
 	// logged in user
@@ -662,6 +666,16 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 				)
 				return
 			}
+
+			var ctx context.Context
+
+			if user != nil {
+				ctx = context.WithValue(r.Context(), RoutingCtxKey, urls)
+			} else {
+				ctx = context.WithValue(r.Context(), RoutingCtxKey, routing.nonUserURLs)
+			}
+
+			next.ServeHTTP(w, r.WithContext(ctx))
 		}
 
 		next.ServeHTTP(w, r)
