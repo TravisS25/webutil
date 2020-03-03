@@ -51,6 +51,8 @@ type TestCase struct {
 	ExpectedStatus int
 	// ExpectedBody is the expected response, if any, that given response will have
 	ExpectedBody string
+	// RunInParallel allows for tests to be run in parallel
+	RunInParallel bool
 	// ContextValues is used for adding context values with request
 	ContextValues map[interface{}]interface{}
 	// Header is for adding custom header to request
@@ -59,10 +61,9 @@ type TestCase struct {
 	Form interface{}
 	//URLValues is form information you wish to post in body of request
 	URLValues url.Values
-	// File is used to simulate a file be uploaded in request
-	// Use the Header option to add additional headers when needed
-	// Eg. "Content-type"
-	File io.Reader
+	// FileUploadConfs is used to simulate a request to upload file(s)
+	// to server
+	FileUploadConfs []FileUploadConfig
 	// Handler is the request handler that you which to test
 	Handler http.Handler
 	// ValidResponse allows user to take in response from api end
@@ -95,6 +96,25 @@ type filteredInt64ID struct {
 	Count int       `json:"count"`
 }
 
+// FileConfig is used in conjunction with FileUploadConfig to
+// set configuration settings to upload file to server
+type FileConfig struct {
+	// FilePath is file path to file to upload
+	FilePath string `json:"filePath" mapstructure:"file_path"`
+
+	// Params is extra parameters to add to file upload request
+	Params map[string]string `json:"params" mapstructure:"params"`
+}
+
+// FileUploadConfig is config struct used to set up configuration
+// to upload file(s) to server
+type FileUploadConfig struct {
+	// ParamName is name of parameter that is used to get multipart form
+	// uploaded from client
+	ParamName string       `json:"paramName" mapstructure:"param_name"`
+	FileConfs []FileConfig `json:"fileConfs" mapstructure:"file_confs"`
+}
+
 type Response struct {
 	ExpectedResult       interface{}
 	ValidateResponseFunc func(bodyResponse io.Reader, expectedResult interface{}) error
@@ -113,7 +133,11 @@ func NewRequestWithForm(method, url string, form interface{}) (*http.Request, er
 
 func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 	for _, testCase := range testCases {
-		t.Run(testCase.TestName, func(v *testing.T) {
+		tc := testCase
+		t.Run(tc.TestName, func(v *testing.T) {
+			if tc.RunInParallel {
+				t.Parallel()
+			}
 			panicked := true
 			defer func() {
 				if deferFunc != nil {
@@ -132,19 +156,17 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 			// If Form and File options are nil, init req without added parameters
 			// Else check whether Form or file option is selected.
 			// Right now, File option will overide Form option
-			if testCase.Form == nil && testCase.File == nil {
-				req, err = http.NewRequest(testCase.Method, testCase.RequestURL, nil)
+			if tc.Form == nil && tc.URLValues == nil && tc.FileUploadConfs == nil {
+				req, err = http.NewRequest(tc.Method, tc.RequestURL, nil)
 			} else {
-				if testCase.File != nil {
-					req, err = http.NewRequest(testCase.Method, testCase.RequestURL, testCase.File)
+				if tc.FileUploadConfs != nil {
+					req, err = NewFileUploadRequest(tc.FileUploadConfs, http.MethodPost, "/url")
 
 					if err != nil {
 						v.Fatal(err)
 					}
-
-					// req.Header.Set("Content-Type", testCase.FileConfig.ContentType)
-				} else if testCase.URLValues != nil {
-					req, err = http.NewRequest(testCase.Method, testCase.RequestURL, strings.NewReader(testCase.URLValues.Encode()))
+				} else if tc.URLValues != nil {
+					req, err = http.NewRequest(tc.Method, tc.RequestURL, strings.NewReader(tc.URLValues.Encode()))
 
 					if err != nil {
 						v.Fatal(err)
@@ -152,13 +174,13 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 				} else {
 					var buffer bytes.Buffer
 					encoder := json.NewEncoder(&buffer)
-					err = encoder.Encode(&testCase.Form)
+					err = encoder.Encode(&tc.Form)
 
 					if err != nil {
 						v.Fatal(err)
 					}
 
-					req, err = http.NewRequest(testCase.Method, testCase.RequestURL, &buffer)
+					req, err = http.NewRequest(tc.Method, tc.RequestURL, &buffer)
 
 					if err != nil {
 						v.Fatal(err)
@@ -166,13 +188,13 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 				}
 			}
 
-			req.Header = testCase.Header
+			req.Header = tc.Header
 
 			// If ContextValues is not nil, apply given context values to req
-			if testCase.ContextValues != nil {
+			if tc.ContextValues != nil {
 				ctx := req.Context()
 
-				for key, value := range testCase.ContextValues {
+				for key, value := range tc.ContextValues {
 					ctx = context.WithValue(ctx, key, value)
 				}
 
@@ -182,27 +204,27 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 			// Init recorder that will be written to based on the status
 			// we get from created request
 			rr := httptest.NewRecorder()
-			testCase.Handler.ServeHTTP(rr, req)
+			tc.Handler.ServeHTTP(rr, req)
 
 			// If status is not what was expected, print error
-			if status := rr.Code; status != testCase.ExpectedStatus {
-				v.Errorf("got status %d; want %d\n", status, testCase.ExpectedStatus)
+			if status := rr.Code; status != tc.ExpectedStatus {
+				v.Errorf("got status %d; want %d\n", status, tc.ExpectedStatus)
 				v.Errorf("body response: %s\n", rr.Body.String())
 			}
 
 			// If ExpectedBody option was given and does not equal what was
 			// returned, print error
-			if testCase.ExpectedBody != "" {
-				if testCase.ExpectedBody != rr.Body.String() {
-					v.Errorf("got body %s; want %s\n", rr.Body.String(), testCase.ExpectedBody)
+			if tc.ExpectedBody != "" {
+				if tc.ExpectedBody != rr.Body.String() {
+					v.Errorf("got body %s; want %s\n", rr.Body.String(), tc.ExpectedBody)
 
 				}
 			}
 
-			if testCase.ValidateResponse.ValidateResponseFunc != nil {
-				err = testCase.ValidateResponse.ValidateResponseFunc(
+			if tc.ValidateResponse.ValidateResponseFunc != nil {
+				err = tc.ValidateResponse.ValidateResponseFunc(
 					rr.Body,
-					testCase.ValidateResponse.ExpectedResult,
+					tc.ValidateResponse.ExpectedResult,
 				)
 
 				if err != nil {
@@ -210,8 +232,8 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 				}
 			}
 
-			if testCase.PostResponseValidation != nil {
-				if err = testCase.PostResponseValidation(); err != nil {
+			if tc.PostResponseValidation != nil {
+				if err = tc.PostResponseValidation(); err != nil {
 					v.Errorf(err.Error() + "\n")
 				}
 			}
@@ -857,57 +879,63 @@ func LoginUser(url string, loginForm interface{}) (string, error) {
 	return res.Header.Get(webutil.SetCookieHeader), nil
 }
 
-// NewFileUploadRequest creates a new file upload http request with optional extra params
-func NewFileUploadRequest(uri string, params map[string]string, paramName, path string) (*http.Request, error) {
-	body, contentType, err := FileBody(params, paramName, path)
+func NewFileUploadRequest(confs []FileUploadConfig, method, url string) (*http.Request, error) {
+	body, contentType, err := FileBody(confs)
 
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", uri, body)
+	req, err := http.NewRequest(method, url, body)
 	req.Header.Set("Content-Type", contentType)
 	return req, err
 }
 
-// FileBody is used to encapulate a form file request
-// Returns io.Reader of the file from path parameter along with
-// form content type
-func FileBody(params map[string]string, paramName, path string) (io.Reader, string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, "", err
-	}
-	defer file.Close()
-
+func FileBody(confs []FileUploadConfig) (io.Reader, string, error) {
+	var typ string
+	var err error
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile(paramName, filepath.Base(path))
-	if err != nil {
-		return nil, "", err
-	}
-	_, err = io.Copy(part, file)
 
-	if err != nil {
-		return nil, "", err
-	}
+	for _, v := range confs {
+		for _, t := range v.FileConfs {
+			file, err := os.Open(t.FilePath)
+			if err != nil {
+				return nil, "", err
+			}
+			defer file.Close()
 
-	if params != nil {
-		for key, val := range params {
-			err = writer.WriteField(key, val)
+			part, err := writer.CreateFormFile(v.ParamName, filepath.Base(t.FilePath))
+			if err != nil {
+				return nil, "", err
+			}
+			_, err = io.Copy(part, file)
 
 			if err != nil {
 				return nil, "", err
 			}
+
+			if t.Params != nil {
+				for key, val := range t.Params {
+					err = writer.WriteField(key, val)
+
+					if err != nil {
+						return nil, "", err
+					}
+				}
+			}
+
+			typ = writer.FormDataContentType()
 		}
 	}
 
 	err = writer.Close()
+
 	if err != nil {
 		return nil, "", err
 	}
 
-	return body, writer.FormDataContentType(), nil
+	return body, typ, nil
 }
 
 func CheckResponse(method, url string, expectedStatus int, header http.Header, form interface{}) (*http.Response, error) {

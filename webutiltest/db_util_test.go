@@ -23,7 +23,8 @@ var (
 )
 
 type testConfig struct {
-	DBTestConfig dbTestConfig `yaml:"db_test_config" mapstructure:"db_test_config"`
+	DBTestConfig        dbTestConfig       `yaml:"db_test_config" mapstructure:"db_test_config"`
+	TestFileUploadConfs []FileUploadConfig `yaml:"test_file_upload_confs" mapstructure:"test_file_upload_confs"`
 }
 
 type cmdCommand struct {
