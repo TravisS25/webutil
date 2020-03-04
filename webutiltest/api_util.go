@@ -160,7 +160,7 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 				req, err = http.NewRequest(tc.Method, tc.RequestURL, nil)
 			} else {
 				if tc.FileUploadConfs != nil {
-					req, err = NewFileUploadRequest(tc.FileUploadConfs, http.MethodPost, "/url")
+					req, err = NewFileUploadRequest(tc.FileUploadConfs, tc.Method, tc.RequestURL)
 
 					if err != nil {
 						v.Fatal(err)
