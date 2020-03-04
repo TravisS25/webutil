@@ -1387,7 +1387,7 @@ func InQueryRebind(bindType int, query string, args ...interface{}) (string, []i
 func HasFilterOrServerError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
 	if err != nil {
 		SetHTTPResponseDefaults(&config.ClientErrorResponse, http.StatusNotAcceptable, []byte(err.Error()))
-		SetHTTPResponseDefaults(&config.ServerErrorResponse, http.StatusInternalServerError, []byte(ErrServer.Error()))
+		SetHTTPResponseDefaults(&config.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
 
 		switch err.(type) {
 		case *FilterError, *SortError, *GroupError:

@@ -17,7 +17,6 @@ import (
 //////////////////////////////////////////////////////////////////
 
 const (
-	serverErrTxt     = "Server error"
 	forbiddenURLTxt  = "Forbidden to access url"
 	invalidCookieTxt = "Invalid cookie"
 )

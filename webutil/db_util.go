@@ -503,7 +503,7 @@ func defaultDBErrors(config *ServerErrorConfig) {
 	SetHTTPResponseDefaults(
 		&config.ServerErrorResponse,
 		http.StatusInternalServerError,
-		[]byte(ErrServer.Error()),
+		[]byte(serverErrTxt),
 	)
 }
 

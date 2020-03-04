@@ -55,19 +55,25 @@ const (
 	ContentTypePNG = "image/png"
 )
 
+const (
+	bodyRequiredTxt = "Request must have body"
+	invalidJSONTxt  = "Invalid json"
+	serverErrTxt    = "Server error, please try again later"
+)
+
 //////////////////////////////////////////////////////////////////
 //---------------------- CUSTOM ERRORS ------------------------
 //////////////////////////////////////////////////////////////////
 
 var (
-	// ErrBodyRequired is used for when a post/put request does not contain a body in request
-	ErrBodyRequired = errors.New("webutil: request must have body")
+	// errBodyRequired is used for when a post/put request does not contain a body in request
+	errBodyRequired = errors.New("webutil: " + bodyRequiredTxt)
 
-	// ErrInvalidJSON is used when there is an error unmarshalling a struct
-	ErrInvalidJSON = errors.New("webutil: invalid json")
+	// errInvalidJSON is used when there is an error unmarshalling a struct
+	errInvalidJSON = errors.New("webutil: " + invalidJSONTxt)
 
 	// ErrServer is used when there is a server error
-	ErrServer = errors.New("webutil: server error, please try again later")
+	//ErrServer = errors.New("webutil: server error, please try again later")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -82,7 +88,7 @@ func SetToken(w http.ResponseWriter, r *http.Request) {
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
 func SendPayload(w http.ResponseWriter, payload interface{}, errResp HTTPResponseConfig) error {
-	SetHTTPResponseDefaults(&errResp, http.StatusInternalServerError, []byte(ErrInvalidJSON.Error()))
+	SetHTTPResponseDefaults(&errResp, http.StatusInternalServerError, []byte(invalidJSONTxt))
 	jsonString, err := json.Marshal(payload)
 
 	if err != nil {

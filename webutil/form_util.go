@@ -664,16 +664,16 @@ func HasFormErrors(
 	config ServerErrorConfig,
 ) bool {
 	if err != nil {
-		SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(ErrServer.Error()))
+		SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(serverErrTxt))
 		SetHTTPResponseDefaults(&config.ClientErrorResponse, 406, nil)
 
 		switch err {
-		case ErrBodyRequired:
+		case errBodyRequired:
 			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
-			w.Write([]byte(ErrBodyRequired.Error()))
-		case ErrInvalidJSON:
+			w.Write([]byte(bodyRequiredTxt))
+		case errInvalidJSON:
 			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
-			w.Write([]byte(ErrInvalidJSON.Error()))
+			w.Write([]byte(invalidJSONTxt))
 		default:
 			if payload, ok := err.(validation.Errors); ok {
 				w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
@@ -710,11 +710,11 @@ func GetFormSelections(
 	var err error
 	var newDB *sqlx.DB
 
-	SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(ErrServer.Error()))
+	SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(serverErrTxt))
 
 	getFormSelectionsFromDB := func() ([]FormSelection, error) {
 		if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
-			http.Error(w, ErrServer.Error(), http.StatusInternalServerError)
+			http.Error(w, serverErrTxt, http.StatusInternalServerError)
 			return nil, err
 		}
 
@@ -788,7 +788,7 @@ func GetFormSelections(
 	forms := make([]FormSelection, 0)
 
 	if err = json.Unmarshal(jsonBytes, &forms); err != nil {
-		http.Error(w, ErrServer.Error(), http.StatusInternalServerError)
+		http.Error(w, serverErrTxt, http.StatusInternalServerError)
 		return nil, err
 	}
 
@@ -799,7 +799,7 @@ func GetFormSelections(
 // to the passed struct
 //
 // The excludeMethods parameter allows user to pass certain http methods
-// that skip decoding the request body if nil else will throw ErrBodyRequired error
+// that skip decoding the request body if nil else will throw errBodyRequired error
 func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...string) error {
 	canSkip := false
 
@@ -814,11 +814,11 @@ func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...s
 		dec := json.NewDecoder(req.Body)
 
 		if err := dec.Decode(&form); err != nil {
-			return ErrInvalidJSON
+			return errInvalidJSON
 		}
 	} else {
 		if !canSkip {
-			return ErrBodyRequired
+			return errBodyRequired
 		}
 	}
 

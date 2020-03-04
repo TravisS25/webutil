@@ -188,7 +188,11 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 				}
 			}
 
-			req.Header = tc.Header
+			if tc.Header != nil {
+				for k, v := range tc.Header {
+					req.Header[k] = v
+				}
+			}
 
 			// If ContextValues is not nil, apply given context values to req
 			if tc.ContextValues != nil {
@@ -887,12 +891,17 @@ func NewFileUploadRequest(confs []FileUploadConfig, method, url string) (*http.R
 	}
 
 	req, err := http.NewRequest(method, url, body)
-	req.Header.Set("Content-Type", contentType)
+
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 	return req, err
 }
 
 func FileBody(confs []FileUploadConfig) (io.Reader, string, error) {
-	var typ string
+	// var typ string
 	var err error
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -924,11 +933,10 @@ func FileBody(confs []FileUploadConfig) (io.Reader, string, error) {
 					}
 				}
 			}
-
-			typ = writer.FormDataContentType()
 		}
 	}
 
+	typ := writer.FormDataContentType()
 	err = writer.Close()
 
 	if err != nil {

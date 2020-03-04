@@ -158,7 +158,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 func TestHasFormErrorsUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 
-	if !HasFormErrors(rr, ErrBodyRequired, ServerErrorConfig{}) {
+	if !HasFormErrors(rr, errBodyRequired, ServerErrorConfig{}) {
 		t.Errorf("should have form error\n")
 	}
 	if rr.Result().StatusCode != http.StatusNotAcceptable {
@@ -169,8 +169,8 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
-	if buf.String() != ErrBodyRequired.Error() {
-		t.Errorf("error response should be %s\n", ErrBodyRequired.Error())
+	if buf.String() != bodyRequiredTxt {
+		t.Errorf("error response should be %s\n", bodyRequiredTxt)
 	}
 	if rr.Result().StatusCode != http.StatusNotAcceptable {
 		t.Errorf("returned status should be 406\n")
@@ -178,12 +178,12 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, ErrInvalidJSON, ServerErrorConfig{})
+	HasFormErrors(rr, errInvalidJSON, ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
-	if buf.String() != ErrInvalidJSON.Error() {
-		t.Errorf("error response should be %s\n", ErrInvalidJSON.Error())
+	if buf.String() != invalidJSONTxt {
+		t.Errorf("error response should be %s\n", invalidJSONTxt)
 	}
 	if rr.Result().StatusCode != http.StatusNotAcceptable {
 		t.Errorf("returned status should be 406\n")
@@ -218,8 +218,8 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 	if rr.Result().StatusCode != http.StatusInternalServerError {
 		t.Errorf("returned status should be 500\n")
 	}
-	if buf.String() != ErrServer.Error() {
-		t.Errorf("error response should be %s\n", ErrServer.Error())
+	if buf.String() != serverErrTxt {
+		t.Errorf("error response should be %s\n", serverErrTxt)
 		t.Errorf("err: %s\n", buf.String())
 	}
 }
@@ -240,8 +240,8 @@ func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
 	if err = CheckBodyAndDecode(req, f); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err.Error() != ErrBodyRequired.Error() {
-			t.Errorf("should have ErrBodyRequired error\n")
+		if err.Error() != errBodyRequired.Error() {
+			t.Errorf("should have errBodyRequired error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
 	}
@@ -257,8 +257,8 @@ func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
 	if err = CheckBodyAndDecode(req, errors.New("error")); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err.Error() != ErrInvalidJSON.Error() {
-			t.Errorf("should have ErrInvalidJSON error\n")
+		if err.Error() != errInvalidJSON.Error() {
+			t.Errorf("should have errInvalidJSON error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
 	}
@@ -273,7 +273,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 		ServerErrorConfig: ServerErrorConfig{
 			RecoverConfig: RecoverConfig{
 				RecoverDB: func(err error) (*sqlx.DB, error) {
-					return nil, ErrServer
+					return nil, errors.New(serverErrTxt)
 				},
 			},
 		},
@@ -284,7 +284,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 		t.Fatalf("fatal err: %s\n", err.Error())
 	}
 
-	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
+	mockDB.ExpectQuery("select").WillReturnError(errors.New(serverErrTxt))
 
 	newDB := &sqlx.DB{
 		DB: db,
@@ -303,7 +303,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 		if rr.Result().StatusCode != http.StatusInternalServerError {
 			t.Errorf("should have 500 error\n")
 		}
-		if buf.String() != ErrServer.Error() {
+		if buf.String() != serverErrTxt {
 			t.Errorf("should have ErrServer error\n")
 		}
 	}
@@ -311,7 +311,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	buf.Reset()
 	rr = httptest.NewRecorder()
 	config.ServerErrorConfig.RecoverDB = nil
-	mockDB.ExpectQuery("select").WillReturnError(ErrServer)
+	mockDB.ExpectQuery("select").WillReturnError(errors.New(serverErrTxt))
 
 	if _, err = GetFormSelections(
 		rr,
@@ -326,7 +326,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 		if rr.Result().StatusCode != http.StatusInternalServerError {
 			t.Errorf("should have 500 error\n")
 		}
-		if buf.String() != ErrServer.Error() {
+		if buf.String() != serverErrTxt {
 			t.Errorf("should have ErrServer error\n")
 		}
 	}
@@ -354,7 +354,7 @@ func TestGetFormSelectionsUnitTest(t *testing.T) {
 	mockCacheStore1 := &MockCacheStore{}
 	defer mockCacheStore1.AssertExpectations(t)
 	config.CacheConfig.Cache = mockCacheStore1
-	mockCacheStore1.On("Get", testifymock.Anything).Return(nil, ErrServer)
+	mockCacheStore1.On("Get", testifymock.Anything).Return(nil, errors.New(serverErrTxt))
 	mockDB.ExpectQuery("").WillReturnRows(rows)
 
 	if _, err = GetFormSelections(
