@@ -476,7 +476,7 @@ func (v *validateRequiredRule) Validate(value interface{}) error {
 		val = strings.TrimSpace(val)
 
 		if len(val) == 0 {
-			return errors.New(RequiredTxt)
+			return v.err
 		}
 
 		return nil
@@ -493,6 +493,27 @@ func (v *validateRequiredRule) Validate(value interface{}) error {
 		temp := value.(*string)
 		err = checkValue(*temp)
 	default:
+		switch reflect.TypeOf(value).Kind() {
+		case reflect.Slice:
+			s := reflect.ValueOf(value)
+
+			for i := 0; i < s.Len(); i++ {
+				sliceVal := s.Index(i).Interface()
+
+				switch sliceVal.(type) {
+				case string:
+					err = checkValue(sliceVal.(string))
+				case *string:
+					temp := sliceVal.(*string)
+					err = checkValue(*temp)
+				}
+
+				if err != nil {
+					return v.err
+				}
+			}
+		}
+
 		return validation.Required.Validate(value)
 	}
 

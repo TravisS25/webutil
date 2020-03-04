@@ -34,7 +34,7 @@ func TestValidateRequiredRuleUnitTest(t *testing.T) {
 		t.Errorf("should have error\n")
 	} else {
 		if err.Error() != RequiredTxt {
-			t.Errorf("should have ErrRequiredValidator error\n")
+			t.Errorf("should have required error\n")
 		}
 	}
 
@@ -46,6 +46,26 @@ func TestValidateRequiredRuleUnitTest(t *testing.T) {
 	}
 
 	if err = rule.Validate(&strVal); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	if err = rule.Validate([]string{"hi", "there", ""}); err == nil {
+		t.Errorf("should have error\n")
+	} else {
+		if err.Error() != RequiredTxt {
+			t.Errorf("should have required errors\n")
+		}
+	}
+
+	if err = rule.Validate([]string{"hi", "there"}); err != nil {
+		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
+	}
+
+	hi := "hi"
+
+	if err = rule.Validate([]interface{}{&hi, "there", 1}); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
