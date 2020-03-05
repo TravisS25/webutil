@@ -66,10 +66,9 @@ type TestCase struct {
 	FileUploadConfs []FileUploadConfig
 	// Handler is the request handler that you which to test
 	Handler http.Handler
-	// ValidResponse allows user to take in response from api end
+	// ValidResponse allows user to take in response from api end point
 	// and determine if the given response is the expected one
-	// ValidResponse func(bodyResponse io.Reader) (bool, error)
-	ValidateResponse Response
+	ValidateResponse func(res *http.Response) error
 	// PostResponse is used to validate anything a user wishes after api is
 	// done executing.  This is mainly intended to be used for querying
 	// against a database after POST/PUT/DELETE request to validate that
@@ -117,7 +116,7 @@ type FileUploadConfig struct {
 
 type Response struct {
 	ExpectedResult       interface{}
-	ValidateResponseFunc func(bodyResponse io.Reader, expectedResult interface{}) error
+	ValidateResponseFunc func(bodyResponse *http.Response, expectedResult interface{}) error
 }
 
 func NewRequestWithForm(method, url string, form interface{}) (*http.Request, error) {
@@ -220,18 +219,13 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 			// returned, print error
 			if tc.ExpectedBody != "" {
 				if tc.ExpectedBody != rr.Body.String() {
-					v.Errorf("got body %s; want %s\n", rr.Body.String(), tc.ExpectedBody)
+					v.Errorf("got body '%s'; want '%s'\n", rr.Body.String(), tc.ExpectedBody)
 
 				}
 			}
 
-			if tc.ValidateResponse.ValidateResponseFunc != nil {
-				err = tc.ValidateResponse.ValidateResponseFunc(
-					rr.Body,
-					tc.ValidateResponse.ExpectedResult,
-				)
-
-				if err != nil {
+			if tc.ValidateResponse != nil {
+				if err = tc.ValidateResponse(rr.Result()); err != nil {
 					v.Errorf(err.Error() + "\n")
 				}
 			}
