@@ -114,11 +114,6 @@ type FileUploadConfig struct {
 	FileConfs []FileConfig `json:"fileConfs" mapstructure:"file_confs"`
 }
 
-type Response struct {
-	ExpectedResult       interface{}
-	ValidateResponseFunc func(bodyResponse *http.Response, expectedResult interface{}) error
-}
-
 func NewRequestWithForm(method, url string, form interface{}) (*http.Request, error) {
 	if form != nil {
 		var buffer bytes.Buffer
@@ -135,7 +130,7 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 		tc := testCase
 		t.Run(tc.TestName, func(v *testing.T) {
 			if tc.RunInParallel {
-				t.Parallel()
+				v.Parallel()
 			}
 			panicked := true
 			defer func() {
