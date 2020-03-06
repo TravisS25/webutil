@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS user_profile(
     id serial primary key,
     email text not null unique,
+    password text not null,
     first_name text not null,
     last_name text not null,
     is_active boolean not null,
