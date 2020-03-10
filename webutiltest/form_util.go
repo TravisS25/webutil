@@ -84,7 +84,7 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 			formTest.URL = "/url"
 		}
 
-		t.Run(formTest.TestName, func(t *testing.T) {
+		t.Run(formTest.TestName, func(s *testing.T) {
 			var formErr error
 			var form interface{}
 
@@ -105,14 +105,14 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 				jsonBytes, err := json.Marshal(&formTest.Form)
 
 				if err != nil {
-					t.Fatalf(err.Error())
+					s.Fatalf(err.Error())
 				}
 
 				buf := bytes.NewBuffer(jsonBytes)
 				req, err := http.NewRequest(formTest.Method, formTest.URL, buf)
 
 				if err != nil {
-					t.Fatalf(err.Error())
+					s.Fatalf(err.Error())
 				}
 
 				if formTest.ContextValues != nil {
@@ -131,7 +131,7 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 
 			if formErr == nil {
 				if formTest.ValidationErrors != nil {
-					t.Errorf("Form has no errors, but 'ValidationErrors' was passed\n")
+					s.Errorf("Form has no errors, but 'ValidationErrors' was passed\n")
 				}
 			} else {
 				if validationErrors, ok := formErr.(validation.Errors); ok {
@@ -140,10 +140,10 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 							err := formValidation(t, key, fErr, expectedVal)
 
 							if err != nil {
-								t.Errorf(err.Error())
+								s.Errorf(err.Error())
 							}
 						} else {
-							t.Errorf("Key \"%s\" found in \"ValidationErrors\" that is not in form errors\n\n", key)
+							s.Errorf("Key \"%s\" found in \"ValidationErrors\" that is not in form errors\n\n", key)
 						}
 					}
 
@@ -152,10 +152,10 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 							err := formValidation(t, k, v, fErr)
 
 							if err != nil {
-								t.Errorf(err.Error())
+								s.Errorf(err.Error())
 							}
 						} else {
-							t.Errorf(
+							s.Errorf(
 								"Key \"%s\" found in form errors that is not in \"ValidationErrors\"\n  Threw err: %s\n\n",
 								k,
 								v.Error(),
@@ -164,7 +164,7 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 					}
 				} else {
 					if formTest.InternalError != formErr.Error() {
-						t.Errorf("Internal Error: %s\n", formErr.Error())
+						s.Errorf("Internal Error: %s\n", formErr.Error())
 					}
 				}
 			}

@@ -66,11 +66,11 @@ const (
 //////////////////////////////////////////////////////////////////
 
 var (
-	// errBodyRequired is used for when a post/put request does not contain a body in request
-	errBodyRequired = errors.New("webutil: " + bodyRequiredTxt)
+	// ErrBodyRequired is used for when a post/put request does not contain a body in request
+	ErrBodyRequired = errors.New("webutil: " + bodyRequiredTxt)
 
-	// errInvalidJSON is used when there is an error unmarshalling a struct
-	errInvalidJSON = errors.New("webutil: " + invalidJSONTxt)
+	// ErrInvalidJSON is used when there is an error unmarshalling a struct
+	ErrInvalidJSON = errors.New("webutil: " + invalidJSONTxt)
 
 	// ErrServer is used when there is a server error
 	//ErrServer = errors.New("webutil: server error, please try again later")

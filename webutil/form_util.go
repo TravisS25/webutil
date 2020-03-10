@@ -668,10 +668,10 @@ func HasFormErrors(
 		SetHTTPResponseDefaults(&config.ClientErrorResponse, 406, nil)
 
 		switch err {
-		case errBodyRequired:
+		case ErrBodyRequired:
 			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
 			w.Write([]byte(bodyRequiredTxt))
-		case errInvalidJSON:
+		case ErrInvalidJSON:
 			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
 			w.Write([]byte(invalidJSONTxt))
 		default:
@@ -799,7 +799,7 @@ func GetFormSelections(
 // to the passed struct
 //
 // The excludeMethods parameter allows user to pass certain http methods
-// that skip decoding the request body if nil else will throw errBodyRequired error
+// that skip decoding the request body if nil else will throw ErrBodyRequired error
 func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...string) error {
 	canSkip := false
 
@@ -814,11 +814,11 @@ func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...s
 		dec := json.NewDecoder(req.Body)
 
 		if err := dec.Decode(&form); err != nil {
-			return errInvalidJSON
+			return ErrInvalidJSON
 		}
 	} else {
 		if !canSkip {
-			return errBodyRequired
+			return ErrBodyRequired
 		}
 	}
 

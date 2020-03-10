@@ -158,7 +158,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 func TestHasFormErrorsUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 
-	if !HasFormErrors(rr, errBodyRequired, ServerErrorConfig{}) {
+	if !HasFormErrors(rr, ErrBodyRequired, ServerErrorConfig{}) {
 		t.Errorf("should have form error\n")
 	}
 	if rr.Result().StatusCode != http.StatusNotAcceptable {
@@ -178,7 +178,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, errInvalidJSON, ServerErrorConfig{})
+	HasFormErrors(rr, ErrInvalidJSON, ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
@@ -240,8 +240,8 @@ func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
 	if err = CheckBodyAndDecode(req, f); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err.Error() != errBodyRequired.Error() {
-			t.Errorf("should have errBodyRequired error\n")
+		if err.Error() != ErrBodyRequired.Error() {
+			t.Errorf("should have ErrBodyRequired error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
 	}
@@ -257,8 +257,8 @@ func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
 	if err = CheckBodyAndDecode(req, errors.New("error")); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if err.Error() != errInvalidJSON.Error() {
-			t.Errorf("should have errInvalidJSON error\n")
+		if err.Error() != ErrInvalidJSON.Error() {
+			t.Errorf("should have ErrInvalidJSON error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
 	}
