@@ -63,18 +63,15 @@ type TestCase struct {
 	URLValues url.Values
 	// FileUploadConfs is used to simulate a request to upload file(s)
 	// to server
-	FileUploadConfs []FileUploadConfig
+	FileUploadConf *FileUploadConfig
 	// Handler is the request handler that you which to test
 	Handler http.Handler
-	// ValidResponse allows user to take in response from api end point
-	// and determine if the given response is the expected one
-	ValidateResponse func(res *http.Response) error
 	// PostResponse is used to validate anything a user wishes after api is
 	// done executing.  This is mainly intended to be used for querying
 	// against a database after POST/PUT/DELETE request to validate that
 	// proper things were written to the database.  Could also be used
 	// for clean up
-	PostResponseValidation func() error
+	PostResponseValidation func(res *http.Response) error
 }
 
 type intID struct {
@@ -95,8 +92,9 @@ type filteredInt64ID struct {
 	Count int       `json:"count"`
 }
 
-// FileConfig is used in conjunction with FileUploadConfig to
-// set configuration settings to upload file to server
+// FileConfig is used in conjunction with ParamConfig to
+// set configuration settings to upload file from filesystem
+// along with any params
 type FileConfig struct {
 	// FilePath is file path to file to upload
 	FilePath string `json:"filePath" mapstructure:"file_path"`
@@ -105,13 +103,23 @@ type FileConfig struct {
 	Params map[string]string `json:"params" mapstructure:"params"`
 }
 
+// ParamConfig is used in conjunction with FileUploadConfig to set
+// the request name for files to be uploaded
+type ParamConfig struct {
+	// ParamName is name of parameter that is used to get multipart form
+	// uploaded from client
+	ParamName string `json:"paramName" mapstructure:"param_name"`
+
+	// FileConfs is slice of file configs to be used to simulate
+	// uploading files
+	FileConfs []FileConfig `json:"fileConfs" mapstructure:"file_confs"`
+}
+
 // FileUploadConfig is config struct used to set up configuration
 // to upload file(s) to server
 type FileUploadConfig struct {
-	// ParamName is name of parameter that is used to get multipart form
-	// uploaded from client
-	ParamName string       `json:"paramName" mapstructure:"param_name"`
-	FileConfs []FileConfig `json:"fileConfs" mapstructure:"file_confs"`
+	MaxMemory  int64
+	ParamConfs []ParamConfig
 }
 
 func NewRequestWithForm(method, url string, form interface{}) (*http.Request, error) {
@@ -147,17 +155,21 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 			var req *http.Request
 			var err error
 
-			// If Form and File options are nil, init req without added parameters
+			// If Form, URLValues and FileUploadConf options are nil, init req without added parameters
 			// Else check whether Form or file option is selected.
-			// Right now, File option will overide Form option
-			if tc.Form == nil && tc.URLValues == nil && tc.FileUploadConfs == nil {
+			// Right now, FileUploadConf option will overide Form option
+			if tc.Form == nil && tc.URLValues == nil && tc.FileUploadConf == nil {
 				req, err = http.NewRequest(tc.Method, tc.RequestURL, nil)
 			} else {
-				if tc.FileUploadConfs != nil {
-					req, err = NewFileUploadRequest(tc.FileUploadConfs, tc.Method, tc.RequestURL)
+				if tc.FileUploadConf != nil {
+					req, err = NewFileUploadRequest(tc.FileUploadConf.ParamConfs, tc.Method, tc.RequestURL)
 
 					if err != nil {
 						v.Fatal(err)
+					}
+
+					if err = req.ParseMultipartForm(tc.FileUploadConf.MaxMemory); err != nil {
+						t.Fatalf(err.Error())
 					}
 				} else if tc.URLValues != nil {
 					req, err = http.NewRequest(tc.Method, tc.RequestURL, strings.NewReader(tc.URLValues.Encode()))
@@ -219,14 +231,8 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 				}
 			}
 
-			if tc.ValidateResponse != nil {
-				if err = tc.ValidateResponse(rr.Result()); err != nil {
-					v.Errorf(err.Error() + "\n")
-				}
-			}
-
 			if tc.PostResponseValidation != nil {
-				if err = tc.PostResponseValidation(); err != nil {
+				if err = tc.PostResponseValidation(rr.Result()); err != nil {
 					v.Errorf(err.Error() + "\n")
 				}
 			}
@@ -872,7 +878,7 @@ func LoginUser(url string, loginForm interface{}) (string, error) {
 	return res.Header.Get(webutil.SetCookieHeader), nil
 }
 
-func NewFileUploadRequest(confs []FileUploadConfig, method, url string) (*http.Request, error) {
+func NewFileUploadRequest(confs []ParamConfig, method, url string) (*http.Request, error) {
 	body, contentType, err := FileBody(confs)
 
 	if err != nil {
@@ -889,36 +895,42 @@ func NewFileUploadRequest(confs []FileUploadConfig, method, url string) (*http.R
 	return req, err
 }
 
-func FileBody(confs []FileUploadConfig) (io.Reader, string, error) {
+func FileBody(confs []ParamConfig) (io.Reader, string, error) {
 	// var typ string
 	var err error
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
 	for _, v := range confs {
+		if v.FileConfs == nil {
+			return nil, "", errors.New("FileConfs must be set")
+		}
+
 		for _, t := range v.FileConfs {
-			file, err := os.Open(t.FilePath)
-			if err != nil {
-				return nil, "", err
-			}
-			defer file.Close()
+			if t.FilePath != "" {
+				file, err := os.Open(t.FilePath)
+				if err != nil {
+					return nil, "", err
+				}
+				defer file.Close()
 
-			part, err := writer.CreateFormFile(v.ParamName, filepath.Base(t.FilePath))
-			if err != nil {
-				return nil, "", err
-			}
-			_, err = io.Copy(part, file)
+				part, err := writer.CreateFormFile(v.ParamName, filepath.Base(t.FilePath))
+				if err != nil {
+					return nil, "", err
+				}
+				_, err = io.Copy(part, file)
 
-			if err != nil {
-				return nil, "", err
-			}
+				if err != nil {
+					return nil, "", err
+				}
 
-			if t.Params != nil {
-				for key, val := range t.Params {
-					err = writer.WriteField(key, val)
+				if t.Params != nil {
+					for key, val := range t.Params {
+						err = writer.WriteField(key, val)
 
-					if err != nil {
-						return nil, "", err
+						if err != nil {
+							return nil, "", err
+						}
 					}
 				}
 			}

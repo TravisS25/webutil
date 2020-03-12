@@ -34,6 +34,10 @@ type FormRequestConfig struct {
 	// Validate is interface for struct that will validate form - Optional
 	Validator webutil.RequestValidator
 
+	// FileUploadConf is used to simulate file upload to request and be used
+	// within form validation
+	FileUploadConf *FileUploadConfig
+
 	// Form is form values to use to inject into request - Required
 	Form interface{}
 
@@ -74,8 +78,8 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 		if formTest.TestName == "" {
 			t.Fatalf("TestName required")
 		}
-		if formTest.Validatable == nil && formTest.Validator == nil {
-			t.Fatalf("Validatable or validator is required")
+		if formTest.Validatable == nil && formTest.Validator == nil && formTest.FileUploadConf == nil {
+			t.Fatalf("Validatable, Validator or FileUploadConfs is required")
 		}
 		if formTest.Method == "" {
 			formTest.Method = http.MethodGet
@@ -88,6 +92,9 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 			var formErr error
 			var form interface{}
 
+			var req *http.Request
+			var err error
+
 			panicked := true
 			defer func() {
 				if deferFunc != nil && panicked {
@@ -99,22 +106,7 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 				}
 			}()
 
-			if formTest.Validatable != nil {
-				formErr = formTest.Validatable.Validate()
-			} else {
-				jsonBytes, err := json.Marshal(&formTest.Form)
-
-				if err != nil {
-					s.Fatalf(err.Error())
-				}
-
-				buf := bytes.NewBuffer(jsonBytes)
-				req, err := http.NewRequest(formTest.Method, formTest.URL, buf)
-
-				if err != nil {
-					s.Fatalf(err.Error())
-				}
-
+			setFormValues := func() {
 				if formTest.ContextValues != nil {
 					ctx := req.Context()
 
@@ -127,6 +119,41 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 
 				req = mux.SetURLVars(req, formTest.RouterValues)
 				form, formErr = formTest.Validator.Validate(req, formTest.Instance)
+			}
+
+			if formTest.Validatable != nil {
+				formErr = formTest.Validatable.Validate()
+			} else if formTest.Form != nil {
+				jsonBytes, err := json.Marshal(&formTest.Form)
+
+				if err != nil {
+					s.Fatalf(err.Error())
+				}
+
+				buf := bytes.NewBuffer(jsonBytes)
+				req, err = http.NewRequest(formTest.Method, formTest.URL, buf)
+
+				if err != nil {
+					s.Fatalf(err.Error())
+				}
+
+				setFormValues()
+			} else {
+				req, err = NewFileUploadRequest(
+					formTest.FileUploadConf.ParamConfs,
+					formTest.Method,
+					formTest.URL,
+				)
+
+				if err != nil {
+					s.Fatal(err)
+				}
+
+				if err = req.ParseMultipartForm(formTest.FileUploadConf.MaxMemory); err != nil {
+					s.Fatalf(err.Error())
+				}
+
+				setFormValues()
 			}
 
 			if formErr == nil {
