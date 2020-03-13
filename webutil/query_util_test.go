@@ -1273,18 +1273,18 @@ func TestReplaceGroupFieldsUnitTest(t *testing.T) {
 		},
 	}
 
-	if err = ReplaceGroupFields(&query, groups, fields); err == nil {
+	if err = ReplaceGroupFields(&query, groups, fields, false); err == nil {
 		t.Errorf("should have error\n")
 	}
 
 	groups[0].Field = idField
 	groups = append(groups, Group{Field: nameField})
 
-	if err = ReplaceGroupFields(&query, groups, fields2); err == nil {
+	if err = ReplaceGroupFields(&query, groups, fields2, false); err == nil {
 		t.Errorf("should have error\n")
 	}
 
-	if err = ReplaceGroupFields(&query, groups, fields); err != nil {
+	if err = ReplaceGroupFields(&query, groups, fields, false); err != nil {
 		t.Errorf("should not have error\n")
 	}
 }

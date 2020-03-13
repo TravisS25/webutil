@@ -767,6 +767,7 @@ func GetFilterReplacements(
 			query,
 			queryConf.PrependFilterFields,
 			fields,
+			true,
 		); err != nil {
 			return nil, nil, errors.Wrap(err, "")
 		}
@@ -786,7 +787,7 @@ func GetFilterReplacements(
 				*query += " and"
 			}
 
-			if replacements, err = ReplaceFilterFields(query, filters, fields); err != nil {
+			if replacements, err = ReplaceFilterFields(query, filters, fields, false); err != nil {
 				return nil, nil, errors.Wrap(err, "")
 			}
 		}
@@ -842,6 +843,7 @@ func GetSortReplacements(
 			query,
 			queryConf.PrependSortFields,
 			fields,
+			true,
 		); err != nil {
 			return nil, errors.Wrap(err, "")
 		}
@@ -861,7 +863,7 @@ func GetSortReplacements(
 				*query += ","
 			}
 
-			if err = ReplaceSortFields(query, sortSlice, fields); err != nil {
+			if err = ReplaceSortFields(query, sortSlice, fields, false); err != nil {
 				return nil, errors.Wrap(err, "")
 			}
 		}
@@ -909,6 +911,7 @@ func GetGroupReplacements(
 			query,
 			queryConf.PrependGroupFields,
 			fields,
+			true,
 		); err != nil {
 			return nil, errors.Wrap(err, "")
 		}
@@ -928,7 +931,7 @@ func GetGroupReplacements(
 				*query += ","
 			}
 
-			if err = ReplaceGroupFields(query, groupSlice, fields); err != nil {
+			if err = ReplaceGroupFields(query, groupSlice, fields, false); err != nil {
 				return nil, errors.Wrap(err, "")
 			}
 		}
@@ -1067,42 +1070,50 @@ func decodeQueryParams(req FormRequest, paramName string, val interface{}) error
 // along with verifying that they have right values and applying changes to query
 // This function does not apply "where" string for query so one must do it before
 // passing query
-func ReplaceFilterFields(query *string, filters []Filter, fields DbFields) ([]interface{}, error) {
+func ReplaceFilterFields(query *string, filters []Filter, fields DbFields, isPrependFilters bool) ([]interface{}, error) {
 	var err error
 	replacements := make([]interface{}, 0, len(filters))
 
-	for i, v := range filters {
-		var r interface{}
+	applyCheck := func(idx int, filterVal Filter, dbField string) error {
+		var val interface{}
 
-		// Check if current filter is within our fields map
-		// If it is, check that it is allowed to be filtered
-		// by and then check if given parameters are valid
-		// If valid, apply filter to query
-		// Else throw error
-		if conf, ok := fields[v.Field]; ok {
-			if !conf.OperationConf.CanFilterBy {
+		if val, err = FilterCheck(filterVal); err != nil {
+			return errors.Wrap(err, "")
+		}
+
+		replacements = append(replacements, val)
+		applyAnd := true
+
+		if idx == len(filters)-1 {
+			applyAnd = false
+		}
+
+		filterVal.Field = dbField
+		ApplyFilter(query, filterVal, applyAnd)
+
+		return nil
+	}
+
+	for i, v := range filters {
+		if !isPrependFilters {
+			// Check if current filter is within our fields map
+			// If it is, check that it is allowed to be filtered
+			// by and then check if given parameters are valid
+			// If valid, apply filter to query
+			// Else throw error
+			if conf, ok := fields[v.Field]; ok && conf.OperationConf.CanFilterBy {
+				if err = applyCheck(i, v, conf.DBField); err != nil {
+					return nil, err
+				}
+			} else {
 				filterErr := &FilterError{queryError: &queryError{}}
-				filterErr.setInvalidOperation(v.Field, filter)
+				filterErr.setInvalidField(v.Field)
 				return nil, errors.Wrap(filterErr, "")
 			}
-
-			if r, err = FilterCheck(v); err != nil {
-				return nil, errors.Wrap(err, "")
-			}
-
-			replacements = append(replacements, r)
-			applyAnd := true
-
-			if i == len(filters)-1 {
-				applyAnd = false
-			}
-
-			v.Field = conf.DBField
-			ApplyFilter(query, v, applyAnd)
 		} else {
-			filterErr := &FilterError{queryError: &queryError{}}
-			filterErr.setInvalidField(v.Field)
-			return nil, errors.Wrap(filterErr, "")
+			if err = applyCheck(i, v, fields[v.Field].DBField); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -1113,38 +1124,46 @@ func ReplaceFilterFields(query *string, filters []Filter, fields DbFields) ([]in
 // along with verifying that they have right values and applying changes to query
 // This function does not apply "order by" string for query so one must do it before
 // passing query
-func ReplaceSortFields(query *string, sorts []Sort, fields DbFields) error {
+func ReplaceSortFields(query *string, sorts []Sort, fields DbFields, isPrependSort bool) error {
 	var err error
 
+	applyCheck := func(idx int, sortVal Sort, dbField string) error {
+		if err = SortCheck(sortVal); err != nil {
+			return errors.Wrap(err, "")
+		}
+
+		applyComma := true
+
+		if idx == len(sorts)-1 {
+			applyComma = false
+		}
+
+		sortVal.Field = dbField
+		ApplySort(query, sortVal, applyComma)
+
+		return nil
+	}
+
 	for i, v := range sorts {
-		// Check if current sort is within our fields map
-		// If it is, check that it is allowed to be sorted
-		// by and then check if given parameters are valid
-		// If valid, apply sort to query
-		// Else throw error
-		if conf, ok := fields[v.Field]; ok {
-			if !conf.OperationConf.CanSortBy {
+		if !isPrependSort {
+			// Check if current sort is within our fields map
+			// If it is, check that it is allowed to be sorted
+			// by and then check if given parameters are valid
+			// If valid, apply sort to query
+			// Else throw error
+			if conf, ok := fields[v.Field]; ok && conf.OperationConf.CanSortBy {
+				if err = applyCheck(i, v, conf.DBField); err != nil {
+					return err
+				}
+			} else {
 				sortErr := &SortError{queryError: &queryError{}}
-				sortErr.setInvalidOperation(v.Field, sort)
+				sortErr.setInvalidField(v.Field)
 				return errors.Wrap(sortErr, "")
 			}
-
-			if err = SortCheck(v); err != nil {
+		} else {
+			if err = applyCheck(i, v, fields[v.Field].DBField); err != nil {
 				return err
 			}
-
-			addComma := true
-
-			if i == len(sorts)-1 {
-				addComma = false
-			}
-
-			v.Field = conf.DBField
-			ApplySort(query, v, addComma)
-		} else {
-			sortErr := &SortError{queryError: &queryError{}}
-			sortErr.setInvalidField(v.Field)
-			return errors.Wrap(sortErr, "")
 		}
 	}
 
@@ -1153,32 +1172,34 @@ func ReplaceSortFields(query *string, sorts []Sort, fields DbFields) error {
 
 // ReplaceGroupFields is used to replace query field names and values from slice of groups
 // along with verifying that they have right values and applying changes to query
-func ReplaceGroupFields(query *string, groups []Group, fields DbFields) error {
+func ReplaceGroupFields(query *string, groups []Group, fields DbFields, isPrependGroup bool) error {
+	applyGroup := func(idx int, groupVal Group, dbField string) {
+		applyComma := true
+
+		if idx == len(groups)-1 {
+			applyComma = false
+		}
+
+		groupVal.Field = dbField
+		ApplyGroup(query, groupVal, applyComma)
+	}
+
 	for i, v := range groups {
-		// Check if current sort is within our fields map
-		// If it is, check that it is allowed to be grouped
-		// by and then check if given parameters are valid
-		// If valid, apply sort to query
-		// Else throw error
-		if conf, ok := fields[v.Field]; ok {
-			if !conf.OperationConf.CanGroupBy {
+		if !isPrependGroup {
+			// Check if current sort is within our fields map
+			// If it is, check that it is allowed to be grouped
+			// by and then check if given parameters are valid
+			// If valid, apply sort to query
+			// Else throw error
+			if conf, ok := fields[v.Field]; ok && conf.OperationConf.CanGroupBy {
+				applyGroup(i, v, conf.DBField)
+			} else {
 				groupErr := &GroupError{queryError: &queryError{}}
-				groupErr.setInvalidOperation(v.Field, group)
+				groupErr.setInvalidField(v.Field)
 				return errors.Wrap(groupErr, "")
 			}
-
-			addComma := true
-
-			if i == len(groups)-1 {
-				addComma = false
-			}
-
-			v.Field = conf.DBField
-			ApplyGroup(query, v, addComma)
 		} else {
-			groupErr := &GroupError{queryError: &queryError{}}
-			groupErr.setInvalidField(v.Field)
-			return errors.Wrap(groupErr, "")
+			applyGroup(i, v, fields[v.Field].DBField)
 		}
 	}
 

@@ -1,68 +1,59 @@
 package webutiltest
 
-import (
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
-	"testing"
+// type testServer struct{}
 
-	"github.com/gorilla/mux"
-)
+// func (s *testServer) fileUploads(w http.ResponseWriter, r *http.Request) {
+// 	var err error
 
-type testServer struct{}
+// 	if err = r.ParseMultipartForm(8 << 20); err != nil {
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
 
-func (s *testServer) fileUploads(w http.ResponseWriter, r *http.Request) {
-	var err error
+// 	fileHeaders := r.MultipartForm.File[testConf.TestFileUploadConfs[0].ParamName]
 
-	if err = r.ParseMultipartForm(8 << 20); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+// 	for _, v := range fileHeaders {
+// 		f, err := v.Open()
 
-	fileHeaders := r.MultipartForm.File[testConf.TestFileUploadConfs[0].ParamName]
+// 		if err != nil {
+// 			w.WriteHeader(http.StatusInternalServerError)
+// 			w.Write([]byte(err.Error()))
+// 			return
+// 		}
 
-	for _, v := range fileHeaders {
-		f, err := v.Open()
+// 		if _, err = ioutil.ReadAll(f); err != nil {
+// 			w.WriteHeader(http.StatusInternalServerError)
+// 			w.Write([]byte(err.Error()))
+// 			return
+// 		}
+// 	}
+// }
 
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
+// func TestFileUploads(t *testing.T) {
+// 	api := testServer{}
+// 	bodiesURL := "/fileUploads"
 
-		if _, err = ioutil.ReadAll(f); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-	}
-}
+// 	r := mux.NewRouter()
+// 	r.HandleFunc(bodiesURL, api.fileUploads)
 
-func TestFileUploads(t *testing.T) {
-	api := testServer{}
-	bodiesURL := "/fileUploads"
+// 	serv := httptest.NewServer(r)
+// 	baseURL := serv.URL
+// 	url := baseURL + bodiesURL
+// 	c := serv.Client()
 
-	r := mux.NewRouter()
-	r.HandleFunc(bodiesURL, api.fileUploads)
+// 	req, err := NewFileUploadRequest(
+// 		testConf.TestFileUploadConfs,
+// 		http.MethodPost,
+// 		url,
+// 	)
 
-	serv := httptest.NewServer(r)
-	baseURL := serv.URL
-	url := baseURL + bodiesURL
-	c := serv.Client()
+// 	if err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
 
-	req, err := NewFileUploadRequest(
-		testConf.TestFileUploadConfs,
-		http.MethodPost,
-		url,
-	)
+// 	_, err = c.Do(req)
 
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	_, err = c.Do(req)
-
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-}
+// 	if err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
+// }
