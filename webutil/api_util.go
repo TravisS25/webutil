@@ -48,6 +48,9 @@ const (
 	// ContentTypeText is key string for content type header "text/plain; charset=utf-8"
 	ContentTypeText = "text/plain; charset=utf-8"
 
+	// ContentTypeCSV is key string for content type header "text/csv; charset=utf-8"
+	ContentTypeCSV = "text/csv; charset=utf-8"
+
 	// ContenTypeJPG is key string for content type header "image/jpeg"
 	ContenTypeJPG = "image/jpeg"
 

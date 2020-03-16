@@ -162,9 +162,12 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 				}
 			} else {
 				if validationErrors, ok := formErr.(validation.Errors); ok {
+					foundKeys := make(map[string]bool, 0)
+
 					for key, expectedVal := range formTest.ValidationErrors {
 						if fErr, valid := validationErrors[key]; valid {
-							err := formValidation(t, key, fErr, expectedVal)
+							foundKeys[key] = true
+							err := formValidation(s, key, fErr, expectedVal)
 
 							if err != nil {
 								s.Errorf(err.Error())
@@ -176,10 +179,12 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 
 					for k, v := range validationErrors {
 						if fErr, valid := formTest.ValidationErrors[k]; valid {
-							err := formValidation(t, k, v, fErr)
+							if _, found := foundKeys[k]; !found {
+								err := formValidation(s, k, v, fErr)
 
-							if err != nil {
-								s.Errorf(err.Error())
+								if err != nil {
+									s.Errorf(err.Error())
+								}
 							}
 						} else {
 							s.Errorf(

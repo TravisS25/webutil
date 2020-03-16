@@ -408,7 +408,7 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	}
 
 	if _, err = GetQueriedResults(
-		&query,
+		query,
 		invalidSortFields,
 		mockRequest11,
 		newDB,
@@ -440,7 +440,7 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	mockDB.ExpectQuery("select").WillReturnRows(rows)
 
 	if _, err = GetQueriedResults(
-		&query,
+		query,
 		filterFields,
 		mockRequest12,
 		newDB,
@@ -459,7 +459,7 @@ func TestQueryFunctionsUnitTest(t *testing.T) {
 	mockDB.ExpectQuery("select").WillReturnRows(rows)
 
 	if _, err = GetCountResults(
-		&query,
+		query,
 		filterFields,
 		mockRequest13,
 		newDB,

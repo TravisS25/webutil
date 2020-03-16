@@ -591,8 +591,8 @@ func getValueResults(
 // GetQueriedAndCountResults is a wrapper function for GetQueriedResults()
 // and GetCountResults() functions and simply returns the values for both
 func GetQueriedAndCountResults(
-	query *string,
-	countQuery *string,
+	query string,
+	countQuery string,
 	fields DbFields,
 	req FormRequest,
 	db Querier,
@@ -632,7 +632,7 @@ func GetQueriedAndCountResults(
 // single row and column with total count of results with all
 // the filters applied to query
 func GetCountResults(
-	countQuery *string,
+	countQuery string,
 	fields DbFields,
 	req FormRequest,
 	db Querier,
@@ -643,7 +643,7 @@ func GetCountResults(
 	var err error
 
 	if results, err = getValueResults(
-		countQuery,
+		&countQuery,
 		false,
 		req,
 		paramConf,
@@ -653,7 +653,7 @@ func GetCountResults(
 		return 0, errors.Wrap(err, "")
 	}
 
-	rower, err := db.Queryx(*countQuery, results...)
+	rower, err := db.Queryx(countQuery, results...)
 
 	if err != nil {
 		return 0, err
@@ -711,7 +711,7 @@ func GetPreQueryResults(
 // This is a wrapper function for GetPreQueryResults() function that
 // executes the query and returns results
 func GetQueriedResults(
-	query *string,
+	query string,
 	fields DbFields,
 	req FormRequest,
 	db Querier,
@@ -719,7 +719,7 @@ func GetQueriedResults(
 	queryConf QueryConfig,
 ) (*sqlx.Rows, error) {
 	values, err := GetPreQueryResults(
-		query,
+		&query,
 		fields,
 		req,
 		paramConf,
@@ -730,7 +730,7 @@ func GetQueriedResults(
 		return nil, errors.Wrap(err, "")
 	}
 
-	return db.Queryx(*query, values...)
+	return db.Queryx(query, values...)
 }
 
 ////////////////////////////////////////////////////////////
