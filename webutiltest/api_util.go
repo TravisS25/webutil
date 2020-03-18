@@ -167,10 +167,6 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 					if err != nil {
 						v.Fatal(err)
 					}
-
-					if err = req.ParseMultipartForm(tc.FileUploadConf.MaxMemory); err != nil {
-						t.Fatalf(err.Error())
-					}
 				} else if tc.URLValues != nil {
 					req, err = http.NewRequest(tc.Method, tc.RequestURL, strings.NewReader(tc.URLValues.Encode()))
 
