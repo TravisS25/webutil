@@ -60,11 +60,6 @@ var (
 //------------------------ INTERFACES ---------------------------
 //////////////////////////////////////////////////////////////////
 
-// type MiddlewareAuth interface {
-// 	GetID() string
-// 	GetEmail() string
-// }
-
 //////////////////////////////////////////////////////////////////
 //----------------------- CONFIG STRUCTS -----------------------
 //////////////////////////////////////////////////////////////////
@@ -150,17 +145,20 @@ type QueryDB func(req *http.Request, db Querier) ([]byte, error)
 type AuthHandler struct {
 	db           Querier
 	queryForUser QueryDB
+	clientResp   HTTPResponseConfig
 	config       AuthHandlerConfig
 }
 
 func NewAuthHandler(
 	db Querier,
 	queryForUser QueryDB,
+	clientResp HTTPResponseConfig,
 	config AuthHandlerConfig,
 ) *AuthHandler {
 	return &AuthHandler{
 		db:           db,
 		queryForUser: queryForUser,
+		clientResp:   clientResp,
 		config:       config,
 	}
 }
@@ -175,7 +173,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 
 		// Setting up default values from passed configs if none are set
 		SetHTTPResponseDefaults(
-			&a.config.ClientErrorResponse,
+			&a.clientResp,
 			http.StatusBadRequest,
 			[]byte(invalidCookieTxt),
 		)
@@ -198,8 +196,8 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					if cookieErr.IsDecode() {
 						http.Error(
 							w,
-							string(a.config.ClientErrorResponse.HTTPResponse),
-							*a.config.ClientErrorResponse.HTTPStatus,
+							string(a.clientResp.HTTPResponse),
+							*a.clientResp.HTTPStatus,
 						)
 					}
 
@@ -480,6 +478,7 @@ type RoutingHandler struct {
 	queryRoutes QueryDB
 	pathRegex   PathRegex
 	nonUserURLs map[string]bool
+	clientResp  HTTPResponseConfig
 	config      ServerErrorCacheConfig
 }
 
@@ -488,6 +487,7 @@ func NewRoutingHandler(
 	queryRoutes QueryDB,
 	pathRegex PathRegex,
 	nonUserURLs map[string]bool,
+	clientResp HTTPResponseConfig,
 	config ServerErrorCacheConfig,
 ) *RoutingHandler {
 	return &RoutingHandler{
@@ -508,7 +508,7 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var db *sqlx.DB
 
 			SetHTTPResponseDefaults(
-				&routing.config.ClientErrorResponse,
+				&routing.clientResp,
 				http.StatusForbidden,
 				[]byte(forbiddenURLTxt),
 			)
@@ -528,8 +528,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					if err == sql.ErrNoRows {
 						http.Error(
 							w,
-							string(routing.config.ClientErrorResponse.HTTPResponse),
-							*routing.config.ClientErrorResponse.HTTPStatus,
+							string(routing.clientResp.HTTPResponse),
+							*routing.clientResp.HTTPStatus,
 						)
 						return err
 					}
@@ -545,8 +545,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 								if err == sql.ErrNoRows {
 									http.Error(
 										w,
-										string(routing.config.ClientErrorResponse.HTTPResponse),
-										*routing.config.ClientErrorResponse.HTTPStatus,
+										string(routing.clientResp.HTTPResponse),
+										*routing.clientResp.HTTPStatus,
 									)
 									return err
 								}
@@ -618,8 +618,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 							} else {
 								http.Error(
 									w,
-									string(routing.config.ClientErrorResponse.HTTPResponse),
-									*routing.config.ClientErrorResponse.HTTPStatus,
+									string(routing.clientResp.HTTPResponse),
+									*routing.clientResp.HTTPStatus,
 								)
 								return
 							}
@@ -660,8 +660,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			if !allowedPath {
 				http.Error(
 					w,
-					string(routing.config.ClientErrorResponse.HTTPResponse),
-					*routing.config.ClientErrorResponse.HTTPStatus,
+					string(routing.clientResp.HTTPResponse),
+					*routing.clientResp.HTTPStatus,
 				)
 				return
 			}
@@ -679,19 +679,4 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-//////////////////////////////////////////////////////////////////
-//------------------------ FUNCTIONS --------------------------
-//////////////////////////////////////////////////////////////////
-
-// SetHTTPResponseDefaults is util function to set default values for passed
-// config if values for nil
-func SetHTTPResponseDefaults(config *HTTPResponseConfig, defaultStatus int, defaultResponse []byte) {
-	if config.HTTPStatus == nil {
-		config.HTTPStatus = &defaultStatus
-	}
-	if config.HTTPResponse == nil {
-		config.HTTPResponse = defaultResponse
-	}
 }

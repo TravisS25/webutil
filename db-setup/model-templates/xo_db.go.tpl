@@ -24,7 +24,12 @@ func inclusionMap(field *structs.Field, listField string, listVal interface{}, v
 					values[structField] = strconv.FormatInt(val, webutil.IntBase)
 				case *int64:
 					val := field.Value().(*int64)
-					values[structField] = strconv.FormatInt(*val, webutil.IntBase)
+					
+					if val != nil {
+						values[structField] = strconv.FormatInt(*val, webutil.IntBase)
+					} else {
+						values[structField] = nil
+					}
 				case uuid.UUID:
 					val := field.Value().(uuid.UUID)
 					values[structField] = val.String()

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -116,6 +117,18 @@ type CacheSetup struct {
 
 	CacheStore CacheStore
 }
+
+//////////////////////////////////////////////////////////////////
+//--------------------------- TYPES --------------------------
+//////////////////////////////////////////////////////////////////
+
+// RecoverCache should implement ability to recover from
+// cache error
+type RecoverCache func(error) (*ClientCache, error)
+
+// RetryCache should implement ability to take in CacheStore
+// and query cache that was tried and recovered by RecoverCache
+type RetryCache func(CacheStore) error
 
 //////////////////////////////////////////////////////////////////
 //------------------------- STRUCTS --------------------------
@@ -292,4 +305,61 @@ func SetCacheFromDB(cacheSetup CacheSetup, db Querier) error {
 	}
 
 	return nil
+}
+
+// HasCacheError determines if cache has error and it tries to recover
+// if ServerErrorConfig#RecoverConfig#RecoverCache and retryCache are set
+//
+// Since cache is usually queried before a database and we can always resort
+// to a database, we have the writeIfError parameter which indicates whether
+// HasCacheError will write back to the client the server error set in
+// ServerErrorConfig#ServerErrorResponse if cache is unable to recover
+func HasCacheError(
+	w http.ResponseWriter,
+	r *http.Request,
+	err error,
+	retryCache RetryCache,
+	writeIfError bool,
+	conf ServerErrorConfig,
+) bool {
+	hasError := false
+
+	if err != nil {
+		logConf := LogConfig{CauseErr: err}
+
+		if conf.RecoverCache != nil {
+			if cache, recoverErr := conf.RecoverCache(err); err == nil {
+				if retryCache != nil {
+					if retryErr := retryCache(cache); retryErr != nil {
+						logConf.RetryCacheErr = retryErr
+						hasError = true
+					}
+				} else {
+					hasError = true
+				}
+			} else {
+				logConf.CacheRecoverErr = recoverErr
+				hasError = true
+			}
+		} else {
+			hasError = true
+		}
+
+		if conf.Logger != nil {
+			conf.Logger(r, logConf)
+		}
+
+		if writeIfError && hasError {
+			SetHTTPResponseDefaults(
+				&conf.ServerErrorResponse,
+				http.StatusInternalServerError,
+				[]byte(serverErrTxt),
+			)
+
+			w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+			w.Write(conf.ServerErrorResponse.HTTPResponse)
+		}
+	}
+
+	return hasError
 }

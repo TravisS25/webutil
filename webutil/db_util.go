@@ -102,12 +102,12 @@ type QuerierExec interface {
 	Executer
 }
 
-// DBInterfaceRecover implements setting DBInterface
-// to struct that implements SetDBInterface
+// ResetDB implements setting DBInterface
+// to struct that implements SetDB
 // This is generally used in apis to recover from
 // database failure
-type DBInterfaceRecover interface {
-	SetDBInterface(DBInterface)
+type ResetDB interface {
+	SetDB(DBInterface)
 }
 
 // EntityRecover implements setting Entity
@@ -165,10 +165,10 @@ type RecoverDB func(err error) (*sqlx.DB, error)
 // an error or not
 type RetryDB func(DBInterface) error
 
-// RetryQuerier implementation should query database that has
-// recovered from a failure and return whether you get
-// an error or not
-type RetryQuerier func(Querier) error
+// // RetryQuerier implementation should query database that has
+// // recovered from a failure and return whether you get
+// // an error or not
+// type RetryQuerier func(Querier) error
 
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
@@ -212,7 +212,8 @@ func NewDB(dbConfig DatabaseSetting, dbType string) (*sqlx.DB, error) {
 	return db, nil
 }
 
-// NewDBWithList is function that returns *sqlx.DB with given slice DB config
+// NewDBWithList is function that returns *sqlx.DB and the DatabaseSetting used
+// to connect to the database
 // If no db connection can be established with given list, ErrNoConnection is returned
 func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*sqlx.DB, error) {
 	if len(dbConfigList) == 0 {
@@ -232,8 +233,40 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*sqlx.DB, err
 
 // IsDBError takes passed error and determines if error is recoverable
 // based on the settings passed in config
-func IsDBError(err error, retryDB RetryDB, config RecoverConfig) bool {
-	return isDBError(err, retryDB, config)
+func IsDBError(r *http.Request, err error, retryDB RetryDB, conf ServerErrorConfig) bool {
+	hasError := false
+
+	if err != nil {
+		logConf := LogConfig{CauseErr: err}
+
+		// Working on logging, figuring out where to check if logger is nil or not
+
+		if conf.RecoverDB != nil {
+			if db, recoverErr := conf.RecoverDB(err); recoverErr == nil {
+				if retryDB != nil {
+					if retryErr := retryDB(db); retryErr != nil {
+						logConf.RetryDBErr = retryErr
+						hasError = true
+					}
+				} else {
+					hasError = true
+				}
+			} else {
+				logConf.RecoverDBErr = recoverErr
+				hasError = true
+				//conf.Logger(r, logConf)
+			}
+		} else {
+			hasError = true
+			//conf.Logger(r, logConf)
+		}
+
+		if conf.Logger != nil {
+			conf.Logger(r, logConf)
+		}
+	}
+
+	return hasError
 }
 
 // HasDBError takes passed error and determines what to write
@@ -266,9 +299,9 @@ func IsDBError(err error, retryDB RetryDB, config RecoverConfig) bool {
 //
 // -----------------------------------------------------------------------
 //
-func HasDBError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
-	defaultDBErrors(&config)
-	return dbError(w, err, retryDB, config)
+func HasDBError(w http.ResponseWriter, r *http.Request, err error, retry RetryDB, conf ServerErrorConfig) bool {
+	SetHTTPResponseDefaults(&conf.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
+	return dbError(w, r, err, retry, conf)
 }
 
 // HasNoRowsOrDBError takes passed error and determines what to write
@@ -305,16 +338,24 @@ func HasDBError(w http.ResponseWriter, err error, retryDB RetryDB, config Server
 //
 // -----------------------------------------------------------------------
 //
-func HasNoRowsOrDBError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
-	defaultDBErrors(&config)
+func HasNoRowsOrDBError(
+	w http.ResponseWriter,
+	r *http.Request,
+	err error,
+	retryDB RetryDB,
+	clientResp HTTPResponseConfig,
+	config ServerErrorConfig,
+) bool {
+	SetHTTPResponseDefaults(&clientResp, http.StatusNotFound, []byte("Not Found"))
+	SetHTTPResponseDefaults(&config.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
 
 	if err == sql.ErrNoRows {
-		w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
-		w.Write(config.ClientErrorResponse.HTTPResponse)
+		w.WriteHeader(*clientResp.HTTPStatus)
+		w.Write(clientResp.HTTPResponse)
 		return true
 	}
 
-	return dbError(w, err, retryDB, config)
+	return dbError(w, r, err, retryDB, config)
 }
 
 // PopulateDatabaseTables populates "database_table" in a database which
@@ -498,40 +539,10 @@ func QueryCount(db SqlxDB, query string, args ...interface{}) (*Count, error) {
 	return &dest, err
 }
 
-func defaultDBErrors(config *ServerErrorConfig) {
-	SetHTTPResponseDefaults(&config.ClientErrorResponse, http.StatusNotFound, []byte("Not Found"))
-	SetHTTPResponseDefaults(
-		&config.ServerErrorResponse,
-		http.StatusInternalServerError,
-		[]byte(serverErrTxt),
-	)
-}
-
-func isDBError(err error, retryDB RetryDB, config RecoverConfig) bool {
-	if err != nil {
-		if config.RecoverDB != nil {
-			if db, err := config.RecoverDB(err); err == nil {
-				if config.DBInterfaceRecover != nil {
-					config.DBInterfaceRecover.SetDBInterface(db)
-				}
-				if retryDB != nil {
-					if err = retryDB(db); err == nil {
-						return false
-					}
-				}
-			}
-		}
-
-		return true
-	}
-
-	return false
-}
-
-func dbError(w http.ResponseWriter, err error, retryDB RetryDB, config ServerErrorConfig) bool {
-	if isDBError(err, retryDB, config.RecoverConfig) {
-		w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-		w.Write(config.ServerErrorResponse.HTTPResponse)
+func dbError(w http.ResponseWriter, r *http.Request, err error, retryDB RetryDB, conf ServerErrorConfig) bool {
+	if IsDBError(r, err, retryDB, conf) {
+		w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+		w.Write(conf.ServerErrorResponse.HTTPResponse)
 		return true
 	}
 

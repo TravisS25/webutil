@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 
@@ -99,6 +100,11 @@ var (
 var (
 	// RequiredRule makes field required and does NOT allow just spaces
 	RequiredRule = &validateRequiredRule{err: errors.New(RequiredTxt)}
+
+	// DefaultPathRegex is the standard setting returned from request
+	DefaultPathRegex = func(r *http.Request) (string, error) {
+		return mux.CurrentRoute(r).GetPathTemplate()
+	}
 )
 
 //////////////////////////////////////////////////////////////////
@@ -140,6 +146,9 @@ var (
 // mux is quite complex without spinning up an entire server
 type PathRegex func(r *http.Request) (string, error)
 
+// RecoverForm should implement ability to recover from form error
+type RecoverForm func(error) error
+
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
 //////////////////////////////////////////////////////////////////
@@ -147,9 +156,12 @@ type PathRegex func(r *http.Request) (string, error)
 // FormValidationConfig is config struct used in the initialization
 // of *FormValidation
 type FormValidationConfig struct {
-	Cache     CacheStore
-	RecoverDB RecoverDB
-	PathRegex PathRegex
+	Cache CacheStore
+	// RecoverDB  RecoverError
+	RecoverDB    RecoverDB
+	RecoverCache RecoverCache
+	PathRegex    PathRegex
+	SQLBindVar   int
 }
 
 // CacheValidate is config struct used in form validators
@@ -203,6 +215,12 @@ type CacheValidate struct {
 type RequestValidator interface {
 	Validate(req *http.Request, instance interface{}) (interface{}, error)
 }
+
+// type Validator interface {
+// 	RequestValidator
+// 	SetEntity(Entity)
+// 	SetCache(CacheStore)
+// }
 
 //////////////////////////////////////////////////////////////////
 //------------------------- STRUCTS ---------------------------
@@ -347,8 +365,8 @@ func (f *FormValidation) ValidateDate(
 // length of slice
 func (f *FormValidation) ValidateArgs(
 	cacheValidate *CacheValidate,
-	placeHolderIdx,
-	bindVar int,
+	placeHolderIdx int,
+	//bindVar int,
 	query string,
 	args ...interface{},
 ) *validateArgsRule {
@@ -360,7 +378,7 @@ func (f *FormValidation) ValidateArgs(
 			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
-			bindVar:        bindVar,
+			bindVar:        f.config.SQLBindVar,
 			query:          query,
 			args:           args,
 			err:            errors.New(InvalidTxt),
@@ -373,8 +391,8 @@ func (f *FormValidation) ValidateArgs(
 func (f *FormValidation) ValidateUniqueness(
 	cacheValidate *CacheValidate,
 	instanceValue interface{},
-	placeHolderIdx,
-	bindVar int,
+	placeHolderIdx int,
+	//bindVar int,
 	query string,
 	args ...interface{},
 ) *validateUniquenessRule {
@@ -387,7 +405,7 @@ func (f *FormValidation) ValidateUniqueness(
 			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
-			bindVar:        bindVar,
+			bindVar:        f.config.SQLBindVar,
 			query:          query,
 			args:           args,
 			err:            errors.New(AlreadyExistsTxt),
@@ -400,8 +418,8 @@ func (f *FormValidation) ValidateUniqueness(
 // Only has to find one record to be true
 func (f *FormValidation) ValidateExists(
 	cacheValidate *CacheValidate,
-	placeHolderIdx,
-	bindVar int,
+	placeHolderIdx int,
+	//bindVar int,
 	query string,
 	args ...interface{},
 ) *validateExistsRule {
@@ -413,7 +431,7 @@ func (f *FormValidation) ValidateExists(
 			recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
-			bindVar:        bindVar,
+			bindVar:        f.config.SQLBindVar,
 			query:          query,
 			args:           args,
 			err:            errors.New(DoesNotExistTxt),
@@ -461,8 +479,8 @@ type validator struct {
 	placeHolderIdx int
 	err            error
 	recoverDB      RecoverDB
-	cacheValidate  *CacheValidate
-	//validateConf   ValidateConfig
+	// recoverDB      RecoverError
+	cacheValidate *CacheValidate
 }
 
 type validateRequiredRule struct {
@@ -654,145 +672,69 @@ func (v *validateArgsRule) Error(message string) *validateArgsRule {
 // HasFormErrors determines what type of form error is passed and
 // sends appropriate error message to client
 //
-// ServerErrorResponse and ClientErrorResponse have set default
-// if user does not
-//
-// RecoverDB is optional and can be set but RetryDB is not used
+// If err is caused by server from form validator, then we try to recover
+// and retry the form if user has set this
+// If that fails, we write server error back to client and log if set
 func HasFormErrors(
 	w http.ResponseWriter,
+	r *http.Request,
 	err error,
-	config ServerErrorConfig,
+	retryForm func() error,
+	clientStatus int,
+	conf ServerErrorConfig,
 ) bool {
+	hasError := false
+
 	if err != nil {
-		SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(serverErrTxt))
-		SetHTTPResponseDefaults(&config.ClientErrorResponse, 406, nil)
+		logConf := LogConfig{CauseErr: err}
+
+		SetHTTPResponseDefaults(&conf.ServerErrorResponse, 500, []byte(serverErrTxt))
+		//SetHTTPResponseDefaults(&clientResp, http.StatusNotAcceptable, []byte(`{"error": form error}`))
 
 		switch err {
 		case ErrBodyRequired:
-			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
+			hasError = true
+			w.WriteHeader(clientStatus)
 			w.Write([]byte(bodyRequiredTxt))
 		case ErrInvalidJSON:
-			w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
+			hasError = true
+			w.WriteHeader(clientStatus)
 			w.Write([]byte(invalidJSONTxt))
 		default:
 			if payload, ok := err.(validation.Errors); ok {
-				w.WriteHeader(*config.ClientErrorResponse.HTTPStatus)
+				hasError = true
 				jsonString, _ := json.Marshal(payload)
+				w.WriteHeader(clientStatus)
 				w.Write(jsonString)
 			} else {
-				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-				w.Write(config.ServerErrorResponse.HTTPResponse)
-			}
-		}
-
-		return true
-	}
-
-	return false
-}
-
-// GetFormSelections takes query with arguments and returns slice of
-// FormSelection of result
-// The query given should only return two columns, value and
-//
-// ServerErrorResponse and ClientErrorResponse have set default
-// if user does not
-//
-// RecoverDB is optional and can be set but RetryDB is not used
-func GetFormSelections(
-	w http.ResponseWriter,
-	config ServerErrorCacheConfig,
-	db Querier,
-	bindVar int,
-	query string,
-	args ...interface{},
-) ([]FormSelection, error) {
-	var err error
-	var newDB *sqlx.DB
-
-	SetHTTPResponseDefaults(&config.ServerErrorResponse, 500, []byte(serverErrTxt))
-
-	getFormSelectionsFromDB := func() ([]FormSelection, error) {
-		if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
-			http.Error(w, serverErrTxt, http.StatusInternalServerError)
-			return nil, err
-		}
-
-		rower, err := db.Queryx(query, args...)
-
-		if err != nil {
-			canRecover := false
-
-			if config.RecoverDB != nil {
-				if newDB, err = config.RecoverDB(err); err == nil {
-					config.DBInterfaceRecover.SetDBInterface(newDB)
-					rower, err = db.Queryx(query, args...)
-
-					if err == nil {
-						canRecover = true
+				if conf.RecoverForm != nil {
+					if formErr := conf.RecoverForm(err); formErr != nil {
+						w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+						w.Write(conf.ServerErrorResponse.HTTPResponse)
+						logConf.RecoverFormErr = formErr
+						hasError = true
+					} else {
+						if retryErr := retryForm(); retryErr != nil {
+							w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+							w.Write(conf.ServerErrorResponse.HTTPResponse)
+							logConf.RetryFormErr = retryErr
+							hasError = true
+						}
 					}
+				} else {
+					w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+					w.Write(conf.ServerErrorResponse.HTTPResponse)
+					hasError = true
 				}
 			}
-
-			if !canRecover {
-				w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-				w.Write(config.ServerErrorResponse.HTTPResponse)
-				return nil, err
-			}
 		}
 
-		cols, err := rower.Columns()
-
-		if err != nil {
-			return nil, err
+		if conf.Logger != nil {
+			conf.Logger(r, logConf)
 		}
-
-		if len(cols) != 2 {
-			return nil, errInvalidFormSelectionInternal
-		}
-
-		forms := make([]FormSelection, 0)
-
-		for rower.Next() {
-			form := FormSelection{}
-			err = rower.Scan(
-				&form.Value,
-				&form.Text,
-			)
-
-			forms = append(forms, form)
-		}
-
-		return forms, nil
 	}
 
-	if config.CacheConfig.Cache == nil {
-		return getFormSelectionsFromDB()
-	}
-
-	jsonBytes, err := config.CacheConfig.Cache.Get(config.Key)
-
-	if err != nil {
-		if err != ErrCacheNil {
-			return getFormSelectionsFromDB()
-		}
-		if config.CacheConfig.IgnoreCacheNil {
-			return getFormSelectionsFromDB()
-		}
-
-		w.WriteHeader(*config.ServerErrorResponse.HTTPStatus)
-		w.Write(config.ServerErrorResponse.HTTPResponse)
-		return nil, err
-	}
-
-	forms := make([]FormSelection, 0)
-
-	if err = json.Unmarshal(jsonBytes, &forms); err != nil {
-		http.Error(w, serverErrTxt, http.StatusInternalServerError)
-		return nil, err
-	}
-
-	return forms, nil
+	return hasError
 }
 
 // CheckBodyAndDecode takes request and decodes the json body from the request

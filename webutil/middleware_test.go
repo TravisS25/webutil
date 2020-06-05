@@ -236,7 +236,7 @@ func TestAuthHandlerUnitTest(t *testing.T) {
 	session.IsNew = true
 
 	middlewareState := &middlewareState{}
-	authHandler := NewAuthHandler(newDB, middlewareState.queryForUser, config)
+	authHandler := NewAuthHandler(newDB, middlewareState.queryForUser, HTTPResponseConfig{}, config)
 
 	mockHandler := &Handler{}
 	mockHandler.On("ServeHTTP", testifymock.Anything, testifymock.Anything)
@@ -705,11 +705,12 @@ func TestRoutingHandlerUnitTest(t *testing.T) {
 	state.pRegex = generalErr
 	routingHandler := NewRoutingHandler(
 		newDB,
-		state.queryForGroups,
+		state.queryForRoutes,
 		state.pathRegex,
 		map[string]bool{
 			defaultURL: true,
 		},
+		HTTPResponseConfig{},
 		config,
 	)
 	h := routingHandler.MiddlewareFunc(mockHandler)

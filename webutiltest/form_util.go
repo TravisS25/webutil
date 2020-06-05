@@ -53,7 +53,7 @@ type FormRequestConfig struct {
 
 	// PostExecute can be used to exec some logic that you may need to run inbetween test cases
 	// such as clean up logic before the next test is run - Optional
-	PostExecute func(form interface{})
+	PostExecute func(form interface{}) error
 
 	// ValidationErrors is a map of what errors you expect to return from test
 	// The key is the json name of the field and value is the error message the
@@ -138,7 +138,7 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 				}
 
 				setFormValues()
-			} else {
+			} else if formTest.FileUploadConf != nil {
 				req, err = NewFileUploadRequest(
 					formTest.FileUploadConf.ParamConfs,
 					formTest.Method,
@@ -150,6 +150,14 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 				}
 
 				if err = req.ParseMultipartForm(formTest.FileUploadConf.MaxMemory); err != nil {
+					s.Fatalf(err.Error())
+				}
+
+				setFormValues()
+			} else {
+				req, err = http.NewRequest(formTest.Method, formTest.URL, nil)
+
+				if err != nil {
 					s.Fatalf(err.Error())
 				}
 
@@ -196,13 +204,15 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 					}
 				} else {
 					if formTest.InternalError != formErr.Error() {
-						s.Errorf("Internal Error: %s\n", formErr.Error())
+						s.Errorf("Internal Error: %+v\n", formErr)
 					}
 				}
 			}
 
 			if formTest.PostExecute != nil {
-				formTest.PostExecute(form)
+				if err = formTest.PostExecute(form); err != nil {
+					t.Errorf("post execute error: %+v\n", err)
+				}
 			}
 
 			panicked = false

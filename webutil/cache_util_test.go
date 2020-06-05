@@ -1,6 +1,10 @@
 package webutil
 
 import (
+	"bytes"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -187,8 +191,6 @@ func TestSetCachingUnitTest(t *testing.T) {
 
 	mockCacheStore.On("Set", testifymock.Anything, testifymock.Anything, testifymock.Anything)
 
-	//mockCacheStore.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
 	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
 
 	if err != nil {
@@ -233,19 +235,87 @@ func TestSetCachingUnitTest(t *testing.T) {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
+}
 
-	// rows = sqlmock.NewRows([]string{"value", "text"}).
-	// 	AddRow(1, "foo").
-	// 	AddRow(2, "bar")
-	// mockDB.ExpectQuery("").WillReturnRows(rows)
-	// setup.CacheSets[0].CacheKey.NumOfArgs = 3
+func TestHasCacheErrorUnitTest(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/url", nil)
 
-	// if err = SetCacheFromDB(setup, db); err == nil {
-	// 	t.Errorf("should have error\n")
-	// } else {
-	// 	if err != errTooManyKeyArgs {
-	// 		t.Errorf("should have errTooManyKeyArgs error\n")
-	// 		t.Errorf("err: %s\n", err.Error())
-	// 	}
-	// }
+	if !HasCacheError(rr, req, errors.New("error"), nil, true, ServerErrorConfig{}) {
+		t.Errorf("should have error\n")
+	}
+
+	buf := &bytes.Buffer{}
+	buf.ReadFrom(rr.Result().Body)
+	rr.Result().Body.Close()
+
+	if rr.Result().StatusCode != http.StatusInternalServerError {
+		t.Errorf("status code should be 500\n")
+	}
+
+	if buf.String() != serverErrTxt {
+		t.Errorf("error response should be : %s\n", serverErrTxt)
+	}
+
+	// ------------------------------------------------------------------------------
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	sec := ServerErrorConfig{
+		Logger: func(r *http.Request, conf LogConfig) {
+			if conf.CacheRecoverErr == nil {
+				t.Errorf("cache recover error should NOT be nil\n")
+			}
+		},
+		RecoverConfig: RecoverConfig{
+			RecoverCache: func(err error) (*ClientCache, error) {
+				return nil, errors.New("errors")
+			},
+		},
+	}
+
+	if !HasCacheError(rr, req, errors.New("errors"), nil, true, sec) {
+		t.Errorf("should have error\n")
+	}
+
+	buf.ReadFrom(rr.Result().Body)
+	rr.Result().Body.Close()
+
+	if rr.Result().StatusCode != http.StatusInternalServerError {
+		t.Errorf("status code should be 500\n")
+	}
+
+	if buf.String() != serverErrTxt {
+		t.Errorf("error response should be : %s\n", serverErrTxt)
+	}
+
+	// ------------------------------------------------------------------------------
+
+	buf.Reset()
+	rr = httptest.NewRecorder()
+	sec.RecoverCache = func(err error) (*ClientCache, error) {
+		return &ClientCache{}, nil
+	}
+	sec.Logger = func(r *http.Request, conf LogConfig) {
+		if conf.RetryCacheErr != nil {
+			t.Errorf("retry cache error should NOT be nil\n")
+		}
+	}
+
+	if !HasCacheError(rr, req, errors.New("errors"), func(cache CacheStore) error {
+		return errors.New("errors")
+	}, true, sec) {
+		t.Errorf("should have error\n")
+	}
+
+	buf.ReadFrom(rr.Result().Body)
+	rr.Result().Body.Close()
+
+	if rr.Result().StatusCode != http.StatusInternalServerError {
+		t.Errorf("status code should be 500\n")
+	}
+
+	if buf.String() != serverErrTxt {
+		t.Errorf("error response should be : %s\n", serverErrTxt)
+	}
 }

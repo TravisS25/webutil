@@ -14,7 +14,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	pkgerrors "github.com/pkg/errors"
 	mock "github.com/stretchr/testify/mock"
-	testifymock "github.com/stretchr/testify/mock"
 )
 
 func TestValidateRequiredRuleUnitTest(t *testing.T) {
@@ -156,9 +155,12 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 }
 
 func TestHasFormErrorsUnitTest(t *testing.T) {
-	rr := httptest.NewRecorder()
+	httpStatus := 406
 
-	if !HasFormErrors(rr, ErrBodyRequired, ServerErrorConfig{}) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/url", nil)
+
+	if !HasFormErrors(rr, req, ErrBodyRequired, nil, httpStatus, ServerErrorConfig{}) {
 		t.Errorf("should have form error\n")
 	}
 	if rr.Result().StatusCode != http.StatusNotAcceptable {
@@ -178,7 +180,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, ErrInvalidJSON, ServerErrorConfig{})
+	HasFormErrors(rr, req, ErrInvalidJSON, nil, httpStatus, ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
@@ -195,7 +197,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 		"id": errors.New("field error"),
 	}
 
-	HasFormErrors(rr, vErr, ServerErrorConfig{})
+	HasFormErrors(rr, req, vErr, nil, httpStatus, ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 	rr.Result().Body.Close()
 
@@ -212,7 +214,7 @@ func TestHasFormErrorsUnitTest(t *testing.T) {
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
-	HasFormErrors(rr, errors.New("errors"), ServerErrorConfig{})
+	HasFormErrors(rr, req, errors.New("errors"), nil, httpStatus, ServerErrorConfig{})
 	buf.ReadFrom(rr.Result().Body)
 
 	if rr.Result().StatusCode != http.StatusInternalServerError {
@@ -261,183 +263,6 @@ func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
 			t.Errorf("should have ErrInvalidJSON error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
-	}
-}
-
-func TestGetFormSelectionsUnitTest(t *testing.T) {
-	var err error
-
-	rr := httptest.NewRecorder()
-	buf := &bytes.Buffer{}
-	config := ServerErrorCacheConfig{
-		ServerErrorConfig: ServerErrorConfig{
-			RecoverConfig: RecoverConfig{
-				RecoverDB: func(err error) (*sqlx.DB, error) {
-					return nil, errors.New(serverErrTxt)
-				},
-			},
-		},
-	}
-	db, mockDB, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
-
-	if err != nil {
-		t.Fatalf("fatal err: %s\n", err.Error())
-	}
-
-	mockDB.ExpectQuery("select").WillReturnError(errors.New(serverErrTxt))
-
-	newDB := &sqlx.DB{
-		DB: db,
-	}
-
-	if _, err = GetFormSelections(
-		rr,
-		config,
-		newDB,
-		sqlx.DOLLAR,
-		"",
-	); err == nil {
-		t.Errorf("should have error\n")
-	} else {
-		buf.ReadFrom(rr.Result().Body)
-		if rr.Result().StatusCode != http.StatusInternalServerError {
-			t.Errorf("should have 500 error\n")
-		}
-		if buf.String() != serverErrTxt {
-			t.Errorf("should have ErrServer error\n")
-		}
-	}
-
-	buf.Reset()
-	rr = httptest.NewRecorder()
-	config.ServerErrorConfig.RecoverDB = nil
-	mockDB.ExpectQuery("select").WillReturnError(errors.New(serverErrTxt))
-
-	if _, err = GetFormSelections(
-		rr,
-		config,
-		newDB,
-		sqlx.DOLLAR,
-		"",
-	); err == nil {
-		t.Errorf("should have error\n")
-	} else {
-		buf.ReadFrom(rr.Result().Body)
-		if rr.Result().StatusCode != http.StatusInternalServerError {
-			t.Errorf("should have 500 error\n")
-		}
-		if buf.String() != serverErrTxt {
-			t.Errorf("should have ErrServer error\n")
-		}
-	}
-
-	buf.Reset()
-	rr = httptest.NewRecorder()
-	rows := sqlmock.NewRows([]string{"value", "text"}).
-		AddRow(1, "foo").
-		AddRow(2, "bar")
-	mockDB.ExpectQuery("").WillReturnRows(rows)
-
-	if _, err = GetFormSelections(
-		rr,
-		config,
-		newDB,
-		sqlx.DOLLAR,
-		"",
-	); err != nil {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %s\n", err.Error())
-	}
-
-	buf.Reset()
-	rr = httptest.NewRecorder()
-	mockCacheStore1 := &MockCacheStore{}
-	defer mockCacheStore1.AssertExpectations(t)
-	config.CacheConfig.Cache = mockCacheStore1
-	mockCacheStore1.On("Get", testifymock.Anything).Return(nil, errors.New(serverErrTxt))
-	mockDB.ExpectQuery("").WillReturnRows(rows)
-
-	if _, err = GetFormSelections(
-		rr,
-		config,
-		newDB,
-		sqlx.DOLLAR,
-		"",
-	); err != nil {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %s\n", err.Error())
-	}
-
-	buf.Reset()
-	rr = httptest.NewRecorder()
-	mockCacheStore2 := &MockCacheStore{}
-	defer mockCacheStore2.AssertExpectations(t)
-	config.CacheConfig.Cache = mockCacheStore2
-	config.CacheConfig.IgnoreCacheNil = true
-	mockCacheStore2.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
-	mockDB.ExpectQuery("").WillReturnRows(rows)
-
-	if _, err = GetFormSelections(
-		rr,
-		config,
-		newDB,
-		sqlx.DOLLAR,
-		"",
-	); err != nil {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %s\n", err.Error())
-	}
-
-	buf.Reset()
-	rr = httptest.NewRecorder()
-	mockCacheStore3 := &MockCacheStore{}
-	defer mockCacheStore3.AssertExpectations(t)
-	config.CacheConfig.Cache = mockCacheStore3
-	config.CacheConfig.IgnoreCacheNil = false
-	mockCacheStore3.On("Get", testifymock.Anything).Return(nil, ErrCacheNil)
-
-	if _, err = GetFormSelections(
-		rr,
-		config,
-		newDB,
-		sqlx.DOLLAR,
-		"",
-	); err == nil {
-		t.Errorf("should have error\n")
-	} else {
-		if rr.Result().StatusCode != http.StatusInternalServerError {
-			t.Errorf("should have StatusInternalServerError error\n")
-		}
-	}
-
-	buf.Reset()
-	rr = httptest.NewRecorder()
-	form := []FormSelection{
-		{
-			Value: 1, Text: "foo",
-		},
-	}
-
-	formBytes, err := json.Marshal(&form)
-
-	if err != nil {
-		t.Fatalf("err: %s\n", err.Error())
-	}
-
-	mockCacheStore4 := &MockCacheStore{}
-	defer mockCacheStore4.AssertExpectations(t)
-	config.CacheConfig.Cache = mockCacheStore4
-	mockCacheStore4.On("Get", testifymock.Anything).Return(formBytes, nil)
-
-	if _, err = GetFormSelections(
-		rr,
-		config,
-		newDB,
-		sqlx.DOLLAR,
-		"",
-	); err != nil {
-		t.Errorf("should not have error\n")
-		t.Errorf("err: %s\n", err.Error())
 	}
 }
 
