@@ -123,6 +123,13 @@ type AuthHandlerConfig struct {
 	QueryForSession func(db Querier, userID string) (sessionID string, err error)
 }
 
+// RoutingHandlerConfig is used as config struct for RoutingHandlerConfig
+type RoutingHandlerConfig struct {
+	ServerErrorCacheConfig
+
+	ClientResp HTTPResponseConfig
+}
+
 // MiddlewareUser is config struct used to get the base
 // authentication of user in middleware
 type MiddlewareUser struct {
@@ -136,21 +143,21 @@ type MiddlewareUser struct {
 
 // QueryDB should implement querying a database and returning
 // results in bytes
-type QueryDB func(req *http.Request, db Querier) ([]byte, error)
+type QueryDB func(req *http.Request, db Entity) ([]byte, error)
 
 //////////////////////////////////////////////////////////////////
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
 
 type AuthHandler struct {
-	db           Querier
+	db           Entity
 	queryForUser QueryDB
 	clientResp   HTTPResponseConfig
 	config       AuthHandlerConfig
 }
 
 func NewAuthHandler(
-	db Querier,
+	db Entity,
 	queryForUser QueryDB,
 	clientResp HTTPResponseConfig,
 	config AuthHandlerConfig,
@@ -338,13 +345,13 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 }
 
 type GroupHandler struct {
-	db             Querier
+	db             Entity
 	queryForGroups QueryDB
 	config         ServerErrorCacheConfig
 }
 
 func NewGroupHandler(
-	db Querier,
+	db Entity,
 	queryForGroups QueryDB,
 	config ServerErrorCacheConfig,
 ) *GroupHandler {
@@ -474,21 +481,19 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 }
 
 type RoutingHandler struct {
-	db          Querier
+	db          Entity
 	queryRoutes QueryDB
 	pathRegex   PathRegex
 	nonUserURLs map[string]bool
-	clientResp  HTTPResponseConfig
-	config      ServerErrorCacheConfig
+	config      RoutingHandlerConfig
 }
 
 func NewRoutingHandler(
-	db Querier,
+	db Entity,
 	queryRoutes QueryDB,
 	pathRegex PathRegex,
 	nonUserURLs map[string]bool,
-	clientResp HTTPResponseConfig,
-	config ServerErrorCacheConfig,
+	config RoutingHandlerConfig,
 ) *RoutingHandler {
 	return &RoutingHandler{
 		db:          db,
@@ -508,7 +513,7 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var db *sqlx.DB
 
 			SetHTTPResponseDefaults(
-				&routing.clientResp,
+				&routing.config.ClientResp,
 				http.StatusForbidden,
 				[]byte(forbiddenURLTxt),
 			)
@@ -528,8 +533,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					if err == sql.ErrNoRows {
 						http.Error(
 							w,
-							string(routing.clientResp.HTTPResponse),
-							*routing.clientResp.HTTPStatus,
+							string(routing.config.ClientResp.HTTPResponse),
+							*routing.config.ClientResp.HTTPStatus,
 						)
 						return err
 					}
@@ -545,8 +550,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 								if err == sql.ErrNoRows {
 									http.Error(
 										w,
-										string(routing.clientResp.HTTPResponse),
-										*routing.clientResp.HTTPStatus,
+										string(routing.config.ClientResp.HTTPResponse),
+										*routing.config.ClientResp.HTTPStatus,
 									)
 									return err
 								}
@@ -618,8 +623,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 							} else {
 								http.Error(
 									w,
-									string(routing.clientResp.HTTPResponse),
-									*routing.clientResp.HTTPStatus,
+									string(routing.config.ClientResp.HTTPResponse),
+									*routing.config.ClientResp.HTTPStatus,
 								)
 								return
 							}
@@ -660,8 +665,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			if !allowedPath {
 				http.Error(
 					w,
-					string(routing.clientResp.HTTPResponse),
-					*routing.clientResp.HTTPStatus,
+					string(routing.config.ClientResp.HTTPResponse),
+					*routing.config.ClientResp.HTTPStatus,
 				)
 				return
 			}
