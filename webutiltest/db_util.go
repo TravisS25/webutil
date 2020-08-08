@@ -239,7 +239,7 @@ const (
 // 	return nil
 // }
 
-func DBSetup(db webutil.QuerierTx, bindVar int) func() error {
+func DBSetup(db webutil.QuerierExec, bindVar int) func() error {
 	return func() error {
 		query :=
 			`
@@ -346,7 +346,7 @@ func DBSetup(db webutil.QuerierTx, bindVar int) func() error {
 	}
 }
 
-func foreignDeletion(db webutil.QuerierTx, err error, currentTable string) error {
+func foreignDeletion(db webutil.QuerierExec, err error, currentTable string) error {
 	// fmt.Printf("err under table: %s\n", currentTable)
 	// tx.Rollback()
 

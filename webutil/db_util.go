@@ -349,7 +349,7 @@ func HasNoRowsOrDBError(
 	SetHTTPResponseDefaults(&clientResp, http.StatusNotFound, []byte("Not Found"))
 	SetHTTPResponseDefaults(&config.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(*clientResp.HTTPStatus)
 		w.Write(clientResp.HTTPResponse)
 		return true

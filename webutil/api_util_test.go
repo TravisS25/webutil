@@ -56,7 +56,7 @@ func TestSetSecureCookieUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	session := getMockSession(cookieName)
 
-	if err := SetSecureCookie(rr, session, keyPairs...); err != nil {
+	if _, err := SetSecureCookie(rr, session, keyPairs...); err != nil {
 		t.Fatalf("err: %s\n", err.Error())
 	}
 }

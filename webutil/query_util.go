@@ -509,7 +509,9 @@ func getValueResults(
 	}
 
 	for _, v := range filters {
-		allValues = append(allValues, v.Value)
+		if v.Value != nil {
+			allValues = append(allValues, v.Value)
+		}
 	}
 
 	if !queryConf.ExcludeGroups {
@@ -864,11 +866,12 @@ func GetQueriedResults(
 	rows, err := db.Queryx(query, values...)
 
 	if err != nil {
-		// fmt.Printf("query: %s\n", query)
-		// fmt.Printf("foo err: %s\n", err.Error())
+		fmt.Printf("query: %s\n", query)
+		fmt.Printf("values: %v\n", values)
+		return nil, errors.WithStack(err)
 	}
 
-	return rows, err
+	return rows, nil
 }
 
 ////////////////////////////////////////////////////////////
@@ -881,6 +884,60 @@ func GetQueriedResults(
 // already contains a where clause
 //
 // Throws FilterError{} or json.SyntaxError{} error type if error occurs
+
+// func GetFilterReplacements(
+// 	req *http.Request,
+// 	query *string,
+// 	paramName string,
+// 	queryConf QueryConfig,
+// 	fields DbFields,
+// ) ([]Filter, error) {
+// 	var err error
+// 	var filters []Filter
+
+// 	if len(queryConf.PrependFilterFields) > 0 {
+// 		ApplyFilterText(query)
+
+// 		if _, err = ReplaceFilterFields(
+// 			query,
+// 			queryConf.PrependFilterFields,
+// 			fields,
+// 			true,
+// 		); err != nil {
+// 			return nil, errors.Wrap(err, "")
+// 		}
+// 	} else {
+// 		queryConf.PrependFilterFields = make([]Filter, 0)
+// 	}
+
+// 	if !queryConf.ExcludeFilters {
+// 		if filters, err = DecodeFilters(req, paramName); err != nil {
+// 			return nil, errors.Wrap(err, "")
+// 		}
+
+// 		if len(filters) > 0 {
+// 			ApplyFilterText(query)
+
+// 			if _, err = ReplaceFilterFields(query, filters, fields, false); err != nil {
+// 				return nil, errors.Wrap(err, "")
+// 			}
+// 		}
+// 	} else {
+// 		filters = make([]Filter, 0)
+// 	}
+
+// 	allFilters := make([]Filter, 0, len(queryConf.PrependFilterFields)+len(filters))
+
+// 	for _, v := range queryConf.PrependFilterFields {
+// 		allFilters = append(allFilters, v)
+// 	}
+// 	for _, v := range filters {
+// 		allFilters = append(allFilters, v)
+// 	}
+
+// 	return allFilters, nil
+// }
+
 func GetFilterReplacements(
 	req *http.Request,
 	query *string,
@@ -890,11 +947,12 @@ func GetFilterReplacements(
 ) ([]Filter, error) {
 	var err error
 	var filters []Filter
+	allFilters := make([]Filter, 0)
 
 	if len(queryConf.PrependFilterFields) > 0 {
 		ApplyFilterText(query)
 
-		if _, err = ReplaceFilterFields(
+		if filters, err = ReplaceFilterFields(
 			query,
 			queryConf.PrependFilterFields,
 			fields,
@@ -902,6 +960,8 @@ func GetFilterReplacements(
 		); err != nil {
 			return nil, errors.Wrap(err, "")
 		}
+
+		allFilters = append(allFilters, filters...)
 	} else {
 		queryConf.PrependFilterFields = make([]Filter, 0)
 	}
@@ -914,21 +974,14 @@ func GetFilterReplacements(
 		if len(filters) > 0 {
 			ApplyFilterText(query)
 
-			if _, err = ReplaceFilterFields(query, filters, fields, false); err != nil {
+			if filters, err = ReplaceFilterFields(query, filters, fields, false); err != nil {
 				return nil, errors.Wrap(err, "")
 			}
+
+			allFilters = append(allFilters, filters...)
 		}
 	} else {
 		filters = make([]Filter, 0)
-	}
-
-	allFilters := make([]Filter, 0, len(queryConf.PrependFilterFields)+len(filters))
-
-	for _, v := range queryConf.PrependFilterFields {
-		allFilters = append(allFilters, v)
-	}
-	for _, v := range filters {
-		allFilters = append(allFilters, v)
 	}
 
 	return allFilters, nil
@@ -1167,18 +1220,16 @@ func decodeQueryParams(req *http.Request, paramName string, val interface{}) err
 // along with verifying that they have right values and applying changes to query
 // This function does not apply "where" string for query so one must do it before
 // passing query
-func ReplaceFilterFields(query *string, filters []Filter, fields DbFields, isPrependFilters bool) ([]interface{}, error) {
+func ReplaceFilterFields(query *string, filters []Filter, fields DbFields, isPrependFilters bool) ([]Filter, error) {
 	var err error
-	replacements := make([]interface{}, 0, len(filters))
+	validFilters := make([]Filter, 0)
 
 	applyCheck := func(idx int, filterVal Filter, dbField string) error {
-		var val interface{}
-
-		if val, err = FilterCheck(filterVal); err != nil {
+		if err = FilterCheck(&filterVal); err != nil {
 			return errors.Wrap(err, "")
 		}
 
-		replacements = append(replacements, val)
+		validFilters = append(validFilters, filterVal)
 		applyAnd := true
 
 		if idx == len(filters)-1 {
@@ -1193,6 +1244,7 @@ func ReplaceFilterFields(query *string, filters []Filter, fields DbFields, isPre
 
 	for i, v := range filters {
 		if !isPrependFilters {
+
 			// Check if current filter is within our fields map
 			// If it is, check that it is allowed to be filtered
 			// by and then check if given parameters are valid
@@ -1214,7 +1266,7 @@ func ReplaceFilterFields(query *string, filters []Filter, fields DbFields, isPre
 		}
 	}
 
-	return replacements, nil
+	return validFilters, nil
 }
 
 // ReplaceSortFields is used to replace query field names and values from slice of sorts
@@ -1440,14 +1492,16 @@ func SortCheck(s Sort) error {
 
 // FilterCheck checks to make sure that the values passed to each filter is valid
 // The types passed should be primitive types
-// Returns the "Value" property of Filter type if all checks pass
-func FilterCheck(f Filter) (interface{}, error) {
-	var r interface{}
+// If the filter operator equals "isnull" or "isnotnull" and a value is passed,
+// this function will "self correct" and null out the value as those operators
+// should not have values attached to them
+func FilterCheck(f *Filter) error {
+	//var r interface{}
 
 	validTypes := []string{"string", "int", "float", "float64", "int64"}
 	hasValidType := false
 
-	if f.Value != "" && f.Operator != "isnull" && f.Operator != "isnotnull" {
+	if f.Operator != "isnull" && f.Operator != "isnotnull" {
 		// First check if value sent is slice
 		list, ok := f.Value.([]interface{})
 
@@ -1469,18 +1523,18 @@ func FilterCheck(f Filter) (interface{}, error) {
 				if !hasValidType {
 					sliceErr := &SliceError{}
 					sliceErr.setInvalidSliceError(f.Field, someType)
-					return nil, sliceErr
+					return sliceErr
 				}
 			}
 
-			r = list
+			// r = list
 		} else {
 			validTypes = append(validTypes, "bool")
 
 			if f.Value == nil {
 				filterErr := &FilterError{queryError: &queryError{}}
 				filterErr.setInvalidValueError(f.Field, f.Value)
-				return nil, filterErr
+				return filterErr
 			}
 
 			someType := reflect.TypeOf(f.Value).String()
@@ -1495,14 +1549,16 @@ func FilterCheck(f Filter) (interface{}, error) {
 			if !hasValidType {
 				filterErr := &FilterError{queryError: &queryError{}}
 				filterErr.setInvalidValueError(f.Field, someType)
-				return nil, filterErr
+				return filterErr
 			}
 
-			r = f.Value
+			// r = f.Value
 		}
+	} else {
+		f.Value = nil
 	}
 
-	return r, nil
+	return nil
 }
 
 ////////////////////////////////////////////////////////////
@@ -1533,11 +1589,14 @@ func HasFilterOrServerError(w http.ResponseWriter, r *http.Request, err error, r
 	if err != nil {
 		SetHTTPResponseDefaults(&conf.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
 
-		switch err.(type) {
-		case *FilterError, *SortError, *GroupError:
+		var fe *FilterError
+		var se *SortError
+		var ge *GroupError
+
+		if errors.As(err, &fe) || errors.As(err, &se) || errors.As(err, &ge) {
 			w.WriteHeader(clientStatus)
-			w.Write([]byte(err.Error()))
-		default:
+			w.Write([]byte(errors.Cause(err).Error()))
+		} else {
 			return dbError(w, r, err, retryDB, conf)
 		}
 

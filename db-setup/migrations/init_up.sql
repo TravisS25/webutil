@@ -36,12 +36,14 @@ CREATE TABLE IF NOT EXISTS logging(
     id uuid primary key DEFAULT gen_random_uuid(),
     date_created TIMESTAMP default now(),
     data json,
+    been_viewed boolean not null default false,
     primary_key_id int,
     primary_key_uuid uuid,
-    been_viewed boolean not null default false,
     database_action_id int REFERENCES database_action(id),
     database_table_id int default 1 REFERENCES database_table(id) ON UPDATE SET DEFAULT ON DELETE SET DEFAULT,
-    user_profile_id int REFERENCES user_profile(id)
+    user_profile_id int REFERENCES user_profile(id),
+
+    INDEX logging_search_idx(database_table_id, primary_key_id, primary_key_uuid)
 );
 
 CREATE TABLE IF NOT EXISTS user_session(

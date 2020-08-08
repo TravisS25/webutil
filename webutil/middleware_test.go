@@ -62,7 +62,7 @@ type middlewareState struct {
 	errCounter      int
 }
 
-func (a *middlewareState) queryForUser(r *http.Request, db Querier) ([]byte, error) {
+func (a *middlewareState) queryForUser(r *http.Request, db Entity) ([]byte, error) {
 	if r.Header.Get(queryUser) == decodeErr {
 		cookieError := &Error{}
 		cookieError.On("IsDecode").Return(true)
@@ -128,7 +128,7 @@ func (a *middlewareState) queryForSession(db Querier, userID string) (sessionID 
 	return "sessionID", nil
 }
 
-func (a *middlewareState) queryForGroups(r *http.Request, db Querier) ([]byte, error) {
+func (a *middlewareState) queryForGroups(r *http.Request, db Entity) ([]byte, error) {
 	if a.groupError == noRowsErr {
 		return nil, sql.ErrNoRows
 	}
@@ -156,7 +156,7 @@ func (a *middlewareState) queryForGroups(r *http.Request, db Querier) ([]byte, e
 	})
 }
 
-func (a *middlewareState) queryForRoutes(r *http.Request, db Querier) ([]byte, error) {
+func (a *middlewareState) queryForRoutes(r *http.Request, db Entity) ([]byte, error) {
 	if a.errType == errType1 {
 		return nil, sql.ErrNoRows
 	}
@@ -236,7 +236,7 @@ func TestAuthHandlerUnitTest(t *testing.T) {
 	session.IsNew = true
 
 	middlewareState := &middlewareState{}
-	authHandler := NewAuthHandler(newDB, middlewareState.queryForUser, HTTPResponseConfig{}, config)
+	authHandler := NewAuthHandler(newDB, middlewareState.queryForUser, config)
 
 	mockHandler := &Handler{}
 	mockHandler.On("ServeHTTP", testifymock.Anything, testifymock.Anything)
@@ -685,11 +685,24 @@ func TestRoutingHandlerUnitTest(t *testing.T) {
 	}
 
 	state := &middlewareState{}
-	config := ServerErrorCacheConfig{
-		ServerErrorConfig: ServerErrorConfig{
-			RecoverConfig: RecoverConfig{
-				RecoverDB: func(err error) (*sqlx.DB, error) {
-					return &sqlx.DB{}, nil
+	// config := ServerErrorCacheConfig{
+	// 	ServerErrorConfig: ServerErrorConfig{
+	// 		RecoverConfig: RecoverConfig{
+	// 			RecoverDB: func(err error) (*sqlx.DB, error) {
+	// 				return &sqlx.DB{}, nil
+	// 			},
+	// 		},
+	// 	},
+	// }
+
+	config := RoutingHandlerConfig{
+		ServerErrorCacheConfig: ServerErrorCacheConfig{
+			CacheConfig: CacheConfig{},
+			ServerErrorConfig: ServerErrorConfig{
+				RecoverConfig: RecoverConfig{
+					RecoverDB: func(err error) (*sqlx.DB, error) {
+						return &sqlx.DB{}, nil
+					},
 				},
 			},
 		},
@@ -710,7 +723,6 @@ func TestRoutingHandlerUnitTest(t *testing.T) {
 		map[string]bool{
 			defaultURL: true,
 		},
-		HTTPResponseConfig{},
 		config,
 	)
 	h := routingHandler.MiddlewareFunc(mockHandler)

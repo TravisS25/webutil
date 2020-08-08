@@ -684,50 +684,93 @@ func HasFormErrors(
 	conf ServerErrorConfig,
 ) bool {
 	hasError := false
+	//hasFormError := false
 
 	if err != nil {
 		logConf := LogConfig{CauseErr: err}
-
 		SetHTTPResponseDefaults(&conf.ServerErrorResponse, 500, []byte(serverErrTxt))
-		//SetHTTPResponseDefaults(&clientResp, http.StatusNotAcceptable, []byte(`{"error": form error}`))
 
-		switch err {
-		case ErrBodyRequired:
-			hasError = true
-			w.WriteHeader(clientStatus)
-			w.Write([]byte(bodyRequiredTxt))
-		case ErrInvalidJSON:
-			hasError = true
-			w.WriteHeader(clientStatus)
-			w.Write([]byte(invalidJSONTxt))
-		default:
-			if payload, ok := err.(validation.Errors); ok {
+		var valErr validation.Errors
+
+		hasFormErrFn := func() bool {
+			if errors.Is(err, ErrBodyRequired) {
 				hasError = true
-				jsonString, _ := json.Marshal(payload)
+				w.WriteHeader(clientStatus)
+				w.Write([]byte(bodyRequiredTxt))
+			} else if errors.Is(err, ErrInvalidJSON) {
+				hasError = true
+				w.WriteHeader(clientStatus)
+				w.Write([]byte(invalidJSONTxt))
+			} else if errors.As(err, &valErr) {
+				hasError = true
+				jsonString, _ := json.Marshal(errors.Cause(err).(validation.Errors))
 				w.WriteHeader(clientStatus)
 				w.Write(jsonString)
-			} else {
-				if conf.RecoverForm != nil {
-					if formErr := conf.RecoverForm(err); formErr != nil {
-						w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
-						w.Write(conf.ServerErrorResponse.HTTPResponse)
-						logConf.RecoverFormErr = formErr
-						hasError = true
-					} else {
-						if retryErr := retryForm(); retryErr != nil {
-							w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
-							w.Write(conf.ServerErrorResponse.HTTPResponse)
-							logConf.RetryFormErr = retryErr
-							hasError = true
+			}
+
+			return hasError
+		}
+
+		serverErrFn := func() {
+			w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+			w.Write(conf.ServerErrorResponse.HTTPResponse)
+			hasError = true
+		}
+
+		if !hasFormErrFn() {
+			if conf.RecoverForm != nil {
+				if formErr := conf.RecoverForm(err); formErr != nil {
+					logConf.RecoverFormErr = formErr
+					serverErrFn()
+				} else {
+					if retryErr := retryForm(); retryErr != nil {
+						logConf.RetryFormErr = retryErr
+
+						if !hasFormErrFn() {
+							serverErrFn()
 						}
 					}
-				} else {
-					w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
-					w.Write(conf.ServerErrorResponse.HTTPResponse)
-					hasError = true
 				}
+			} else {
+				serverErrFn()
 			}
 		}
+
+		// if errors.Is(err, ErrBodyRequired) {
+		// 	hasError = true
+		// 	w.WriteHeader(clientStatus)
+		// 	w.Write([]byte(bodyRequiredTxt))
+		// } else if errors.Is(err, ErrInvalidJSON) {
+		// 	hasError = true
+		// 	w.WriteHeader(clientStatus)
+		// 	w.Write([]byte(invalidJSONTxt))
+		// } else if errors.As(err, &valErr) {
+		// 	hasError = true
+		// 	jsonString, _ := json.Marshal(errors.Cause(err).(validation.Errors))
+		// 	w.WriteHeader(clientStatus)
+		// 	w.Write(jsonString)
+		// } else {
+		// 	if conf.RecoverForm != nil {
+		// 		if formErr := conf.RecoverForm(err); formErr != nil {
+		// 			w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+		// 			w.Write(conf.ServerErrorResponse.HTTPResponse)
+		// 			logConf.RecoverFormErr = formErr
+		// 			hasError = true
+		// 		} else {
+		// 			if retryErr := retryForm(); retryErr != nil {
+
+		// 				w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+		// 				w.Write(conf.ServerErrorResponse.HTTPResponse)
+		// 				logConf.RetryFormErr = retryErr
+		// 				hasError = true
+		// 			}
+		// 		}
+		// 	} else {
+		// 		w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
+		// 		w.Write(conf.ServerErrorResponse.HTTPResponse)
+		// 		hasError = true
+		// 	}
+		// }
 
 		if conf.Logger != nil {
 			conf.Logger(r, logConf)

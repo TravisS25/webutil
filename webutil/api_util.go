@@ -208,6 +208,19 @@ func DecodeCookie(r *http.Request, cookieName string, authKey, encryptKey []byte
 	return cookieVal, nil
 }
 
+func DecodeCookieNoRequest(cookieName, val string, authKey, encryptKey []byte) (string, error) {
+	var cookieVal string
+
+	sc := securecookie.New(authKey, encryptKey)
+	err := sc.Decode(cookieName, val, &cookieVal)
+
+	if err != nil {
+		return "", err
+	}
+
+	return cookieVal, nil
+}
+
 // GetJSONBuffer takes interface and json encodes it into a buffer and returns buffer
 func GetJSONBuffer(item interface{}) (bytes.Buffer, error) {
 	var buffer bytes.Buffer
@@ -221,13 +234,13 @@ func GetJSONBuffer(item interface{}) (bytes.Buffer, error) {
 	return buffer, nil
 }
 
-// SetSecureCookie is used to set a cookie from a session
+// SetSecureCookie is used to set a cookie from a session to header and returns encoded cookie
 // The code used is copied pasted from the RedisStore#Save function from the redis store library
-func SetSecureCookie(w http.ResponseWriter, session *sessions.Session, keyPairs ...[]byte) error {
+func SetSecureCookie(w http.ResponseWriter, session *sessions.Session, keyPairs ...[]byte) (string, error) {
 	encoded, err := securecookie.EncodeMulti(session.Name(), session.ID, securecookie.CodecsFromPairs(keyPairs...)...)
 	if err != nil {
-		return err
+		return "", err
 	}
 	http.SetCookie(w, sessions.NewCookie(session.Name(), encoded, session.Options))
-	return nil
+	return encoded, nil
 }

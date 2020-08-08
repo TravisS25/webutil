@@ -203,7 +203,9 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 						}
 					}
 				} else {
-					if formTest.InternalError != formErr.Error() {
+					if formErr == webutil.ErrBodyRequired || formErr == webutil.ErrInvalidJSON {
+						s.Errorf("%+v\n", formErr)
+					} else {
 						s.Errorf("Internal Error: %+v\n", formErr)
 					}
 				}

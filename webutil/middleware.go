@@ -101,6 +101,8 @@ type SessionKeys struct {
 type AuthHandlerConfig struct {
 	ServerErrorConfig
 
+	ClientErrorResponse HTTPResponseConfig
+
 	// SessionStore is used to implement a backend to store sessions
 	// besides a database like file system or in-memory database
 	// i.e. Redis
@@ -127,7 +129,7 @@ type AuthHandlerConfig struct {
 type RoutingHandlerConfig struct {
 	ServerErrorCacheConfig
 
-	ClientResp HTTPResponseConfig
+	ClientErrResponse HTTPResponseConfig
 }
 
 // MiddlewareUser is config struct used to get the base
@@ -152,20 +154,17 @@ type QueryDB func(req *http.Request, db Entity) ([]byte, error)
 type AuthHandler struct {
 	db           Entity
 	queryForUser QueryDB
-	clientResp   HTTPResponseConfig
 	config       AuthHandlerConfig
 }
 
 func NewAuthHandler(
 	db Entity,
 	queryForUser QueryDB,
-	clientResp HTTPResponseConfig,
 	config AuthHandlerConfig,
 ) *AuthHandler {
 	return &AuthHandler{
 		db:           db,
 		queryForUser: queryForUser,
-		clientResp:   clientResp,
 		config:       config,
 	}
 }
@@ -180,7 +179,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 
 		// Setting up default values from passed configs if none are set
 		SetHTTPResponseDefaults(
-			&a.clientResp,
+			&a.config.ClientErrorResponse,
 			http.StatusBadRequest,
 			[]byte(invalidCookieTxt),
 		)
@@ -194,6 +193,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			userBytes, err = a.queryForUser(r, a.db)
 
 			if err != nil {
+				fmt.Printf(err.Error())
 				canRecover := false
 
 				switch err.(type) {
@@ -203,8 +203,8 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					if cookieErr.IsDecode() {
 						http.Error(
 							w,
-							string(a.clientResp.HTTPResponse),
-							*a.clientResp.HTTPStatus,
+							string(a.config.ClientErrorResponse.HTTPResponse),
+							*a.config.ClientErrorResponse.HTTPStatus,
 						)
 					}
 
@@ -513,7 +513,7 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			var db *sqlx.DB
 
 			SetHTTPResponseDefaults(
-				&routing.config.ClientResp,
+				&routing.config.ClientErrResponse,
 				http.StatusForbidden,
 				[]byte(forbiddenURLTxt),
 			)
@@ -533,8 +533,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 					if err == sql.ErrNoRows {
 						http.Error(
 							w,
-							string(routing.config.ClientResp.HTTPResponse),
-							*routing.config.ClientResp.HTTPStatus,
+							string(routing.config.ClientErrResponse.HTTPResponse),
+							*routing.config.ClientErrResponse.HTTPStatus,
 						)
 						return err
 					}
@@ -550,8 +550,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 								if err == sql.ErrNoRows {
 									http.Error(
 										w,
-										string(routing.config.ClientResp.HTTPResponse),
-										*routing.config.ClientResp.HTTPStatus,
+										string(routing.config.ClientErrResponse.HTTPResponse),
+										*routing.config.ClientErrResponse.HTTPStatus,
 									)
 									return err
 								}
@@ -623,8 +623,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 							} else {
 								http.Error(
 									w,
-									string(routing.config.ClientResp.HTTPResponse),
-									*routing.config.ClientResp.HTTPStatus,
+									string(routing.config.ClientErrResponse.HTTPResponse),
+									*routing.config.ClientErrResponse.HTTPStatus,
 								)
 								return
 							}
@@ -665,8 +665,8 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			if !allowedPath {
 				http.Error(
 					w,
-					string(routing.config.ClientResp.HTTPResponse),
-					*routing.config.ClientResp.HTTPStatus,
+					string(routing.config.ClientErrResponse.HTTPResponse),
+					*routing.config.ClientErrResponse.HTTPStatus,
 				)
 				return
 			}

@@ -854,7 +854,7 @@ func TestFilterCheckUnitTest(t *testing.T) {
 		Value:    []interface{}{errors.New("wrong type")},
 	}
 
-	if _, err = FilterCheck(filter); err == nil {
+	if err = FilterCheck(&filter); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if _, ok := err.(*SliceError); !ok {
@@ -864,14 +864,14 @@ func TestFilterCheckUnitTest(t *testing.T) {
 
 	filter.Value = []interface{}{1}
 
-	if _, err = FilterCheck(filter); err != nil {
+	if err = FilterCheck(&filter); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
 
 	filter.Value = nil
 
-	if _, err = FilterCheck(filter); err == nil {
+	if err = FilterCheck(&filter); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if fErr, ok := err.(*FilterError); !ok {
@@ -885,7 +885,7 @@ func TestFilterCheckUnitTest(t *testing.T) {
 
 	filter.Value = errors.New("error")
 
-	if _, err = FilterCheck(filter); err == nil {
+	if err = FilterCheck(&filter); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if fErr, ok := err.(*FilterError); !ok {
@@ -899,7 +899,7 @@ func TestFilterCheckUnitTest(t *testing.T) {
 
 	filter.Value = 1
 
-	if _, err = FilterCheck(filter); err != nil {
+	if err = FilterCheck(&filter); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
