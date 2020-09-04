@@ -229,7 +229,7 @@ func RunTestCases(t *testing.T, deferFunc func() error, testCases []TestCase) {
 
 			if tc.PostResponseValidation != nil {
 				if err = tc.PostResponseValidation(rr.Result()); err != nil {
-					v.Errorf(err.Error() + "\n")
+					v.Errorf("post validation err: %+v\n", err)
 				}
 			}
 

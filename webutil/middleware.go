@@ -193,7 +193,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			userBytes, err = a.queryForUser(r, a.db)
 
 			if err != nil {
-				fmt.Printf(err.Error())
+				//fmt.Printf(err.Error())
 				canRecover := false
 
 				switch err.(type) {

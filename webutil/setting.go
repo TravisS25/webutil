@@ -76,6 +76,7 @@ type Settings struct {
 	HTTPS          bool     `yaml:"https" mapstructure:"https"`
 	AssetsLocation string   `yaml:"assets_location" mapstructure:"assets_location"`
 	AllowedOrigins []string `yaml:"allowed_origins" mapstructure:"allowed_origins"`
+	RootDir        string   `yaml:"root_dir" mapstructure:"root_dir"`
 
 	PaymentConfig  map[string]string            `yaml:"payment_config" mapstructure:"payment_config"`
 	CacheConfig    map[string]CacheSetting      `yaml:"cache_config" mapstructure:"cache_config"`
