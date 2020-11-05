@@ -105,6 +105,11 @@ var (
 	DefaultPathRegex = func(r *http.Request) (string, error) {
 		return mux.CurrentRoute(r).GetPathTemplate()
 	}
+
+	// DefaultVars returns mux vars from request
+	DefaultVars = func(r *http.Request) map[string]string {
+		return mux.Vars(r)
+	}
 )
 
 //////////////////////////////////////////////////////////////////
@@ -136,6 +141,15 @@ var (
 	// errNilValidation represents when we return a nil error in validation rules
 	// because the validated value is empty so we can't continue validating
 	errNilValidation = errors.New("webutil: nil validation error")
+
+	// errInvalidValidateValue represents error where a value passed to form validation can't be a struct
+	// only primative types
+	errInvalidValidateValue = errors.New("webutil: validate value is invalid type")
+
+	// errInvalidInstanceValue represents error if instance value passed to validator is not primitive type
+	errInvalidInstanceValue = errors.New("webutil: instance value is invalid type")
+
+	errIncompatableTypes = errors.New("webutil: instance value and passed are different types")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -539,8 +553,9 @@ func (v *validateRequiredRule) Validate(value interface{}) error {
 }
 
 func (v *validateRequiredRule) Error(message string) *validateRequiredRule {
-	v.err = errors.New(message)
-	return v
+	return &validateRequiredRule{
+		err: errors.New(message),
+	}
 }
 
 type validateDateRule struct {
@@ -638,10 +653,112 @@ type validateUniquenessRule struct {
 }
 
 func (v *validateUniquenessRule) Validate(value interface{}) error {
-	// If value and instance value are the same return nil
-	// as this indicates that the form value hasn't changed
-	if v.instanceValue == value {
-		return nil
+	var validateVal, instanceVal interface{}
+	var err error
+
+	validateValOf := reflect.ValueOf(value)
+	instanceValOf := reflect.ValueOf(v.instanceValue)
+	compareValues := true
+
+	if !validateValOf.IsValid() || !instanceValOf.IsValid() {
+		compareValues = false
+	}
+	if validateValOf.Kind() == reflect.Ptr && validateValOf.IsNil() {
+		compareValues = false
+	}
+	if instanceValOf.Kind() == reflect.Ptr && instanceValOf.IsNil() {
+		compareValues = false
+	}
+
+	if compareValues {
+		findVal := func(kind reflect.Kind, isPointer bool, forValidateVal bool) error {
+			kindList := []reflect.Kind{
+				reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+				reflect.Float32, reflect.Float64, reflect.String,
+			}
+
+			found := false
+
+			for _, v := range kindList {
+				if kind == v {
+					found = true
+				}
+			}
+
+			if found {
+				if forValidateVal {
+					if isPointer {
+						validateVal = validateValOf.Elem().Interface()
+						//fmt.Printf("here foo 1: %v\n", reflect.ValueOf(validateVal).Kind())
+					} else {
+						validateVal = validateValOf.Interface()
+						//fmt.Printf("here foo 2: %v\n", reflect.ValueOf(validateVal).Kind())
+					}
+				} else {
+					if isPointer {
+						instanceVal = instanceValOf.Elem().Interface()
+						//fmt.Printf("here foo 3: %v\n", reflect.ValueOf(instanceVal).Kind())
+					} else {
+						instanceVal = instanceValOf.Interface()
+						//fmt.Printf("here foo 4: %v\n", reflect.ValueOf(instanceVal).Kind())
+					}
+				}
+			} else {
+				if forValidateVal {
+					return errInvalidValidateValue
+				}
+
+				return errInvalidInstanceValue
+			}
+
+			return nil
+		}
+
+		var validateKind, instanceKind reflect.Kind
+
+		if validateValOf.Kind() == reflect.Ptr {
+			validateKind = validateValOf.Elem().Kind()
+			//fmt.Printf("validate kind 1: %v\n", validateKind)
+
+			if err = findVal(validateKind, true, true); err != nil {
+				return err
+			}
+		} else {
+			validateKind = validateValOf.Kind()
+			//fmt.Printf("validate kind 2: %v\n", validateKind)
+
+			if err = findVal(validateKind, false, true); err != nil {
+				return err
+			}
+		}
+
+		if instanceValOf.Kind() == reflect.Ptr {
+			instanceKind = instanceValOf.Elem().Kind()
+			//fmt.Printf("instance kind 1: %v\n", instanceKind)
+
+			if err = findVal(instanceKind, true, false); err != nil {
+				return err
+			}
+		} else {
+			instanceKind = instanceValOf.Kind()
+			//fmt.Printf("instance kind 2: %v\n", instanceKind)
+
+			if err = findVal(instanceKind, false, false); err != nil {
+				return err
+			}
+		}
+
+		if validateKind != instanceKind {
+			return errIncompatableTypes
+		}
+
+		// fmt.Printf("validate val type: %s\n", reflect.TypeOf(validateVal).Kind())
+		// fmt.Printf("instance val type: %s\n", reflect.TypeOf(instanceVal).Kind())
+
+		if instanceVal == validateVal {
+			return nil
+		}
 	}
 
 	return validatorRules(v.validator, value, validateUniquenessType)

@@ -533,10 +533,10 @@ func PopulateDatabaseTables(db DBInterface, dbType string, dbTables map[string]s
 }
 
 // QueryCount is used for queries that consist of count in select statement
-func QueryCount(db SqlxDB, query string, args ...interface{}) (*Count, error) {
+func QueryCount(db SqlxDB, query string, args ...interface{}) (Count, error) {
 	var dest Count
 	err := db.Get(&dest, query, args...)
-	return &dest, err
+	return dest, err
 }
 
 func dbError(w http.ResponseWriter, r *http.Request, err error, retryDB RetryDB, conf ServerErrorConfig) bool {

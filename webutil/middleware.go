@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/pkg/errors"
+
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
@@ -193,7 +195,6 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 			userBytes, err = a.queryForUser(r, a.db)
 
 			if err != nil {
-				//fmt.Printf(err.Error())
 				canRecover := false
 
 				switch err.(type) {
@@ -214,7 +215,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 						*a.config.ServerErrorResponse.HTTPStatus,
 					)
 				default:
-					if err == sql.ErrNoRows {
+					if errors.Is(err, sql.ErrNoRows) {
 						next.ServeHTTP(w, r)
 					} else {
 						if a.config.RecoverDB != nil {
@@ -223,7 +224,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 								canRecover = true
 								userBytes, err = a.queryForUser(r, a.db)
 
-								if err == sql.ErrNoRows {
+								if errors.Is(err, sql.ErrNoRows) {
 									next.ServeHTTP(w, r)
 									return err
 								}
@@ -387,7 +388,7 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 				if err != nil {
 					isValid := false
 
-					if err == sql.ErrNoRows {
+					if errors.Is(err, sql.ErrNoRows) {
 						isValid = true
 						next.ServeHTTP(w, r)
 					} else {
@@ -397,7 +398,7 @@ func (g *GroupHandler) MiddlewareFunc(next http.Handler) http.Handler {
 								isValid = true
 								groupBytes, err = g.queryForGroups(r, g.db)
 
-								if err == sql.ErrNoRows {
+								if errors.Is(err, sql.ErrNoRows) {
 									next.ServeHTTP(w, r)
 								}
 							}
@@ -530,7 +531,7 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 				if err != nil {
 					isValid := false
 
-					if err == sql.ErrNoRows {
+					if errors.Is(err, sql.ErrNoRows) {
 						http.Error(
 							w,
 							string(routing.config.ClientErrResponse.HTTPResponse),
@@ -547,7 +548,7 @@ func (routing *RoutingHandler) MiddlewareFunc(next http.Handler) http.Handler {
 							if err == nil {
 								isValid = true
 							} else {
-								if err == sql.ErrNoRows {
+								if errors.Is(err, sql.ErrNoRows) {
 									http.Error(
 										w,
 										string(routing.config.ClientErrResponse.HTTPResponse),

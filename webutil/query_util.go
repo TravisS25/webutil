@@ -83,6 +83,18 @@ type DbFields map[string]FieldConfig
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
 
+// SelectItem is struct used in conjunction with primeng's library api
+type SelectItem struct {
+	Value interface{} `json:"value" db:"value"`
+	Label string      `json:"label" db:"label"`
+}
+
+// FilteredResults is struct used for dynamically filtered results
+type FilteredResults struct {
+	Data  interface{} `json:"data"`
+	Total int         `json:"total"`
+}
+
 type queryError struct {
 	isInvalidField     bool
 	isInvalidOperation bool
@@ -628,8 +640,8 @@ func getValueResults(
 		*query,
 		allValues...,
 	); err != nil {
-		// fmt.Printf("query: %s\n", *query)
-		// fmt.Printf("args: %s\n", allValues)
+		fmt.Printf("query: %s\n", *query)
+		fmt.Printf("args: %s\n", allValues)
 		// fmt.Printf("err 6: %s\n", err.Error())
 		return nil, errors.Wrap(err, "")
 	}
@@ -856,6 +868,9 @@ func GetQueriedResults(
 		paramConf,
 		queryConf,
 	)
+
+	// fmt.Printf("query: %s\n", query)
+	// fmt.Printf("args: %s\n", values)
 
 	if err != nil {
 		// fmt.Printf("get queried err: %s\n", err.Error())
@@ -1604,4 +1619,61 @@ func HasFilterOrServerError(w http.ResponseWriter, r *http.Request, err error, r
 	}
 
 	return false
+}
+
+// QuerySelectItems is utility function for querying against a table and returning
+// a list of SelectItem structs to be used with primeng's library components
+func QuerySelectItems(db SqlxDB, bindVar int, query string, args ...interface{}) ([]SelectItem, error) {
+	var err error
+
+	if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
+		return nil, err
+	}
+
+	var items []SelectItem
+
+	if err = db.Select(&items, query, args...); err != nil {
+		return []SelectItem{}, err
+	}
+
+	return items, nil
+}
+
+// QuerySingleColumn is utility function used to query for single column
+// Will return error if length of *sql.Rows#Columns does not return 1
+func QuerySingleColumn(db Querier, bindVar int, query string, args ...interface{}) ([]interface{}, error) {
+	var err error
+
+	if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
+		return nil, err
+	}
+
+	items := make([]interface{}, 0)
+	rows, err := db.Queryx(query, args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	cols, err := rows.Columns()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(cols) != 1 {
+		return nil, fmt.Errorf("webutil: query should only return one column")
+	}
+
+	for rows.Next() {
+		var item interface{}
+
+		if err = rows.Scan(&item); err != nil {
+			return nil, err
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
 }

@@ -760,7 +760,7 @@ func ValidateFilteredIntArrayResponse(bodyResponse io.Reader, expectedResult int
 	return validateIDResponse(bodyResponse, intFilteredIDResult, expectedResult)
 }
 
-func ValidateFilteredInt64ArrayResponse(bodyResponse io.Reader, expectedResult interface{}) error {
+func ValidateFilteredInt64ArrayResponse(bodyResponse io.Reader, expectedResult []int64) error {
 	return validateIDResponse(bodyResponse, int64FilteredIDResult, expectedResult)
 }
 
