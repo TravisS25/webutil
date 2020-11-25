@@ -805,6 +805,8 @@ func GetPreCountQueryResults(
 	return results, nil
 }
 
+// GetPreQueryAndCountResults gathers all of the replacement values and
+// appends all the neccessary clauses to query but doesn't execute
 func GetPreQueryAndCountResults(
 	query *string,
 	countQuery *string,
@@ -813,8 +815,8 @@ func GetPreQueryAndCountResults(
 	req *http.Request,
 	paramConf ParamConfig,
 	queryConf QueryConfig,
-) ([]interface{}, error) {
-	var results []interface{}
+) ([]interface{}, []interface{}, error) {
+	var results, countResults []interface{}
 	var err error
 
 	if results, err = getValueResults(
@@ -827,10 +829,10 @@ func GetPreQueryAndCountResults(
 		fields,
 	); err != nil {
 		//fmt.Printf("get result err: %s\n", err.Error())
-		return nil, errors.Wrap(err, "")
+		return nil, nil, errors.Wrap(err, "")
 	}
 
-	if _, err = getValueResults(
+	if countResults, err = getValueResults(
 		countQuery,
 		prependArgs,
 		false,
@@ -840,10 +842,10 @@ func GetPreQueryAndCountResults(
 		fields,
 	); err != nil {
 		//fmt.Printf("get result err: %s\n", err.Error())
-		return nil, errors.Wrap(err, "")
+		return nil, nil, errors.Wrap(err, "")
 	}
 
-	return results, err
+	return results, countResults, err
 }
 
 // GetQueriedResults dynamically adds filters, sorts and groups to query

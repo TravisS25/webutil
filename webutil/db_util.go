@@ -183,10 +183,9 @@ type Count struct {
 //------------------------ FUNCTIONS ---------------------------
 //////////////////////////////////////////////////////////////////
 
-// NewDB is function that returns *sqlx.DB with given DB config
-// If db connection fails, returns error
-func NewDB(dbConfig DatabaseSetting, dbType string) (*sqlx.DB, error) {
-	dbStr := fmt.Sprintf(
+// GetDNSConnStr returns dns connection strings based on settings passed
+func GetDNSConnStr(dbConfig DatabaseSetting, dbType string) string {
+	return fmt.Sprintf(
 		DBConnStr,
 		dbType,
 		dbConfig.User,
@@ -200,8 +199,12 @@ func NewDB(dbConfig DatabaseSetting, dbType string) (*sqlx.DB, error) {
 		dbConfig.SSLKey,
 		dbConfig.SSLCert,
 	)
+}
 
-	db, err := sqlx.Open(dbType, dbStr)
+// NewDBWithDriver works just like NewDB but instead of using
+// DatabaseSetting as parameter, we use dataSourceName
+func NewDBWithDriver(driverName, dataSourceName string) (*sqlx.DB, error) {
+	db, err := sqlx.Open(driverName, dataSourceName)
 
 	if err != nil {
 		return nil, err
@@ -210,6 +213,13 @@ func NewDB(dbConfig DatabaseSetting, dbType string) (*sqlx.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// NewDB is function that returns *sqlx.DB with given DB config
+// If db connection fails, returns error
+func NewDB(dbConfig DatabaseSetting, dbType string) (*sqlx.DB, error) {
+	dbStr := GetDNSConnStr(dbConfig, dbType)
+	return NewDBWithDriver(dbType, dbStr)
 }
 
 // NewDBWithList is function that returns *sqlx.DB and the DatabaseSetting used

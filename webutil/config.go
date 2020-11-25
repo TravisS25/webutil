@@ -7,6 +7,9 @@ const (
 	// DateTimeLayout is global format for date time
 	DateTimeLayout = "2006-01-02 15:04:05"
 
+	// DateTimeOffsetLayout is global format for date time with time zone offset
+	DateTimeOffsetLayout = "2006-01-02 15:04:05-07:00"
+
 	// DateLayout is global format for date
 	DateLayout = "2006-01-02"
 

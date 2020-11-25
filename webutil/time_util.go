@@ -6,6 +6,22 @@ import (
 	pkgerrors "github.com/pkg/errors"
 )
 
+func convertTimeToLocalDateTime(dateString, dateFormat, timezone string) (time.Time, error) {
+	location, err := time.LoadLocation(timezone)
+
+	if err != nil {
+		return time.Time{}, pkgerrors.Wrap(err, "")
+	}
+
+	parsedTime, err := time.Parse(dateFormat, dateString)
+
+	if err != nil {
+		return time.Time{}, pkgerrors.Wrap(err, "")
+	}
+
+	return parsedTime.In(location), nil
+}
+
 // ConvertTimeToLocalDateTime is used to convert the date string passed
 // to the local time zone passed and returns a time instance
 func ConvertTimeToLocalDateTime(dateString, timezone string) (time.Time, error) {
@@ -22,6 +38,13 @@ func ConvertTimeToLocalDateTime(dateString, timezone string) (time.Time, error) 
 	}
 
 	return parsedTime.In(location), nil
+}
+
+// ConvertTimeToLocalDateTimeF is used to convert the date string passed
+// to the local time zone passed along with date format that will be retrieved
+// from datasource and returns a time instance
+func ConvertTimeToLocalDateTimeF(dateString, dateFormat, timezone string) (time.Time, error) {
+	return convertTimeToLocalDateTime(dateString, dateFormat, timezone)
 }
 
 // func GetCurrentDateTimeInUTC() time.Time {
