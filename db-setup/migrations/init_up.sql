@@ -49,9 +49,8 @@ CREATE TABLE IF NOT EXISTS logging(
 CREATE TABLE IF NOT EXISTS user_session(
     id serial primary key,
     session text not null unique,
-    user_bytes text not null,
-    url_bytes text not null,
-    group_bytes text not null,
+    session_bytes json not null,
+    expire_date TIMESTAMP,
     user_profile_id int not null REFERENCES user_profile(id)
 );
 

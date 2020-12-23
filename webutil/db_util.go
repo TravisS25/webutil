@@ -165,11 +165,6 @@ type RecoverDB func(err error) (*sqlx.DB, error)
 // an error or not
 type RetryDB func(DBInterface) error
 
-// // RetryQuerier implementation should query database that has
-// // recovered from a failure and return whether you get
-// // an error or not
-// type RetryQuerier func(Querier) error
-
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------
 //////////////////////////////////////////////////////////////////
@@ -239,6 +234,61 @@ func NewDBWithList(dbConfigList []DatabaseSetting, dbType string) (*sqlx.DB, err
 	}
 
 	return nil, ErrNoConnection
+}
+
+// ServerErrorRecover takes passed error and determines if error is recoverable
+// based on the settings passed in config
+func ServerErrorRecover(r *http.Request, err error, exclusionErrors []error, retryDB RetryDB, cfg ServerErrorConfig) (bool, error) {
+	var innerErr error
+
+	if err != nil {
+		if exclusionErrors != nil {
+			for _, v := range exclusionErrors {
+				if errors.Is(err, v) {
+					return true, err
+				}
+			}
+		}
+
+		logConf := LogConfig{CauseErr: err}
+
+		if cfg.RecoverDB != nil {
+			fmt.Printf("recover set\n")
+			if db, recoverErr := cfg.RecoverDB(err); recoverErr == nil {
+				fmt.Printf("able to recover\n")
+				if retryDB != nil {
+					fmt.Printf("rety set\n")
+					if retryErr := retryDB(db); retryErr != nil {
+						if exclusionErrors != nil {
+							for _, v := range exclusionErrors {
+								if errors.Is(retryErr, v) {
+									return true, retryErr
+								}
+							}
+						}
+
+						logConf.RetryDBErr = retryErr
+						innerErr = retryErr
+					}
+				} else {
+					innerErr = err
+				}
+			} else {
+				logConf.RecoverDBErr = recoverErr
+				innerErr = recoverErr
+			}
+		} else {
+			innerErr = err
+		}
+
+		if cfg.Logger != nil {
+			cfg.Logger(r, logConf)
+		}
+	} else {
+		return true, nil
+	}
+
+	return false, innerErr
 }
 
 // IsDBError takes passed error and determines if error is recoverable

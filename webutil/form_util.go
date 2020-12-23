@@ -352,6 +352,22 @@ func (f *FormValidation) IsValid(isValid bool) *validRule {
 //
 // Will raise errFutureAndPastDateInternal error which will be wrapped
 // in validation.InternalError if both bool parameters are false
+func (f *FormValidation) ValidateDateV2(
+	layout,
+	timezone string,
+	compareTime,
+	canBeFuture,
+	canBePast bool,
+) *validateDateRule {
+	return &validateDateRule{
+		layout:      layout,
+		timezone:    timezone,
+		canBeFuture: canBeFuture,
+		canBePast:   canBePast,
+		compareTime: compareTime,
+	}
+}
+
 func (f *FormValidation) ValidateDate(
 	layout,
 	timezone string,
@@ -561,6 +577,7 @@ func (v *validateRequiredRule) Error(message string) *validateRequiredRule {
 type validateDateRule struct {
 	layout      string
 	timezone    string
+	compareTime bool
 	canBeFuture bool
 	canBePast   bool
 	err         error
@@ -580,7 +597,11 @@ func (v *validateDateRule) Validate(value interface{}) error {
 	}
 
 	if v.timezone != "" {
-		currentTime, err = GetCurrentLocalDateInUTC(v.timezone)
+		if v.compareTime {
+			currentTime, err = GetCurrentLocalDateTimeInUTC(v.timezone)
+		} else {
+			currentTime, err = GetCurrentLocalDateInUTC(v.timezone)
+		}
 
 		if err != nil {
 			return validation.NewInternalError(err)
@@ -593,10 +614,15 @@ func (v *validateDateRule) Validate(value interface{}) error {
 		return errors.New(InvalidFormatTxt)
 	}
 
+	fmt.Printf("current time: %v\n", currentTime)
+	fmt.Printf("date time: %v\n", dateTime)
+
 	if v.canBeFuture && v.canBePast {
 		err = nil
 	} else if v.canBeFuture {
+		fmt.Printf("hey there\n")
 		if dateTime.Before(currentTime) {
+			fmt.Printf("sholud geeeet here")
 			err = errors.New(InvalidPastDateTxt)
 		}
 	} else if v.canBePast {

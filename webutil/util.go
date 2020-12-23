@@ -11,7 +11,7 @@ type LogConfig struct {
 	RecoverDBErr error
 	RetryDBErr   error
 
-	CacheRecoverErr error
+	RecoverCacheErr error
 	RetryCacheErr   error
 
 	RecoverFormErr error

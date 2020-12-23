@@ -263,7 +263,7 @@ func TestHasCacheErrorUnitTest(t *testing.T) {
 	rr = httptest.NewRecorder()
 	sec := ServerErrorConfig{
 		Logger: func(r *http.Request, conf LogConfig) {
-			if conf.CacheRecoverErr == nil {
+			if conf.RecoverCacheErr == nil {
 				t.Errorf("cache recover error should NOT be nil\n")
 			}
 		},

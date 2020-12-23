@@ -59,10 +59,6 @@ var (
 )
 
 //////////////////////////////////////////////////////////////////
-//------------------------ INTERFACES ---------------------------
-//////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////
 //----------------------- CONFIG STRUCTS -----------------------
 //////////////////////////////////////////////////////////////////
 
@@ -141,6 +137,14 @@ type MiddlewareUser struct {
 	Email string `json:"email"`
 }
 
+// SessionMiddleware is config struct for gathering info from
+// middleware functions
+type SessionMiddleware struct {
+	User   []byte `json:"user"`
+	Groups []byte `json:"groups"`
+	Routes []byte `json:"routes"`
+}
+
 //////////////////////////////////////////////////////////////////
 //--------------------------- TYPES ---------------------------
 //////////////////////////////////////////////////////////////////
@@ -200,6 +204,7 @@ func (a *AuthHandler) MiddlewareFunc(next http.Handler) http.Handler {
 				switch err.(type) {
 				case securecookie.Error:
 					cookieErr := err.(securecookie.Error)
+					fmt.Printf("cookieErr: %s\n", cookieErr.Error())
 
 					if cookieErr.IsDecode() {
 						http.Error(

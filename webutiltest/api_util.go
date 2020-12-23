@@ -122,6 +122,51 @@ type FileUploadConfig struct {
 	ParamConfs []ParamConfig
 }
 
+func ValidateObjectSlice(data []interface{}, mapKey string, expectedMap map[interface{}]string) error {
+	unexpectedVals := make([]interface{}, 0)
+	nMap := make(map[interface{}]string, len(expectedMap))
+
+	for k, v := range expectedMap {
+		nMap[k] = v
+	}
+
+	for _, val := range data {
+		entry, ok := val.(map[string]interface{})
+
+		if !ok {
+			return fmt.Errorf("data entry is not JSON object")
+		}
+
+		if _, ok = entry[mapKey]; !ok {
+			return fmt.Errorf("'mapKey' value not found in object")
+		}
+
+		if _, ok = nMap[mapKey]; ok {
+			delete(nMap, mapKey)
+		} else {
+			unexpectedVals = append(unexpectedVals, entry[mapKey])
+		}
+	}
+
+	var errStr string
+
+	if len(nMap) != 0 {
+		vals := make([]string, 0)
+
+		for _, v := range nMap {
+			vals = append(vals, v)
+		}
+
+		errStr += fmt.Sprintf("entries not found: %v\n\n", vals)
+	}
+
+	if len(unexpectedVals) > 0 {
+		errStr += fmt.Sprintf("unexpected values found: %v\n\n", unexpectedVals)
+	}
+
+	return nil
+}
+
 func NewRequestWithForm(method, url string, form interface{}) (*http.Request, error) {
 	if form != nil {
 		var buffer bytes.Buffer
@@ -824,27 +869,25 @@ func SetJSONFromResponse(bodyResponse io.Reader, item interface{}) error {
 	return nil
 }
 
-// LoginUser takes email and password along with login url and form information
-// to use to make a POST request to login url and if successful, return user cookie
-func LoginUser(url string, loginForm interface{}) (string, error) {
+func loginUser(url string, loginForm interface{}) (*http.Response, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	res, err := client.Do(req)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if res.StatusCode != http.StatusOK {
 		buf := bytes.Buffer{}
 		buf.ReadFrom(res.Body)
 		errorMessage := fmt.Sprintf("status code: %d\n  response: %s\n", res.StatusCode, buf.String())
-		return "", errors.New(errorMessage)
+		return nil, errors.New(errorMessage)
 	}
 
 	token := res.Header.Get(webutil.TokenHeader)
@@ -853,7 +896,7 @@ func LoginUser(url string, loginForm interface{}) (string, error) {
 	req, err = http.NewRequest(http.MethodPost, url, &buffer)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req.Header.Set(webutil.TokenHeader, token)
@@ -861,17 +904,58 @@ func LoginUser(url string, loginForm interface{}) (string, error) {
 	res, err = client.Do(req)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if res.StatusCode != http.StatusOK {
 		buf := bytes.Buffer{}
 		buf.ReadFrom(res.Body)
 		errorMessage := fmt.Sprintf("status code: %d\n  response: %s\n", res.StatusCode, buf.String())
-		return "", errors.New(errorMessage)
+		return nil, errors.New(errorMessage)
+	}
+
+	return res, nil
+}
+
+// LoginUser takes email and password along with login url and form information
+// to use to make a POST request to login url and if successful, returns user cookie
+func LoginUser(url string, loginForm interface{}) (string, error) {
+	res, err := loginUser(url, loginForm)
+
+	if err != nil {
+		return "", err
 	}
 
 	return res.Header.Get(webutil.SetCookieHeader), nil
+}
+
+// LoginUserV takes email and password along with login url and form information
+// to use to make a POST request to login url and if successful, returns user cookie
+// with the value extracted
+func LoginUserV(url string, loginForm interface{}) (string, error) {
+	res, err := loginUser(url, loginForm)
+
+	if err != nil {
+		return "", err
+	}
+
+	if len(res.Cookies()) > 0 {
+		return res.Cookies()[0].Value, nil
+	}
+
+	return "", fmt.Errorf("webutiltest: no cookie value returned")
+
+	// if len(res.Header.Get(webutil.SetCookieHeader)) == 0 {
+	// 	return "", fmt.Errorf("webutiltest: no cookie returned")
+	// }
+
+	// c := strings.Split(res.Header.Get(webutil.SetCookieHeader), ";")[0]
+
+	// if len(c) < len(cookieName)+1 {
+	// 	return "", fmt.Errorf("webutiltest: invalid cookie name")
+	// }
+
+	// return c[len(cookieName)+1:], nil
 }
 
 func NewFileUploadRequest(confs []ParamConfig, method, url string) (*http.Request, error) {

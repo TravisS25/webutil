@@ -20,13 +20,16 @@ import (
 
 const (
 	// TokenHeader is key string for "X-CSRF-TOKEN" header
-	TokenHeader = "X-CSRF-TOKEN"
+	TokenHeader = "X-Csrf-Token"
 
 	// CookieHeader is key string for "Cookie" header
 	CookieHeader = "Cookie"
 
 	// SetCookieHeader is key string for "Set-Cookie" header
 	SetCookieHeader = "Set-Cookie"
+
+	// LocationHeader is key string for "Location" header
+	LocationHeader = "Location"
 )
 
 const (
@@ -91,6 +94,7 @@ func SetToken(w http.ResponseWriter, r *http.Request) {
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
 func SendPayload(w http.ResponseWriter, payload interface{}, errResp HTTPResponseConfig) error {
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	SetHTTPResponseDefaults(&errResp, http.StatusInternalServerError, []byte(invalidJSONTxt))
 	jsonString, err := json.Marshal(payload)
 

@@ -22,9 +22,13 @@ const (
 	// FormDateLayout is format that should be received from a form
 	FormDateLayout = "01/02/2006"
 
-	// FormDateTimeStrfTimeFormat is format used when formatting date in sql query
+	// FormDateTimeStrf is format used when formatting date in sql query
 	// to use a form format
-	FormDateTimeStrfTimeFormat = "%m/%d/%Y %I:%M %p"
+	FormDateTimeStrf = "%m/%d/%Y %I:%M %p"
+
+	// FormDateStrf is format used when formatting date in sql query
+	// to use a form format
+	FormDateStrf = "%m/%d/%Y"
 )
 
 const (

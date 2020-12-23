@@ -299,6 +299,166 @@ func TestHasDBErrorUnitTest(t *testing.T) {
 	// }
 }
 
+func TestServerErrorRecoverUnitTest(t *testing.T) {
+	var valid bool
+	var err error
+
+	r := httptest.NewRequest(http.MethodGet, "/url", nil)
+	cfg := ServerErrorConfig{}
+
+	valid, err = ServerErrorRecover(r, nil, nil, nil, cfg)
+
+	if !valid {
+		t.Errorf("should be valid")
+	}
+
+	if err != nil {
+		t.Errorf("should not have err; got %s\n", err.Error())
+	}
+
+	valid, err = ServerErrorRecover(
+		r,
+		sql.ErrNoRows,
+		[]error{sql.ErrNoRows},
+		nil,
+		cfg,
+	)
+
+	if !valid {
+		t.Errorf("should be valid")
+	}
+
+	if err == nil {
+		t.Errorf("should have sql.ErrNoRows error")
+	} else {
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Errorf("should have sql.ErrNoRows error; got %s\n", err.Error())
+		}
+	}
+
+	cfg.RecoverDB = func(err error) (*sqlx.DB, error) {
+		return &sqlx.DB{}, nil
+	}
+
+	testErr := fmt.Errorf("test error")
+
+	valid, err = ServerErrorRecover(
+		r,
+		testErr,
+		[]error{sql.ErrNoRows},
+		func(db DBInterface) error {
+			return sql.ErrNoRows
+		},
+		cfg,
+	)
+
+	if !valid {
+		t.Errorf("should be valid")
+	}
+
+	if err == nil {
+		t.Errorf("should have sql.ErrNoRows error")
+	} else {
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Errorf("should have sql.ErrNoRows error; got %s\n", err.Error())
+		}
+	}
+
+	cfg.Logger = func(r *http.Request, cfg LogConfig) {
+		if !errors.Is(cfg.CauseErr, testErr) {
+			t.Errorf("should have test err: got %s\n", cfg.CauseErr.Error())
+		}
+	}
+
+	valid, err = ServerErrorRecover(
+		r,
+		testErr,
+		[]error{sql.ErrNoRows},
+		func(db DBInterface) error {
+			return testErr
+		},
+		cfg,
+	)
+
+	if valid {
+		t.Errorf("should not be valid")
+	}
+
+	if err == nil {
+		t.Errorf("should have testErr")
+	} else {
+		if !errors.Is(err, testErr) {
+			t.Errorf("should have testErr; got %s\n", err.Error())
+		}
+	}
+
+	valid, err = ServerErrorRecover(
+		r,
+		testErr,
+		[]error{sql.ErrNoRows},
+		nil,
+		cfg,
+	)
+
+	if valid {
+		t.Errorf("should not be valid")
+	}
+
+	if err == nil {
+		t.Errorf("should have testErr")
+	} else {
+		if !errors.Is(err, testErr) {
+			t.Errorf("should have testErr; got %s\n", err.Error())
+		}
+	}
+
+	cfg.RecoverDB = func(err error) (*sqlx.DB, error) {
+		return nil, testErr
+	}
+
+	valid, err = ServerErrorRecover(
+		r,
+		testErr,
+		[]error{sql.ErrNoRows},
+		nil,
+		cfg,
+	)
+
+	if valid {
+		t.Errorf("should not be valid")
+	}
+
+	if err == nil {
+		t.Errorf("should have testErr")
+	} else {
+		if !errors.Is(err, testErr) {
+			t.Errorf("should have testErr; got %s\n", err.Error())
+		}
+	}
+
+	cfg.RecoverDB = nil
+
+	valid, err = ServerErrorRecover(
+		r,
+		testErr,
+		[]error{sql.ErrNoRows},
+		nil,
+		cfg,
+	)
+
+	if valid {
+		t.Errorf("should not be valid")
+	}
+
+	if err == nil {
+		t.Errorf("should have testErr")
+	} else {
+		if !errors.Is(err, testErr) {
+			t.Errorf("should have testErr; got %s\n", err.Error())
+		}
+	}
+}
+
 func TestHasNoRowsOrDBErrorUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/url", nil)

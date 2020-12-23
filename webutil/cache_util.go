@@ -338,7 +338,7 @@ func HasCacheError(
 					hasError = true
 				}
 			} else {
-				logConf.CacheRecoverErr = recoverErr
+				logConf.RecoverCacheErr = recoverErr
 				hasError = true
 			}
 		} else {
