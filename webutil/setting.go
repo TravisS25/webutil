@@ -1,7 +1,9 @@
 package webutil
 
 import (
+	"fmt"
 	"os"
+	"reflect"
 
 	"github.com/spf13/viper"
 )
@@ -104,4 +106,25 @@ func ConfigSettings(envString string) (*Settings, error) {
 	}
 
 	return settings, nil
+}
+
+func GetSettings(envString string, settings interface{}, opts ...viper.DecoderConfigOption) error {
+	var err error
+
+	if reflect.ValueOf(settings).Type().Kind() != reflect.Ptr {
+		return fmt.Errorf("settings parameter must be pointer")
+	}
+
+	filePath := os.Getenv(envString)
+	v := viper.New()
+	v.SetConfigFile(filePath)
+
+	if err = v.ReadInConfig(); err != nil {
+		return err
+	}
+	if err = v.Unmarshal(settings, opts...); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -724,6 +724,8 @@ func GetCountResults(
 	rower, err := db.Queryx(countQuery, results...)
 
 	if err != nil {
+		fmt.Printf("query: %s\n", countQuery)
+		fmt.Printf("values: %v\n", results)
 		return 0, err
 	}
 
@@ -871,7 +873,7 @@ func GetQueriedResults(
 		queryConf,
 	)
 
-	// fmt.Printf("query: %s\n", query)
+	fmt.Printf("query: %s\n", query)
 	// fmt.Printf("args: %s\n", values)
 
 	if err != nil {

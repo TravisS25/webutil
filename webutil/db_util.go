@@ -250,7 +250,7 @@ func ServerErrorRecover(r *http.Request, err error, exclusionErrors []error, ret
 			}
 		}
 
-		logConf := LogConfig{CauseErr: err}
+		logCfg := LogConfig{CauseErr: err}
 
 		if cfg.RecoverDB != nil {
 			fmt.Printf("recover set\n")
@@ -267,14 +267,14 @@ func ServerErrorRecover(r *http.Request, err error, exclusionErrors []error, ret
 							}
 						}
 
-						logConf.RetryDBErr = retryErr
+						logCfg.RetryDBErr = retryErr
 						innerErr = retryErr
 					}
 				} else {
 					innerErr = err
 				}
 			} else {
-				logConf.RecoverDBErr = recoverErr
+				logCfg.RecoverDBErr = recoverErr
 				innerErr = recoverErr
 			}
 		} else {
@@ -282,7 +282,7 @@ func ServerErrorRecover(r *http.Request, err error, exclusionErrors []error, ret
 		}
 
 		if cfg.Logger != nil {
-			cfg.Logger(r, logConf)
+			cfg.Logger(r, logCfg)
 		}
 	} else {
 		return true, nil

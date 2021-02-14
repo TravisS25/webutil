@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -91,6 +93,9 @@ var (
 	// FormDateTimeRegex is regex expression used for forms to validate correct format of
 	// date and time
 	FormDateTimeRegex = regexp.MustCompile("^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4} [0-9]{1,2}:[0-9]{2} (?i)(AM|PM)$")
+
+	// USDCurrencyRegex represents usd currency format to validate for form
+	USDCurrencyRegex = regexp.MustCompile("^(?:-)?[0-9]+(?:\\.[0-9]{1,2})?$")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -226,19 +231,104 @@ type CacheValidate struct {
 
 // RequestValidator should implement validating fields sent from
 // request and return form or error if one occurs
+//
+// This is deprecated, use FormValidator
 type RequestValidator interface {
 	Validate(req *http.Request, instance interface{}) (interface{}, error)
 }
 
-// type Validator interface {
-// 	RequestValidator
-// 	SetEntity(Entity)
-// 	SetCache(CacheStore)
-// }
+// FormValidator should implement validating fields sent from
+// request and return error if one occurs
+type FormValidator interface {
+	Validate(req *http.Request, validator *FormValidation) error
+}
 
 //////////////////////////////////////////////////////////////////
 //------------------------- STRUCTS ---------------------------
 //////////////////////////////////////////////////////////////////
+
+// FormCurrency is struct used to deal with form fields that involve currency
+//
+// The reason for having this is that floats do not give exact returns all the
+// time so FormCurrency (which embeds the github.com/shopspring/decimal library)
+// is for manipulating currency with exact returns
+type FormCurrency struct {
+	decimal.Decimal
+
+	// CurrencyRegex is used for form validation on validating decimal.Decimal
+	// is in the right format
+	// This will be used in FormCurrency#Validate function
+	//
+	// Default: USDCurrencyRegex
+	CurrencyRegex *regexp.Regexp `json:"-"`
+
+	// AllowNegative allows decimal number to be negative
+	// This will be used in FormCurrency#Validate function
+	//
+	// Default: false
+	//AllowNegative bool `json:"-"`
+
+	// Min is the lowest number decimal allowed
+	//
+	// Default: nil (no limit)
+	Min *decimal.Decimal `json:"-"`
+
+	// MinError is a custom error message a user can set if
+	// decimal is lower than Min
+	MinError error `json:"-"`
+
+	// Min is the highest number decimal allowed
+	//
+	// Default: nil (no limit)
+	Max *decimal.Decimal `json:"-"`
+
+	// MaxError is a custom error message a user can set if
+	// decimal is higher than Max
+	MaxError error `json:"-"`
+}
+
+func (f *FormCurrency) UnmarshalJSON(decimalBytes []byte) error {
+	return f.Decimal.UnmarshalJSON(decimalBytes)
+}
+
+func (f FormCurrency) MarshalJSON() ([]byte, error) {
+	return f.Decimal.MarshalJSON()
+}
+
+func (f FormCurrency) Validate() error {
+	var currencyRegexp *regexp.Regexp
+
+	if f.CurrencyRegex == nil {
+		currencyRegexp = USDCurrencyRegex
+	} else {
+		currencyRegexp = f.CurrencyRegex
+	}
+
+	if !currencyRegexp.MatchString(f.Decimal.String()) {
+		fmt.Printf("format: %s\n", f.Decimal.String())
+		return fmt.Errorf(InvalidFormatTxt)
+	}
+
+	if f.Min != nil && f.Decimal.LessThan(*f.Min) {
+		if f.MinError != nil {
+			return f.MinError
+		}
+
+		val, _ := f.Min.Float64()
+		return fmt.Errorf("Can't be less than %v", val)
+	}
+
+	if f.Max != nil && f.Decimal.GreaterThan(*f.Max) {
+		if f.MaxError != nil {
+			return f.MaxError
+		}
+
+		val, _ := f.Max.Float64()
+		return fmt.Errorf("Can't be greater than %v", val)
+	}
+
+	return nil
+}
 
 // Boolean is used to be able interpret string bool values
 type Boolean struct {
@@ -338,7 +428,7 @@ func (f *FormValidation) IsValid(isValid bool) *validRule {
 	return &validRule{isValid: isValid, err: errors.New("Not Valid")}
 }
 
-// ValidateDate verifies whether a date string matches the passed in
+// ValidateDateV2 verifies whether a date string matches the passed in
 // layout format
 //
 // If a user wishes, they can also verify whether the given date is
@@ -614,15 +704,13 @@ func (v *validateDateRule) Validate(value interface{}) error {
 		return errors.New(InvalidFormatTxt)
 	}
 
-	fmt.Printf("current time: %v\n", currentTime)
-	fmt.Printf("date time: %v\n", dateTime)
+	// fmt.Printf("current time: %v\n", currentTime)
+	// fmt.Printf("date time: %v\n", dateTime)
 
 	if v.canBeFuture && v.canBePast {
 		err = nil
 	} else if v.canBeFuture {
-		fmt.Printf("hey there\n")
 		if dateTime.Before(currentTime) {
-			fmt.Printf("sholud geeeet here")
 			err = errors.New(InvalidPastDateTxt)
 		}
 	} else if v.canBePast {
@@ -878,42 +966,6 @@ func HasFormErrors(
 				serverErrFn()
 			}
 		}
-
-		// if errors.Is(err, ErrBodyRequired) {
-		// 	hasError = true
-		// 	w.WriteHeader(clientStatus)
-		// 	w.Write([]byte(bodyRequiredTxt))
-		// } else if errors.Is(err, ErrInvalidJSON) {
-		// 	hasError = true
-		// 	w.WriteHeader(clientStatus)
-		// 	w.Write([]byte(invalidJSONTxt))
-		// } else if errors.As(err, &valErr) {
-		// 	hasError = true
-		// 	jsonString, _ := json.Marshal(errors.Cause(err).(validation.Errors))
-		// 	w.WriteHeader(clientStatus)
-		// 	w.Write(jsonString)
-		// } else {
-		// 	if conf.RecoverForm != nil {
-		// 		if formErr := conf.RecoverForm(err); formErr != nil {
-		// 			w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
-		// 			w.Write(conf.ServerErrorResponse.HTTPResponse)
-		// 			logConf.RecoverFormErr = formErr
-		// 			hasError = true
-		// 		} else {
-		// 			if retryErr := retryForm(); retryErr != nil {
-
-		// 				w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
-		// 				w.Write(conf.ServerErrorResponse.HTTPResponse)
-		// 				logConf.RetryFormErr = retryErr
-		// 				hasError = true
-		// 			}
-		// 		}
-		// 	} else {
-		// 		w.WriteHeader(*conf.ServerErrorResponse.HTTPStatus)
-		// 		w.Write(conf.ServerErrorResponse.HTTPResponse)
-		// 		hasError = true
-		// 	}
-		// }
 
 		if conf.Logger != nil {
 			conf.Logger(r, logConf)
@@ -1318,6 +1370,8 @@ func validatorRules(v *validator, value interface{}, validateType int) error {
 		var rows *sqlx.Rows
 
 		if rows, err = queryValidatorRows(v, q, args...); err != nil {
+			fmt.Printf("query: %s\n", q)
+			fmt.Printf("args: %s\n", args)
 			return validation.NewInternalError(err)
 		}
 
