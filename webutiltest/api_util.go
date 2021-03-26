@@ -124,7 +124,7 @@ type FileUploadConfig struct {
 
 func ValidateObjectSlice(data []interface{}, mapKey string, expectedMap map[interface{}]string) error {
 	unexpectedVals := make([]interface{}, 0)
-	nMap := make(map[interface{}]string, len(expectedMap))
+	nMap := make(map[interface{}]string)
 
 	for k, v := range expectedMap {
 		nMap[k] = v
@@ -137,14 +137,16 @@ func ValidateObjectSlice(data []interface{}, mapKey string, expectedMap map[inte
 			return fmt.Errorf("data entry is not JSON object")
 		}
 
-		if _, ok = entry[mapKey]; !ok {
+		var entryVal interface{}
+
+		if entryVal, ok = entry[mapKey]; !ok {
 			return fmt.Errorf("'mapKey' value not found in object")
 		}
 
-		if _, ok = nMap[mapKey]; ok {
-			delete(nMap, mapKey)
+		if _, ok = nMap[entryVal]; ok {
+			delete(nMap, entryVal)
 		} else {
-			unexpectedVals = append(unexpectedVals, entry[mapKey])
+			unexpectedVals = append(unexpectedVals, entryVal)
 		}
 	}
 
@@ -157,11 +159,15 @@ func ValidateObjectSlice(data []interface{}, mapKey string, expectedMap map[inte
 			vals = append(vals, v)
 		}
 
-		errStr += fmt.Sprintf("entries not found: %v\n\n", vals)
+		errStr += fmt.Sprintf("expected entries not found: %v\n\n", vals)
 	}
 
 	if len(unexpectedVals) > 0 {
 		errStr += fmt.Sprintf("unexpected values found: %v\n\n", unexpectedVals)
+	}
+
+	if errStr != "" {
+		return fmt.Errorf(errStr)
 	}
 
 	return nil

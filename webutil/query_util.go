@@ -640,8 +640,8 @@ func getValueResults(
 		*query,
 		allValues...,
 	); err != nil {
-		fmt.Printf("query: %s\n", *query)
-		fmt.Printf("args: %s\n", allValues)
+		// fmt.Printf("query: %s\n", *query)
+		// fmt.Printf("args: %s\n", allValues)
 		// fmt.Printf("err 6: %s\n", err.Error())
 		return nil, errors.Wrap(err, "")
 	}
@@ -873,7 +873,7 @@ func GetQueriedResults(
 		queryConf,
 	)
 
-	fmt.Printf("query: %s\n", query)
+	//fmt.Printf("query: %s\n", query)
 	// fmt.Printf("args: %s\n", values)
 
 	if err != nil {
@@ -885,8 +885,8 @@ func GetQueriedResults(
 	rows, err := db.Queryx(query, values...)
 
 	if err != nil {
-		fmt.Printf("query: %s\n", query)
-		fmt.Printf("values: %v\n", values)
+		// fmt.Printf("query: %s\n", query)
+		// fmt.Printf("values: %v\n", values)
 		return nil, errors.WithStack(err)
 	}
 
@@ -903,60 +903,6 @@ func GetQueriedResults(
 // already contains a where clause
 //
 // Throws FilterError{} or json.SyntaxError{} error type if error occurs
-
-// func GetFilterReplacements(
-// 	req *http.Request,
-// 	query *string,
-// 	paramName string,
-// 	queryConf QueryConfig,
-// 	fields DbFields,
-// ) ([]Filter, error) {
-// 	var err error
-// 	var filters []Filter
-
-// 	if len(queryConf.PrependFilterFields) > 0 {
-// 		ApplyFilterText(query)
-
-// 		if _, err = ReplaceFilterFields(
-// 			query,
-// 			queryConf.PrependFilterFields,
-// 			fields,
-// 			true,
-// 		); err != nil {
-// 			return nil, errors.Wrap(err, "")
-// 		}
-// 	} else {
-// 		queryConf.PrependFilterFields = make([]Filter, 0)
-// 	}
-
-// 	if !queryConf.ExcludeFilters {
-// 		if filters, err = DecodeFilters(req, paramName); err != nil {
-// 			return nil, errors.Wrap(err, "")
-// 		}
-
-// 		if len(filters) > 0 {
-// 			ApplyFilterText(query)
-
-// 			if _, err = ReplaceFilterFields(query, filters, fields, false); err != nil {
-// 				return nil, errors.Wrap(err, "")
-// 			}
-// 		}
-// 	} else {
-// 		filters = make([]Filter, 0)
-// 	}
-
-// 	allFilters := make([]Filter, 0, len(queryConf.PrependFilterFields)+len(filters))
-
-// 	for _, v := range queryConf.PrependFilterFields {
-// 		allFilters = append(allFilters, v)
-// 	}
-// 	for _, v := range filters {
-// 		allFilters = append(allFilters, v)
-// 	}
-
-// 	return allFilters, nil
-// }
-
 func GetFilterReplacements(
 	req *http.Request,
 	query *string,
@@ -999,8 +945,6 @@ func GetFilterReplacements(
 
 			allFilters = append(allFilters, filters...)
 		}
-	} else {
-		filters = make([]Filter, 0)
 	}
 
 	return allFilters, nil
