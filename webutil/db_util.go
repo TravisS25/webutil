@@ -163,7 +163,7 @@ type RecoverDB func(err error) (*sqlx.DB, error)
 // RetryDB implementation should query database that has
 // recovered from a failure and return whether you get
 // an error or not
-type RetryDB func(DBInterface) error
+type RetryDB func(db DBInterface) error
 
 //////////////////////////////////////////////////////////////////
 //---------------------- CONFIG STRUCTS ------------------------

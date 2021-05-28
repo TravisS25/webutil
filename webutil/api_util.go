@@ -54,8 +54,8 @@ const (
 	// ContentTypeCSV is key string for content type header "text/csv; charset=utf-8"
 	ContentTypeCSV = "text/csv; charset=utf-8"
 
-	// ContenTypeJPG is key string for content type header "image/jpeg"
-	ContenTypeJPG = "image/jpeg"
+	// ContentTypeJPG is key string for content type header "image/jpeg"
+	ContentTypeJPG = "image/jpeg"
 
 	// ContentTypePNG is key string for content type header "image/png"
 	ContentTypePNG = "image/png"

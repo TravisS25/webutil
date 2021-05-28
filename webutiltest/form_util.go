@@ -259,6 +259,32 @@ func RunRequestFormTests(t *testing.T, deferFunc func() error, formTests []FormR
 	}
 }
 
+func GetFormErrorMap(err error) (map[string]interface{}, error) {
+	var valErr validation.Errors
+
+	if err != nil {
+		if errors.As(err, &valErr) {
+			errBytes, err := err.(validation.Errors).MarshalJSON()
+
+			if err != nil {
+				return nil, err
+			}
+
+			var errMap map[string]interface{}
+
+			if err = json.Unmarshal(errBytes, &errMap); err != nil {
+				return nil, err
+			}
+
+			return errMap, nil
+		}
+
+		return nil, err
+	}
+
+	return map[string]interface{}{}, nil
+}
+
 func ValidateFormError(t *testing.T, err error, validatorMap map[string]string) {
 	if err != nil {
 		t.Helper()
@@ -270,16 +296,23 @@ func ValidateFormError(t *testing.T, err error, validatorMap map[string]string) 
 		//
 		// Else simply return err
 		if errors.As(err, &valErr) {
-			errBytes, err := err.(validation.Errors).MarshalJSON()
+			// errBytes, err := err.(validation.Errors).MarshalJSON()
+
+			// if err != nil {
+			// 	t.Errorf(err.Error())
+			// 	return
+			// }
+
+			// var errMap map[string]interface{}
+
+			// if err = json.Unmarshal(errBytes, &errMap); err != nil {
+			// 	t.Errorf(err.Error())
+			// 	return
+			// }
+
+			errMap, err := GetFormErrorMap(err)
 
 			if err != nil {
-				t.Errorf(err.Error())
-				return
-			}
-
-			var errMap map[string]interface{}
-
-			if err = json.Unmarshal(errBytes, &errMap); err != nil {
 				t.Errorf(err.Error())
 				return
 			}

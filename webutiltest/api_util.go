@@ -92,12 +92,19 @@ type filteredInt64ID struct {
 	Count int       `json:"count"`
 }
 
+type FileContents struct {
+	File     io.Reader
+	FileName string
+}
+
 // FileConfig is used in conjunction with ParamConfig to
 // set configuration settings to upload file from filesystem
 // along with any params
 type FileConfig struct {
 	// FilePath is file path to file to upload
 	FilePath string `json:"filePath" mapstructure:"file_path"`
+
+	FileContents *FileContents
 
 	// Params is extra parameters to add to file upload request
 	Params map[string]string `json:"params" mapstructure:"params"`
@@ -1009,14 +1016,32 @@ func FileBody(confs []ParamConfig) (io.Reader, string, error) {
 				if err != nil {
 					return nil, "", err
 				}
+			}
 
-				if t.Params != nil {
-					for key, val := range t.Params {
-						err = writer.WriteField(key, val)
+			if t.FileContents != nil {
+				fileBytes, err := ioutil.ReadAll(t.FileContents.File)
 
-						if err != nil {
-							return nil, "", err
-						}
+				if err != nil {
+					return nil, "", err
+				}
+
+				part, err := writer.CreateFormFile(v.ParamName, t.FileContents.FileName)
+				if err != nil {
+					return nil, "", err
+				}
+				_, err = io.Copy(part, bytes.NewReader(fileBytes))
+
+				if err != nil {
+					return nil, "", err
+				}
+			}
+
+			if t.Params != nil {
+				for key, val := range t.Params {
+					err = writer.WriteField(key, val)
+
+					if err != nil {
+						return nil, "", err
 					}
 				}
 			}

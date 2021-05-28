@@ -406,6 +406,12 @@ type QueryConfig struct {
 	// limit and offset from url query params
 	ExcludeLimitWithOffset bool
 
+	// ExcludeSQLRebind determines whether to exclude applying
+	// sql rebind for query based on sql bind var
+	//
+	// This will also effect the result
+	ExcludeSQLRebind bool
+
 	// DisableGroupMod is used to determine if a user wants to disable
 	// a query from automatically being modified to accommodate a
 	// group by with order by without the client having to explictly send
@@ -601,7 +607,7 @@ func getValueResults(
 		}
 
 		if !queryConf.ExcludeSorts {
-			if sorts, err = GetSortReplacements(
+			if _, err = GetSortReplacements(
 				req,
 				query,
 				*paramConf.Sort,
@@ -635,15 +641,17 @@ func getValueResults(
 	}
 	//fmt.Printf("values: %v\n", allValues)
 
-	if *query, allValues, err = InQueryRebind(
-		*queryConf.SQLBindVar,
-		*query,
-		allValues...,
-	); err != nil {
-		// fmt.Printf("query: %s\n", *query)
-		// fmt.Printf("args: %s\n", allValues)
-		// fmt.Printf("err 6: %s\n", err.Error())
-		return nil, errors.Wrap(err, "")
+	if !queryConf.ExcludeSQLRebind {
+		if *query, allValues, err = InQueryRebind(
+			*queryConf.SQLBindVar,
+			*query,
+			allValues...,
+		); err != nil {
+			// fmt.Printf("query: %s\n", *query)
+			// fmt.Printf("args: %s\n", allValues)
+			// fmt.Printf("err 6: %s\n", err.Error())
+			return nil, errors.Wrap(err, "")
+		}
 	}
 
 	return allValues, nil
@@ -885,8 +893,8 @@ func GetQueriedResults(
 	rows, err := db.Queryx(query, values...)
 
 	if err != nil {
-		// fmt.Printf("query: %s\n", query)
-		// fmt.Printf("values: %v\n", values)
+		fmt.Printf("query: %s\n", query)
+		fmt.Printf("values: %v\n", values)
 		return nil, errors.WithStack(err)
 	}
 
@@ -997,13 +1005,15 @@ func GetSortReplacements(
 	}
 
 	allSorts := make([]Sort, 0, len(queryConf.PrependSortFields)+len(sortSlice))
+	allSorts = append(allSorts, queryConf.PrependSortFields...)
+	allSorts = append(allSorts, sortSlice...)
 
-	for _, v := range queryConf.PrependSortFields {
-		allSorts = append(allSorts, v)
-	}
-	for _, v := range sortSlice {
-		allSorts = append(allSorts, v)
-	}
+	// for _, v := range queryConf.PrependSortFields {
+	// 	allSorts = append(allSorts, v)
+	// }
+	// for _, v := range sortSlice {
+	// 	allSorts = append(allSorts, v)
+	// }
 
 	return allSorts, nil
 }
@@ -1055,13 +1065,15 @@ func GetGroupReplacements(
 	}
 
 	allGroups := make([]Group, 0, len(queryConf.PrependGroupFields)+len(groupSlice))
+	allGroups = append(allGroups, queryConf.PrependGroupFields...)
+	allGroups = append(allGroups, groupSlice...)
 
-	for _, v := range queryConf.PrependGroupFields {
-		allGroups = append(allGroups, v)
-	}
-	for _, v := range groupSlice {
-		allGroups = append(allGroups, v)
-	}
+	// for _, v := range queryConf.PrependGroupFields {
+	// 	allGroups = append(allGroups, v)
+	// }
+	// for _, v := range groupSlice {
+	// 	allGroups = append(allGroups, v)
+	// }
 
 	return allGroups, nil
 }
@@ -1207,7 +1219,6 @@ func ReplaceFilterFields(query *string, filters []Filter, fields DbFields, isPre
 
 	for i, v := range filters {
 		if !isPrependFilters {
-
 			// Check if current filter is within our fields map
 			// If it is, check that it is allowed to be filtered
 			// by and then check if given parameters are valid
@@ -1546,17 +1557,31 @@ func InQueryRebind(bindType int, query string, args ...interface{}) (string, []i
 	return query, args, nil
 }
 
+// IsQueryFilteringError is util function that determines if passed err
+// is either instance of *FilterError, *SortError or *GroupError
+func IsQueryFilteringError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var fe *FilterError
+	var se *SortError
+	var ge *GroupError
+
+	if errors.As(err, &fe) || errors.As(err, &se) || errors.As(err, &ge) {
+		return true
+	}
+
+	return false
+}
+
 // HasFilterOrServerError determines if passed error is a filter based error
 // or a server type error and writes appropriate response to client
 func HasFilterOrServerError(w http.ResponseWriter, r *http.Request, err error, retryDB RetryDB, clientStatus int, conf ServerErrorConfig) bool {
 	if err != nil {
 		SetHTTPResponseDefaults(&conf.ServerErrorResponse, http.StatusInternalServerError, []byte(serverErrTxt))
 
-		var fe *FilterError
-		var se *SortError
-		var ge *GroupError
-
-		if errors.As(err, &fe) || errors.As(err, &se) || errors.As(err, &ge) {
+		if IsQueryFilteringError(err) {
 			w.WriteHeader(clientStatus)
 			w.Write([]byte(errors.Cause(err).Error()))
 		} else {
