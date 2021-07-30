@@ -702,6 +702,79 @@ func GetQueriedAndCountResults(
 	return rower, count, nil
 }
 
+// GetQueriedAndCountRowResults is a wrapper function for GetQueriedResults()
+// and GetCountResults() functions and simply returns the values for both
+func GetQueriedAndCountRowResults(
+	query string,
+	countQuery string,
+	prependArgs []interface{},
+	fields DbFields,
+	req *http.Request,
+	db Querier,
+	paramConf ParamConfig,
+	queryConf QueryConfig,
+) (*sqlx.Rows, *sqlx.Row, error) {
+	rower, err := GetQueriedResults(
+		query,
+		prependArgs,
+		fields,
+		req,
+		db,
+		paramConf,
+		queryConf,
+	)
+
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "")
+	}
+
+	row, err := GetCountRowResults(
+		countQuery,
+		prependArgs,
+		fields,
+		req,
+		db,
+		paramConf,
+		queryConf,
+	)
+
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "")
+	}
+
+	return rower, row, nil
+}
+
+// GetCountRowResults should take in count query that will return
+// single row and column with total count of results with all
+// the filters applied to query
+func GetCountRowResults(
+	countQuery string,
+	prependArgs []interface{},
+	fields DbFields,
+	req *http.Request,
+	db Querier,
+	paramConf ParamConfig,
+	queryConf QueryConfig,
+) (*sqlx.Row, error) {
+	var results []interface{}
+	var err error
+
+	if results, err = getValueResults(
+		&countQuery,
+		prependArgs,
+		false,
+		req,
+		paramConf,
+		queryConf,
+		fields,
+	); err != nil {
+		return nil, errors.Wrap(err, "")
+	}
+
+	return db.QueryRowx(countQuery, results...), nil
+}
+
 // GetCountResults should take in count query that will return
 // single row and column with total count of results with all
 // the filters applied to query

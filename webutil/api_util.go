@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
@@ -247,4 +248,160 @@ func SetSecureCookie(w http.ResponseWriter, session *sessions.Session, keyPairs 
 	}
 	http.SetCookie(w, sessions.NewCookie(session.Name(), encoded, session.Options))
 	return encoded, nil
+}
+
+func GetMapSliceRowItems(
+	w http.ResponseWriter,
+	r *http.Request,
+	db DBInterface,
+	clientErrStatus int,
+	queryFunc func(DBInterface) (*sqlx.Rows, int, error),
+	serverErrCfg ServerErrorConfig,
+) ([]map[string]interface{}, int, error) {
+	var err error
+	var count int
+	var items []map[string]interface{}
+	var rows *sqlx.Rows
+
+	retryDB := func(db DBInterface) error {
+		if rows, count, err = queryFunc(db); err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasFilterOrServerError(
+		w,
+		r,
+		err,
+		retryDB,
+		clientErrStatus,
+		serverErrCfg,
+	) {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	hasFailed := false
+
+	retryDB = func(db DBInterface) error {
+		if hasFailed {
+			if rows, count, err = queryFunc(db); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		innerItems := make([]map[string]interface{}, 0)
+
+		for rows.Next() {
+			dest := make(map[string]interface{})
+
+			if err = rows.MapScanMultiLvl(dest); err != nil {
+				hasFailed = true
+				return errors.WithStack(err)
+			}
+
+			innerItems = append(innerItems, dest)
+		}
+
+		if rows.Err() != nil {
+			hasFailed = true
+			return errors.WithStack(rows.Err())
+		}
+
+		items = make([]map[string]interface{}, 0, len(innerItems))
+		items = append(items, innerItems...)
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasDBError(w, r, err, retryDB, serverErrCfg) {
+		return nil, 0, rows.Err()
+	}
+
+	return items, count, nil
+}
+
+func GetMapSliceRowItemsWithRow(
+	w http.ResponseWriter,
+	r *http.Request,
+	db DBInterface,
+	clientErrStatus int,
+	queryFunc func(DBInterface) (*sqlx.Rows, *sqlx.Row, error),
+	serverErrCfg ServerErrorConfig,
+) ([]map[string]interface{}, map[string]interface{}, error) {
+	var err error
+	var row *sqlx.Row
+	var rows *sqlx.Rows
+
+	retryDB := func(db DBInterface) error {
+		if rows, row, err = queryFunc(db); err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasFilterOrServerError(
+		w,
+		r,
+		err,
+		retryDB,
+		clientErrStatus,
+		serverErrCfg,
+	) {
+		return nil, nil, errors.WithStack(err)
+	}
+
+	var items []map[string]interface{}
+	rowItem := make(map[string]interface{}, 0)
+
+	hasFailed := false
+	retryDB = func(db DBInterface) error {
+		if hasFailed {
+			if rows, row, err = queryFunc(db); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		innerItems := make([]map[string]interface{}, 0)
+
+		for rows.Next() {
+			dest := make(map[string]interface{})
+
+			if err = rows.MapScanMultiLvl(dest); err != nil {
+				hasFailed = true
+				return errors.WithStack(err)
+			}
+
+			innerItems = append(innerItems, dest)
+		}
+
+		if rows.Err() != nil {
+			hasFailed = true
+			return errors.WithStack(rows.Err())
+		}
+
+		if err = row.MapScanMultiLvl(rowItem); err != nil {
+			hasFailed = true
+			return errors.WithStack(row.Err())
+		}
+
+		items = make([]map[string]interface{}, 0, len(innerItems))
+		items = append(items, innerItems...)
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasDBError(w, r, err, retryDB, serverErrCfg) {
+		return nil, nil, rows.Err()
+	}
+
+	return items, rowItem, nil
 }

@@ -30,3 +30,5 @@ require (
 	gopkg.in/boj/redistore.v1 v1.0.0-20160128113310-fc113767cd6b
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
+
+replace github.com/jmoiron/sqlx => /home/travis/programming/go/src/github.com/jmoiron/sqlx
