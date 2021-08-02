@@ -153,7 +153,7 @@ func ValidateObjectSlice(data []interface{}, mapKey string, expectedMap map[inte
 		if _, ok = nMap[entryVal]; ok {
 			delete(nMap, entryVal)
 		} else {
-			unexpectedVals = append(unexpectedVals, entryVal)
+			unexpectedVals = append(unexpectedVals, entry)
 		}
 	}
 
@@ -170,7 +170,7 @@ func ValidateObjectSlice(data []interface{}, mapKey string, expectedMap map[inte
 	}
 
 	if len(unexpectedVals) > 0 {
-		errStr += fmt.Sprintf("unexpected values found: %v\n\n", unexpectedVals)
+		errStr += fmt.Sprintf("unexpected entries found: %v\n\n", unexpectedVals)
 	}
 
 	if errStr != "" {

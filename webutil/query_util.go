@@ -349,7 +349,15 @@ type QueryConfig struct {
 
 	// TakeLimit is used to set max limit on number of
 	// records that are returned from query
+	//
+	// This is used for select query
 	TakeLimit *int
+
+	// CountLimit is used to set the max number of records a query will use
+	// for count before stopping
+	//
+	// This is used for count query
+	CountLimit *int
 
 	// PrependFilterFields prepends filters to query before
 	// ones passed by url query params
@@ -505,12 +513,7 @@ func getValueResults(
 	}
 
 	allValues = make([]interface{}, 0)
-
-	if prependArgs != nil {
-		for _, v := range prependArgs {
-			allValues = append(allValues, v)
-		}
-	}
+	allValues = append(allValues, prependArgs...)
 
 	if !queryConf.ExcludeFilters {
 		// Get filters and append to query
@@ -636,10 +639,7 @@ func getValueResults(
 				allValues = append(allValues, limitOffset.Take, limitOffset.Skip)
 			}
 		}
-
-		// fmt.Printf("select query: %s\n", *query)
 	}
-	//fmt.Printf("values: %v\n", allValues)
 
 	if !queryConf.ExcludeSQLRebind {
 		if *query, allValues, err = InQueryRebind(
@@ -647,14 +647,58 @@ func getValueResults(
 			*query,
 			allValues...,
 		); err != nil {
-			// fmt.Printf("query: %s\n", *query)
-			// fmt.Printf("args: %s\n", allValues)
-			// fmt.Printf("err 6: %s\n", err.Error())
-			return nil, errors.Wrap(err, "")
+			fmt.Printf("error rebinding\n")
+			return nil, errors.WithStack(err)
 		}
 	}
 
 	return allValues, nil
+}
+
+// GetQueriedAndCountResults is a wrapper function for GetQueriedResults()
+// and GetCountResults() functions and simply returns the values for both
+func GetQueriedAndCountResultsV2(
+	query string,
+	countQuery string,
+	prependArgs []interface{},
+	countArgs []interface{},
+	fields DbFields,
+	req *http.Request,
+	db Querier,
+	paramConf ParamConfig,
+	queryConf QueryConfig,
+) (*sqlx.Rows, int, error) {
+	rower, err := GetQueriedResults(
+		query,
+		prependArgs,
+		fields,
+		req,
+		db,
+		paramConf,
+		queryConf,
+	)
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	//fmt.Printf("past query results\n")
+
+	count, err := GetCountResults(
+		countQuery,
+		countArgs,
+		fields,
+		req,
+		db,
+		paramConf,
+		queryConf,
+	)
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return rower, count, nil
 }
 
 // GetQueriedAndCountResults is a wrapper function for GetQueriedResults()
@@ -680,7 +724,7 @@ func GetQueriedAndCountResults(
 	)
 
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "")
+		return nil, 0, err
 	}
 
 	//fmt.Printf("past query results\n")
@@ -696,7 +740,7 @@ func GetQueriedAndCountResults(
 	)
 
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "")
+		return nil, 0, err
 	}
 
 	return rower, count, nil
@@ -958,8 +1002,8 @@ func GetQueriedResults(
 	// fmt.Printf("args: %s\n", values)
 
 	if err != nil {
-		// fmt.Printf("get queried err: %s\n", err.Error())
-		// fmt.Printf("query: %s\n", query)
+		fmt.Printf("get queried err: %s\n", err.Error())
+		fmt.Printf("query: %s\n", query)
 		return nil, errors.Wrap(err, "")
 	}
 
