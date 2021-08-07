@@ -250,12 +250,18 @@ func SetSecureCookie(w http.ResponseWriter, session *sessions.Session, keyPairs 
 	return encoded, nil
 }
 
+// GetMapSliceRowItems is util function that allows us to take filters from client
+// and loop through to return queried values in a slice of map
+//
+// customFunc parameter is function that allows us to take in current queried row
+// and manipulate it within function. This function can be nil
 func GetMapSliceRowItems(
 	w http.ResponseWriter,
 	r *http.Request,
 	db DBInterface,
 	clientErrStatus int,
 	queryFunc func(DBInterface) (*sqlx.Rows, int, error),
+	customFunc func(map[string]interface{}) error,
 	serverErrCfg ServerErrorConfig,
 ) ([]map[string]interface{}, int, error) {
 	var err error
@@ -303,12 +309,18 @@ func GetMapSliceRowItems(
 				return errors.WithStack(err)
 			}
 
-			innerItems = append(innerItems, dest)
-		}
+			if rows.Err() != nil {
+				hasFailed = true
+				return errors.WithStack(rows.Err())
+			}
 
-		if rows.Err() != nil {
-			hasFailed = true
-			return errors.WithStack(rows.Err())
+			if customFunc != nil {
+				if err = customFunc(dest); err != nil {
+					return errors.WithStack(err)
+				}
+			}
+
+			innerItems = append(innerItems, dest)
 		}
 
 		items = make([]map[string]interface{}, 0, len(innerItems))
@@ -331,6 +343,7 @@ func GetMapSliceRowItemsWithRow(
 	db DBInterface,
 	clientErrStatus int,
 	queryFunc func(DBInterface) (*sqlx.Rows, *sqlx.Row, error),
+	customFunc func(map[string]interface{}) error,
 	serverErrCfg ServerErrorConfig,
 ) ([]map[string]interface{}, map[string]interface{}, error) {
 	var err error

@@ -185,6 +185,7 @@ func TestGetMapSliceRowItems(t *testing.T) {
 				QueryConfig{},
 			)
 		},
+		nil,
 		serverErrCfg,
 	); err == nil {
 		t.Errorf("should have error")
@@ -221,6 +222,7 @@ func TestGetMapSliceRowItems(t *testing.T) {
 				QueryConfig{},
 			)
 		},
+		nil,
 		serverErrCfg,
 	); err != nil {
 		t.Errorf("should not have error;got %v\n", err)
@@ -290,6 +292,7 @@ func TestGetMapSliceRowItemsWithRow(t *testing.T) {
 				QueryConfig{},
 			)
 		},
+		nil,
 		serverErrCfg,
 	); err == nil {
 		t.Errorf("should have error")
@@ -326,6 +329,7 @@ func TestGetMapSliceRowItemsWithRow(t *testing.T) {
 				QueryConfig{},
 			)
 		},
+		nil,
 		serverErrCfg,
 	); err != nil {
 		t.Errorf("should not have error;got %v\n", err)
