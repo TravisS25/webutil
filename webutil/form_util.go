@@ -175,8 +175,7 @@ type RecoverForm func(error) error
 // FormValidationConfig is config struct used in the initialization
 // of *FormValidation
 type FormValidationConfig struct {
-	Cache CacheStore
-	// RecoverDB  RecoverError
+	Cache        CacheStore
 	RecoverDB    RecoverDB
 	RecoverCache RecoverCache
 	PathRegex    PathRegex
@@ -266,7 +265,7 @@ type FormCurrency struct {
 	// This will be used in FormCurrency#Validate function
 	//
 	// Default: false
-	//AllowNegative bool `json:"-"`
+	// AllowNegative bool `json:"-"`
 
 	// Min is the lowest number decimal allowed
 	//
@@ -277,7 +276,7 @@ type FormCurrency struct {
 	// decimal is lower than Min
 	MinError error `json:"-"`
 
-	// Min is the highest number decimal allowed
+	// Max is the highest number decimal allowed
 	//
 	// Default: nil (no limit)
 	Max *decimal.Decimal `json:"-"`

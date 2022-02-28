@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/stretchr/objx"
@@ -447,6 +449,16 @@ func ValidateFormError(t *testing.T, err error, validatorMap map[string]string) 
 	}
 
 	//return nil
+}
+
+// RandomString is util test function that takes in int and will return random string with that length
+//
+// This is useful for testing for fields with min/max length constraints
+func RandomString(len int) string {
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, len)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)[:len]
 }
 
 func formValidation(t *testing.T, mapKey string, formValidationErr error, expectedErr interface{}) error {
