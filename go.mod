@@ -9,7 +9,6 @@ require (
 	github.com/go-ini/ini v1.51.1 // indirect
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/go-redis/redis v6.15.6+incompatible
-	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/golang/mock v1.3.1
 	github.com/gorilla/csrf v1.6.2
 	github.com/gorilla/mux v1.7.3
