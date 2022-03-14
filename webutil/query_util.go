@@ -1,11 +1,7 @@
 package webutil
 
-//go:generate mockgen -source=query_util.go -destination=../webutilmock/query_util_mock.go -package=webutilmock
-//go:generate mockgen -source=query_util.go -destination=query_util_mock_test.go -package=webutil
-
 import (
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -55,16 +51,16 @@ const (
 var (
 	// ErrInvalidSort is error returned if client tries
 	// to pass filter parameter that is not sortable
-	ErrInvalidSort = errors.New("invalid sort")
+	ErrInvalidSort = errors.New("webutil: invalid sort")
 
 	// ErrInvalidArray is error returned if client tries
 	// to pass array parameter that is invalid array type
-	ErrInvalidArray = errors.New("invalid array for field")
+	ErrInvalidArray = errors.New("webutil: invalid array for field")
 
 	// ErrInvalidValue is error returned if client tries
 	// to pass filter parameter that had invalid field
 	// value for certain field
-	ErrInvalidValue = errors.New("invalid field value")
+	ErrInvalidValue = errors.New("webutil: invalid field value")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -249,41 +245,6 @@ func (s *SliceError) setInvalidSliceError(field, fieldType string) {
 	s.invalidSlice = true
 }
 
-type GeneralJSON map[string]interface{}
-
-func (g GeneralJSON) Value() (driver.Value, error) {
-	j, err := json.Marshal(g)
-	return j, err
-}
-
-func (g *GeneralJSON) Scan(src interface{}) error {
-	source, ok := src.([]byte)
-	if !ok {
-		return errors.New("type assertion .([]byte) failed")
-	}
-
-	var i interface{}
-	err := json.Unmarshal(source, &i)
-	if err != nil {
-		return err
-	}
-
-	*g, ok = i.(map[string]interface{})
-	if !ok {
-		arr, ok := i.([]interface{})
-
-		if ok {
-			newV := make(map[string]interface{})
-			newV["array"] = arr
-			*g = newV
-		} else {
-			return errors.New("Not valid json")
-		}
-	}
-
-	return nil
-}
-
 //////////////////////////////////////////////////////////////////
 //----------------------- CONFIG STRUCTS ------------------------
 //////////////////////////////////////////////////////////////////
@@ -448,13 +409,10 @@ type Sort struct {
 
 // Group is the group config struct for server side grouping
 type Group struct {
-	// Dir        string       `json:"dir"`
 	Field string `json:"field"`
-	// Aggregates []*Aggregate `json:"aggregates"`
 }
 
-// LimitOffset is config struct to set limit and offset of
-// a query
+// LimitOffset is config struct to set limit and offset of a query
 type LimitOffset struct {
 	Take int `json:"take"`
 	Skip int `json:"skip"`

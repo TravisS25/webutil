@@ -52,16 +52,6 @@ type RecoverConfig struct {
 	// RecoverForm is func that should be used to try to recover
 	// from form failure
 	RecoverForm RecoverForm
-
-	// // ResetDB is optional parameter generally used in api
-	// // enpoints or form validators to reset their DBInterface after
-	// // being recovered from RecoverDB function
-	// ResetDB ResetDB
-
-	// // ResetCache is optional parameter generally used in api
-	// // enpoints or form validators to reset their CacheStore after
-	// // being recovered from RecoverCache function
-	// ResetCache ResetCache
 }
 
 // ServerErrorCacheConfig is config struct used to respond to server
@@ -100,8 +90,7 @@ func SetHTTPResponseDefaults(config *HTTPResponseConfig, defaultStatus int, defa
 	}
 }
 
-// GetHTTPResponseDefaults is util function to get HTTPResponseConfig instance with
-// values passed
+// GetHTTPResponseDefaults is util function to get HTTPResponseConfig instance with values passed
 func GetHTTPResponseDefaults(defaultStatus int, defaultResponse []byte) HTTPResponseConfig {
 	res := HTTPResponseConfig{}
 	SetHTTPResponseDefaults(&res, defaultStatus, defaultResponse)

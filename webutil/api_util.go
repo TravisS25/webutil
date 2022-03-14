@@ -1,8 +1,5 @@
 package webutil
 
-//go:generate mockgen -source=api_util.go -destination=../webutilmock/api_util_mock.go -package=webutilmock
-//go:generate mockgen -source=api_util.go -destination=api_util_mock_test.go -package=webutil
-
 import (
 	"bytes"
 	"encoding/json"
@@ -78,9 +75,6 @@ var (
 
 	// ErrInvalidJSON is used when there is an error unmarshalling a struct
 	ErrInvalidJSON = errors.New("webutil: " + invalidJSONTxt)
-
-	// ErrServer is used when there is a server error
-	//ErrServer = errors.New("webutil: server error, please try again later")
 )
 
 //////////////////////////////////////////////////////////////////

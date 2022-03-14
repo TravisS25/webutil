@@ -8,10 +8,8 @@ import (
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	testifymock "github.com/stretchr/testify/mock"
-	redistore "gopkg.in/boj/redistore.v1"
 )
 
 // func TestRedisCacheUnitTest(t *testing.T) {
@@ -93,29 +91,29 @@ import (
 // 	// }
 // }
 
-func TestRedisSessionIntegrationTest(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+// func TestRedisSessionIntegrationTest(t *testing.T) {
+// 	mockCtrl := gomock.NewController(t)
+// 	defer mockCtrl.Finish()
 
-	store, err := redistore.NewRediStore(
-		10,
-		"tcp",
-		"localhost:6379",
-		"",
-		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
-		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
-	)
+// 	store, err := redistore.NewRediStore(
+// 		10,
+// 		"tcp",
+// 		"localhost:6379",
+// 		"",
+// 		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
+// 		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
+// 	)
 
-	if err != nil {
-		t.Fatalf("err: %s\n", err.Error())
-	}
+// 	if err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
 
-	rs := NewClientSession(store)
+// 	rs := NewClientSession(store)
 
-	if err = rs.Ping(); err != nil {
-		t.Fatalf("err: %s\n", err.Error())
-	}
-}
+// 	if err = rs.Ping(); err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
+// }
 
 // func TestSetCachingUnitTest(t *testing.T) {
 // 	var err error

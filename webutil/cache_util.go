@@ -1,8 +1,5 @@
 package webutil
 
-//go:generate mockgen -source=cache_util.go -destination=../webutilmock/cache_util_mock.go -package=webutilmock
-//go:generate mockgen -source=cache_util.go -destination=cache_util_mock_test.go -package=webutil
-
 import (
 	"encoding/json"
 	"errors"
@@ -122,8 +119,7 @@ type CacheSetup struct {
 //--------------------------- TYPES --------------------------
 //////////////////////////////////////////////////////////////////
 
-// RecoverCache should implement ability to recover from
-// cache error
+// RecoverCache should implement ability to recover from cache error
 type RecoverCache func(error) (*ClientCache, error)
 
 // RetryCache should implement ability to take in CacheStore

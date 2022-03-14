@@ -9,11 +9,8 @@ import (
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	gomock "github.com/golang/mock/gomock"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
-
-	"github.com/gorilla/securecookie"
 )
 
 const (
@@ -33,28 +30,28 @@ func getMockSession(cookieName string) *sessions.Session {
 	return sessions.NewSession(mockSession, cookieName)
 }
 
-func TestDecodeCookieUnitTest(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+// func TestDecodeCookieUnitTest(t *testing.T) {
+// 	mockCtrl := gomock.NewController(t)
+// 	defer mockCtrl.Finish()
 
-	req := httptest.NewRequest(http.MethodGet, "/url", nil)
-	session := getMockSession(cookieName)
-	encoded, err := securecookie.EncodeMulti(
-		session.Name(),
-		session.ID,
-		securecookie.CodecsFromPairs(keyPairs...)...,
-	)
-	if err != nil {
-		t.Fatalf("err: %s\n", err.Error())
-	}
+// 	req := httptest.NewRequest(http.MethodGet, "/url", nil)
+// 	session := getMockSession(cookieName)
+// 	encoded, err := securecookie.EncodeMulti(
+// 		session.Name(),
+// 		session.ID,
+// 		securecookie.CodecsFromPairs(keyPairs...)...,
+// 	)
+// 	if err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
 
-	req.AddCookie(sessions.NewCookie(cookieName, encoded, &sessions.Options{}))
-	_, err = DecodeCookie(req, cookieName, keyPairs[0], keyPairs[1])
+// 	req.AddCookie(sessions.NewCookie(cookieName, encoded, &sessions.Options{}))
+// 	_, err = DecodeCookie(req, cookieName, keyPairs[0], keyPairs[1])
 
-	if err != nil {
-		t.Fatalf("err: %s\n", err.Error())
-	}
-}
+// 	if err != nil {
+// 		t.Fatalf("err: %s\n", err.Error())
+// 	}
+// }
 
 func TestSetSecureCookieUnitTest(t *testing.T) {
 	rr := httptest.NewRecorder()

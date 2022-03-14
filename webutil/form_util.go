@@ -1,8 +1,5 @@
 package webutil
 
-//go:generate mockgen -source=form_util.go -destination=../webutilmock/form_util_mock.go -package=webutilmock
-//go:generate mockgen -source=form_util.go -destination=form_util_mock_test.go -package=webutil
-
 import (
 	"encoding/json"
 	"fmt"
@@ -222,24 +219,6 @@ type CacheValidate struct {
 	// If value is slice, it will convert all values within slice
 	// to string
 	IgnoreTypes bool
-}
-
-//////////////////////////////////////////////////////////////////
-//----------------------- INTERFACES --------------------------
-//////////////////////////////////////////////////////////////////
-
-// RequestValidator should implement validating fields sent from
-// request and return form or error if one occurs
-//
-// This is deprecated, use FormValidator
-type RequestValidator interface {
-	Validate(req *http.Request, instance interface{}) (interface{}, error)
-}
-
-// FormValidator should implement validating fields sent from
-// request and return error if one occurs
-type FormValidator interface {
-	Validate(req *http.Request, validator *FormValidation) error
 }
 
 //////////////////////////////////////////////////////////////////

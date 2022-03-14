@@ -1,8 +1,5 @@
 package webutil
 
-//go:generate mockgen -source=db_util.go -destination=../webutilmock/db_util_mock.go -package=webutilmock
-//go:generate mockgen -source=db_util.go -destination=db_util_mock_test.go -package=webutil
-
 import (
 	"database/sql"
 	"fmt"
@@ -70,11 +67,11 @@ const (
 var (
 	// ErrEmptyConfigList is error returned when trying to recover
 	// from database error and there is no backup configs set up
-	ErrEmptyConfigList = errors.New("empty config list")
+	ErrEmptyConfigList = errors.New("webutil: empty config list")
 
 	// ErrNoConnection is error returned when there is no
 	// connection to database available
-	ErrNoConnection = errors.New("connection could not be established")
+	ErrNoConnection = errors.New("webutil: connection could not be established")
 
 	// ErrInvalidDBType is error returned when trying to pass an invalid
 	// database type string to function
