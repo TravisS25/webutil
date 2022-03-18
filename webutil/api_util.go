@@ -5,58 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/TravisS25/webutil/webutilcfg"
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
-)
-
-//////////////////////////////////////////////////////////////////
-//-------------------------- CONSTS ---------------------------
-//////////////////////////////////////////////////////////////////
-
-const (
-	// TokenHeader is key string for "X-CSRF-TOKEN" header
-	TokenHeader = "X-Csrf-Token"
-
-	// CookieHeader is key string for "Cookie" header
-	CookieHeader = "Cookie"
-
-	// SetCookieHeader is key string for "Set-Cookie" header
-	SetCookieHeader = "Set-Cookie"
-
-	// LocationHeader is key string for "Location" header
-	LocationHeader = "Location"
-)
-
-const (
-	// ContentTypeBinary is key string for content type header "application/octet-stream"
-	ContentTypeBinary = "application/octet-stream"
-
-	// ContentTypeForm is key string for content type header "application/x-www-form-urlencoded"
-	ContentTypeForm = "application/x-www-form-urlencoded"
-
-	// ContentTypeJSON is key string for content type header "application/json"
-	ContentTypeJSON = "application/json"
-
-	// ContentTypePDF is key string for content type header "application/pdf"
-	ContentTypePDF = "application/pdf"
-
-	// ContentTypeHTML is key string for content type header "text/html; charset=utf-8"
-	ContentTypeHTML = "text/html; charset=utf-8"
-
-	// ContentTypeText is key string for content type header "text/plain; charset=utf-8"
-	ContentTypeText = "text/plain; charset=utf-8"
-
-	// ContentTypeCSV is key string for content type header "text/csv; charset=utf-8"
-	ContentTypeCSV = "text/csv; charset=utf-8"
-
-	// ContentTypeJPG is key string for content type header "image/jpeg"
-	ContentTypeJPG = "image/jpeg"
-
-	// ContentTypePNG is key string for content type header "image/png"
-	ContentTypePNG = "image/png"
 )
 
 const (
@@ -83,13 +37,13 @@ var (
 
 // SetToken is wrapper function for setting csrf token header
 func SetToken(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(TokenHeader, csrf.Token(r))
+	w.Header().Set(webutilcfg.TokenHeader, csrf.Token(r))
 }
 
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
 func SendPayload(w http.ResponseWriter, payload interface{}, errResp HTTPResponseConfig) error {
-	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Header().Set("Content-Type", webutilcfg.ContentTypeJSON)
 	SetHTTPResponseDefaults(&errResp, http.StatusInternalServerError, []byte(invalidJSONTxt))
 	jsonString, err := json.Marshal(payload)
 

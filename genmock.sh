@@ -15,3 +15,5 @@ mockery --dir $GOPATH/pkg/mod/github.com/gorilla/sessions@v1.2.0 --name Error
 
 mockery --dir=$GOPATH/pkg/mod/github.com/gorilla/sessions@v1.2.0 --name Store --output webutil --outpkg webutil
 mockery --dir=$GOPATH/pkg/mod/github.com/gorilla/sessions@v1.2.0 --name Store
+
+mockery --dir webutiltest --all --testonly --inpackage

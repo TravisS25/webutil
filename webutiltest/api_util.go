@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"testing"
 
 	"github.com/pkg/errors"
 
@@ -16,7 +15,9 @@ const (
 	IDParam = "{id:[0-9]+}"
 )
 
-func ValidateObjectSlice(t *testing.T, data []interface{}, mapKey string, expectedMap map[interface{}]string) {
+// ValidateObjectSlice takes in a slice of maps, with a mapkey to then test against the expectedMap keys
+// which should be the value expected and the value of expectedMap should be unique name of value
+func ValidateObjectSlice(t TestLog, data []map[string]interface{}, mapKey string, expectedMap map[interface{}]string) error {
 	t.Helper()
 
 	unexpectedVals := make([]interface{}, 0)
@@ -26,29 +27,23 @@ func ValidateObjectSlice(t *testing.T, data []interface{}, mapKey string, expect
 		nMap[k] = v
 	}
 
+	var errStr string
+
 	for _, val := range data {
-		entry, ok := val.(map[string]interface{})
+		entryVal, ok := val[mapKey]
 
 		if !ok {
-			t.Errorf("data entry is not JSON object")
-			return
-		}
-
-		var entryVal interface{}
-
-		if entryVal, ok = entry[mapKey]; !ok {
-			t.Errorf("passed 'mapkey' parameter value not found in object")
-			return
+			errStr = "passed 'mapkey' parameter value not found in object"
+			t.Errorf(errStr)
+			return errors.New(errStr)
 		}
 
 		if _, ok = nMap[entryVal]; ok {
 			delete(nMap, entryVal)
 		} else {
-			unexpectedVals = append(unexpectedVals, entry)
+			unexpectedVals = append(unexpectedVals, val)
 		}
 	}
-
-	var errStr string
 
 	if len(nMap) != 0 {
 		vals := make([]string, 0)
@@ -66,60 +61,11 @@ func ValidateObjectSlice(t *testing.T, data []interface{}, mapKey string, expect
 
 	if errStr != "" {
 		t.Errorf(errStr)
-		return
+		return errors.New(errStr)
 	}
+
+	return nil
 }
-
-// func ValidateObjectSlice(data []interface{}, mapKey string, expectedMap map[interface{}]string) error {
-// 	unexpectedVals := make([]interface{}, 0)
-// 	nMap := make(map[interface{}]string)
-
-// 	for k, v := range expectedMap {
-// 		nMap[k] = v
-// 	}
-
-// 	for _, val := range data {
-// 		entry, ok := val.(map[string]interface{})
-
-// 		if !ok {
-// 			return fmt.Errorf("data entry is not JSON object")
-// 		}
-
-// 		var entryVal interface{}
-
-// 		if entryVal, ok = entry[mapKey]; !ok {
-// 			return fmt.Errorf("passed 'mapkey' parameter value not found in object")
-// 		}
-
-// 		if _, ok = nMap[entryVal]; ok {
-// 			delete(nMap, entryVal)
-// 		} else {
-// 			unexpectedVals = append(unexpectedVals, entry)
-// 		}
-// 	}
-
-// 	var errStr string
-
-// 	if len(nMap) != 0 {
-// 		vals := make([]string, 0)
-
-// 		for _, v := range nMap {
-// 			vals = append(vals, v)
-// 		}
-
-// 		errStr += fmt.Sprintf("expected entries not found: %v\n\n", vals)
-// 	}
-
-// 	if len(unexpectedVals) > 0 {
-// 		errStr += fmt.Sprintf("unexpected entries found: %v\n\n", unexpectedVals)
-// 	}
-
-// 	if errStr != "" {
-// 		return fmt.Errorf(errStr)
-// 	}
-
-// 	return nil
-// }
 
 func loginUser(url string, loginForm interface{}) (*http.Response, error) {
 	client := &http.Client{}
