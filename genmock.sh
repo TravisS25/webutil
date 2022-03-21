@@ -17,3 +17,5 @@ mockery --dir=$GOPATH/pkg/mod/github.com/gorilla/sessions@v1.2.0 --name Store --
 mockery --dir=$GOPATH/pkg/mod/github.com/gorilla/sessions@v1.2.0 --name Store
 
 mockery --dir webutiltest --all --testonly --inpackage
+
+mockery --dir=/usr/local/go/src/net/http/ --name ResponseWriter --output webutiltest --outpkg webutiltest --testonly
