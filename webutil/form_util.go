@@ -387,7 +387,6 @@ type FormSelection struct {
 type FormValidation struct {
 	entity Entity
 	config FormValidationConfig
-	//cache  CacheStore
 }
 
 // NewFormValidation returns *FormValidation instance
@@ -406,7 +405,7 @@ func (f *FormValidation) IsValid(isValid bool) *validRule {
 	return &validRule{isValid: isValid, err: errors.New("Not Valid")}
 }
 
-// ValidateDateV2 verifies whether a date string matches the passed in
+// ValidateDate verifies whether a date string matches the passed in
 // layout format
 //
 // If a user wishes, they can also verify whether the given date is
@@ -420,7 +419,7 @@ func (f *FormValidation) IsValid(isValid bool) *validRule {
 //
 // Will raise errFutureAndPastDateInternal error which will be wrapped
 // in validation.InternalError if both bool parameters are false
-func (f *FormValidation) ValidateDateV2(
+func (f *FormValidation) ValidateDate(
 	layout,
 	timezone string,
 	compareTime,
@@ -429,21 +428,7 @@ func (f *FormValidation) ValidateDateV2(
 ) *validateDateRule {
 	return &validateDateRule{
 		layout:      layout,
-		timezone:    timezone,
-		canBeFuture: canBeFuture,
-		canBePast:   canBePast,
 		compareTime: compareTime,
-	}
-}
-
-func (f *FormValidation) ValidateDate(
-	layout,
-	timezone string,
-	canBeFuture,
-	canBePast bool,
-) *validateDateRule {
-	return &validateDateRule{
-		layout:      layout,
 		timezone:    timezone,
 		canBeFuture: canBeFuture,
 		canBePast:   canBePast,
@@ -464,7 +449,6 @@ func (f *FormValidation) ValidateDate(
 func (f *FormValidation) ValidateArgs(
 	cacheValidate *CacheValidate,
 	placeHolderIdx int,
-	//bindVar int,
 	query string,
 	args ...interface{},
 ) *validateArgsRule {
@@ -490,7 +474,6 @@ func (f *FormValidation) ValidateUniqueness(
 	cacheValidate *CacheValidate,
 	instanceValue interface{},
 	placeHolderIdx int,
-	//bindVar int,
 	query string,
 	args ...interface{},
 ) *validateUniquenessRule {
@@ -517,7 +500,6 @@ func (f *FormValidation) ValidateUniqueness(
 func (f *FormValidation) ValidateExists(
 	cacheValidate *CacheValidate,
 	placeHolderIdx int,
-	//bindVar int,
 	query string,
 	args ...interface{},
 ) *validateExistsRule {
@@ -675,15 +657,16 @@ func (v *validateDateRule) Validate(value interface{}) error {
 			return validation.NewInternalError(err)
 		}
 	} else {
-		currentTime = time.Now().UTC()
+		if v.compareTime {
+			currentTime, err = GetCurrentLocalDateTimeInUTC("UTC")
+		} else {
+			currentTime, err = GetCurrentLocalDateInUTC("UTC")
+		}
 	}
 
 	if dateTime, err = time.Parse(v.layout, dateValue); err != nil {
 		return errors.New(InvalidFormatTxt)
 	}
-
-	// fmt.Printf("current time: %v\n", currentTime)
-	// fmt.Printf("date time: %v\n", dateTime)
 
 	if v.canBeFuture && v.canBePast {
 		err = nil

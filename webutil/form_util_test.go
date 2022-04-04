@@ -75,13 +75,18 @@ func TestValidateRequiredRuleUnitTest(t *testing.T) {
 
 func TestValidateDateRuleUnitTest(t *testing.T) {
 	var err error
+	var rule *validateDateRule
 
-	futureDateStr := time.Now().AddDate(0, 0, 1).Format(DateTimeLayout)
-	pastDateStr := time.Now().AddDate(0, 0, -1).Format(DateTimeLayout)
-	rule := &validateDateRule{timezone: "invalid"}
+	futureDateStr := time.Now().AddDate(0, 0, 1).Format(FormDateTimeLayout)
+	pastDateStr := time.Now().AddDate(0, 0, -1).Format(FormDateTimeLayout)
+
+	rule = &validateDateRule{
+		timezone: "invalid",
+	}
 
 	if err = rule.Validate(nil); err != nil {
 		t.Errorf("should not have error\n")
+		t.Errorf("err: %s\n", err.Error())
 	}
 
 	if err = rule.Validate(""); err != nil {
@@ -93,7 +98,11 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 		t.Errorf("should have error\n")
 	}
 
-	rule.timezone = ""
+	// --------------------------------------------------------------------
+
+	rule = &validateDateRule{
+		layout: FormDateTimeLayout,
+	}
 
 	if err = rule.Validate("invalid"); err == nil {
 		t.Errorf("should have error\n")
@@ -103,7 +112,11 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 		}
 	}
 
-	rule.layout = DateTimeLayout
+	// --------------------------------------------------------------------
+
+	rule = &validateDateRule{
+		layout: FormDateTimeLayout,
+	}
 
 	if err = rule.Validate(pastDateStr); err == nil {
 		t.Errorf("should have error\n")
@@ -114,15 +127,26 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 		}
 	}
 
-	rule.canBeFuture = true
-	rule.canBePast = true
+	// --------------------------------------------------------------------
+
+	rule = &validateDateRule{
+		layout:      FormDateTimeLayout,
+		canBeFuture: true,
+		canBePast:   true,
+	}
 
 	if err = rule.Validate(pastDateStr); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
 
-	rule.canBePast = false
+	// --------------------------------------------------------------------
+
+	rule = &validateDateRule{
+		layout:      FormDateTimeLayout,
+		canBeFuture: true,
+		canBePast:   false,
+	}
 
 	if err = rule.Validate(pastDateStr); err == nil {
 		t.Errorf("should have error\n")
@@ -133,8 +157,13 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 		}
 	}
 
-	rule.canBePast = true
-	rule.canBeFuture = false
+	// --------------------------------------------------------------------
+
+	rule = &validateDateRule{
+		layout:      FormDateTimeLayout,
+		canBeFuture: false,
+		canBePast:   true,
+	}
 
 	if err = rule.Validate(futureDateStr); err == nil {
 		t.Errorf("should have error\n")
@@ -145,7 +174,13 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 		}
 	}
 
-	rule.canBePast = false
+	// --------------------------------------------------------------------
+
+	rule = &validateDateRule{
+		layout:      FormDateTimeLayout,
+		canBeFuture: false,
+		canBePast:   false,
+	}
 
 	if err = rule.Validate(futureDateStr); err == nil {
 		t.Errorf("should have error\n")
@@ -154,6 +189,37 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 			t.Errorf("should have errFutureAndPastDateInternal error\n")
 			t.Errorf("err: %s\n", err.Error())
 		}
+	}
+
+	// --------------------------------------------------------------------
+
+	thenUTCTime := time.Now().UTC().Add(-time.Hour * 1).Format(FormDateTimeLayout)
+
+	rule = &validateDateRule{
+		layout:      FormDateTimeLayout,
+		compareTime: true,
+		canBeFuture: false,
+		canBePast:   true,
+	}
+
+	if err = rule.Validate(thenUTCTime); err != nil {
+		t.Errorf("should not have error; got %s\n", err.Error())
+	}
+
+	// -------------------------------------------------------------------------
+
+	rule = &validateDateRule{
+		layout:      FormDateTimeLayout,
+		timezone:    "America/New_York",
+		compareTime: true,
+		canBeFuture: false,
+		canBePast:   true,
+	}
+
+	if err = rule.Validate(thenUTCTime); err == nil {
+		t.Errorf("should have error")
+	} else if err.Error() != InvalidFutureDateTxt {
+		t.Errorf("should have future date error; got %s\n", err.Error())
 	}
 }
 

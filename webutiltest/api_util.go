@@ -81,61 +81,6 @@ func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedM
 	return nil
 }
 
-func loginUser(url string, loginForm interface{}) (*http.Response, error) {
-	client := &http.Client{}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	res, err := client.Do(req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode != http.StatusOK {
-		buf := bytes.Buffer{}
-		buf.ReadFrom(res.Body)
-		errorMessage := fmt.Sprintf("status code: %d\n  response: %s\n", res.StatusCode, buf.String())
-		return nil, errors.New(errorMessage)
-	}
-
-	var buffer bytes.Buffer
-
-	encoder := json.NewEncoder(&buffer)
-
-	if err := encoder.Encode(&loginForm); err != nil {
-		return &http.Response{}, errors.WithStack(err)
-	}
-
-	token := res.Header.Get(webutilcfg.TokenHeader)
-	csrf := res.Header.Get(webutilcfg.SetCookieHeader)
-	req, err = http.NewRequest(http.MethodPost, url, &buffer)
-
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set(webutilcfg.TokenHeader, token)
-	req.Header.Set(webutilcfg.CookieHeader, csrf)
-	res, err = client.Do(req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode != http.StatusOK {
-		buf := bytes.Buffer{}
-		buf.ReadFrom(res.Body)
-		errorMessage := fmt.Sprintf("status code: %d\n  response: %s\n", res.StatusCode, buf.String())
-		return nil, errors.New(errorMessage)
-	}
-
-	return res, nil
-}
-
 // LoginUser takes email and password along with login url and form information
 // to use to make a POST request to login url and if successful, returns user cookie
 func LoginUser(client HTTPClient, url string, loginForm interface{}) (string, error) {
