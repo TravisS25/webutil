@@ -45,14 +45,6 @@ func (p phone) Validate() error {
 	)
 }
 
-func TestFooBar(t *testing.T) {
-	foo := []string{"foo"}
-
-	for _, v := range foo[:len(foo)-1] {
-		t.Error(v)
-	}
-}
-
 func TestValidateFormError(t *testing.T) {
 	var err error
 	vm := map[string]string{

@@ -196,20 +196,3 @@ func LoginUser(client HTTPClient, url string, loginForm interface{}) (string, er
 
 	return "", fmt.Errorf("webutiltest: no cookie value returned")
 }
-
-// LoginUserV takes email and password along with login url and form information
-// to use to make a POST request to login url and if successful, returns user cookie
-// with the value extracted
-func LoginUserV(client HTTPClient, url string, loginForm interface{}) (string, error) {
-	res, err := loginUser(url, loginForm)
-
-	if err != nil {
-		return "", err
-	}
-
-	if len(res.Cookies()) > 0 {
-		return res.Cookies()[0].Value, nil
-	}
-
-	return "", fmt.Errorf("webutiltest: no cookie value returned")
-}

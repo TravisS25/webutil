@@ -2,22 +2,21 @@ package webutiltest
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
-	"testing"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/stretchr/objx"
 
 	validation "github.com/go-ozzo/ozzo-validation"
 )
 
-func ValidateFormError(t *testing.T, err error, validatorMap map[string]string) {
+func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 	if err != nil {
 		t.Helper()
-
 		var valErr validation.Errors
 
 		// If error is validation.Errors, determine if passed validationMap
@@ -167,9 +166,88 @@ func ValidateFormError(t *testing.T, err error, validatorMap map[string]string) 
 			t.Errorf("There are no form errors but validatorMap was passed")
 		}
 	}
-
-	//return nil
 }
+
+// func ValidateFormError(t TestLog, err error, validatorMap map[string]string) error {
+// 	if err != nil {
+// 		t.Helper()
+
+// 		var valErr validation.Errors
+
+// 		// If error is validation.Errors, determine if passed validationMap
+// 		// errors correspond with errors in validation.Errors map
+// 		//
+// 		// Else simply return err
+// 		if errors.As(err, &valErr) {
+// 			errBytes, err := err.(validation.Errors).MarshalJSON()
+
+// 			if err != nil {
+// 				t.Errorf("%+v", err)
+// 				return errors.WithStack(err)
+// 			}
+
+// 			var errMap map[string]interface{}
+
+// 			if err = json.Unmarshal(errBytes, &errMap); err != nil {
+// 				t.Errorf("%+v", err)
+// 				return errors.WithStack(err)
+// 			}
+
+// 			if validatorMap == nil {
+// 				msg := "There are form errors but validatorMap is nil.  Errors: %+v\n"
+// 				t.Errorf(msg, errMap)
+// 				return errors.WithStack(fmt.Errorf(msg, errMap))
+// 			}
+
+// 			errObj := objx.New(errMap)
+// 			var validatorMapKeyErrMsg string
+// 			var invalidErrMsg string
+// 			var remainingErrsMsg string
+
+// 			validatorMapKeys := make([]string, 0, len(validatorMap))
+
+// 			for k, mapVal := range validatorMap {
+// 				validatorMapKeys = append(validatorMapKeys, k)
+// 				objVal := errObj.Get(k)
+
+// 				if objVal.IsNil() {
+// 					validatorMapKeyErrMsg += fmt.Sprintf(" key '%s' does not exist in form errors \n", k)
+// 				} else if objVal.Str() != mapVal {
+// 					invalidErrMsg += fmt.Sprintf("key '%s' has error %s; expected %s \n", k, objVal.Str(), mapVal)
+// 				}
+
+// 				objVal.
+// 			}
+
+// 			remainingErrMap := errObj.Exclude(validatorMapKeys)
+
+// 			fmt.Printf("remaining map: %+v", remainingErrMap)
+// 			//fmt.Printf("objVal val: %+v", errObj)
+
+// 			if len(remainingErrMap) > 0 {
+// 				remainingErrsMsg = fmt.Sprintf("The following errors were not found in given validatorMap: %+v", remainingErrMap)
+// 			}
+
+// 			errMsgs := validatorMapKeyErrMsg + invalidErrMsg + remainingErrsMsg
+
+// 			if errMsgs != "" {
+// 				t.Errorf(errMsgs)
+// 				return errors.WithStack(fmt.Errorf(errMsgs))
+// 			}
+// 		} else {
+// 			t.Errorf("%+v", err)
+// 			return errors.WithStack(err)
+// 		}
+// 	} else {
+// 		if validatorMap != nil {
+// 			msg := "There are no form errors but validatorMap was passed \n"
+// 			t.Errorf(msg)
+// 			return errors.WithStack(fmt.Errorf(msg))
+// 		}
+// 	}
+
+// 	return nil
+// }
 
 // RandomString is util test function that takes in int and will return random string with that length
 //

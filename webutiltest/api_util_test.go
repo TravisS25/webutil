@@ -131,11 +131,15 @@ func TestLoginUser(t *testing.T) {
 	mockClient := &MockHTTPClient{}
 	mockClient.On("Do", testifymock.Anything).Return(&http.Response{}, resErr).Once()
 
+	// ---------------------------------------------------------------------
+
 	if _, err = LoginUser(mockClient, loginURL, map[string]interface{}{}); err == nil {
 		t.Errorf("should have error")
 	} else if !errors.Is(err, resErr) {
 		t.Errorf("should have err: %s; got %s\n", resErr.Error(), err.Error())
 	}
+
+	// ---------------------------------------------------------------------
 
 	mockClient.On("Do", testifymock.Anything).Return(
 		&http.Response{
@@ -150,6 +154,8 @@ func TestLoginUser(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "status code") {
 		t.Errorf("should have substr err: 'status code'; got %s\n", err.Error())
 	}
+
+	// ---------------------------------------------------------------------
 
 	mockClient.On("Do", testifymock.Anything).Return(
 		&http.Response{
@@ -171,7 +177,30 @@ func TestLoginUser(t *testing.T) {
 		t.Errorf("should have substr err: 'status code'; got %s\n", err.Error())
 	}
 
+	// ---------------------------------------------------------------------
+
 	if _, err = LoginUser(http.DefaultClient, ts.URL+loginURL, map[string]interface{}{}); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
+	}
+
+	// ---------------------------------------------------------------------
+
+	mockClient.On("Do", testifymock.Anything).Return(
+		&http.Response{
+			StatusCode: http.StatusOK,
+		},
+		nil,
+	).Once()
+	mockClient.On("Do", testifymock.Anything).Return(
+		&http.Response{
+			StatusCode: http.StatusOK,
+		},
+		nil,
+	).Once()
+
+	if _, err = LoginUser(mockClient, loginURL, map[string]interface{}{}); err == nil {
+		t.Errorf("should have error")
+	} else if !strings.Contains(err.Error(), "webutiltest") {
+		t.Errorf("should have no cookie error; got %s\n", err.Error())
 	}
 }
