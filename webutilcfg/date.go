@@ -1,4 +1,4 @@
-package webutil
+package webutilcfg
 
 const (
 	// DateTimeMilliLayout is global format for date time with adding milliseconds for precise calculations
@@ -29,22 +29,4 @@ const (
 	// FormDateStrf is format used when formatting date in sql query
 	// to use a form format
 	FormDateStrf = "%m/%d/%Y"
-)
-
-const (
-	// IntBase is default base to use for converting string to int64
-	IntBase = 10
-
-	// IntBitSize is default bit size to use for converting string to int64
-	IntBitSize = 64
-)
-
-var (
-	// True contains true value to use as reference variable
-	// for bool pointers
-	True = true
-
-	// False contains false value to use as reference variable
-	// for bool pointers
-	False = false
 )

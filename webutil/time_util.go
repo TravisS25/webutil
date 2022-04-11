@@ -3,6 +3,7 @@ package webutil
 import (
 	"time"
 
+	"github.com/TravisS25/webutil/webutilcfg"
 	pkgerrors "github.com/pkg/errors"
 )
 
@@ -31,7 +32,7 @@ func ConvertTimeToLocalDateTime(dateString, timezone string) (time.Time, error) 
 		return time.Time{}, pkgerrors.Wrap(err, "")
 	}
 
-	parsedTime, err := time.Parse(PostgresDateLayout, dateString)
+	parsedTime, err := time.Parse(webutilcfg.PostgresDateLayout, dateString)
 
 	if err != nil {
 		return time.Time{}, pkgerrors.Wrap(err, "")

@@ -3,6 +3,7 @@ package webutil
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +17,199 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
+
+func TestGetMapSliceRowItems(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	scanErr := fmt.Errorf("scan error")
+	dbx := sqlx.NewDb(db, Postgres)
+	status := 406
+
+	serverErrCfg := ServerErrorConfig{
+		RecoverConfig: RecoverConfig{
+			RecoverDB: func(err error) (*sqlx.DB, error) {
+				return dbx, nil
+			},
+		},
+	}
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"value", "text"}).
+			AddRow(nil, "bar").
+			AddRow("hey", "there").
+			RowError(1, scanErr),
+	)
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"count"}).
+			AddRow(1),
+	)
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/url", nil)
+
+	if _, _, err = GetMapSliceRowItems(
+		rr,
+		r,
+		dbx,
+		status,
+		func(db DBInterface) (*sqlx.Rows, int, error) {
+			return nil, 0, scanErr
+		},
+		nil,
+		serverErrCfg,
+	); err == nil {
+		t.Errorf("should have error")
+	} else if !errors.Is(err, scanErr) {
+		t.Errorf("should have scan err; got %s\n", err.Error())
+	}
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"value", "text"}).
+			AddRow(nil, "bar"),
+	)
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"count"}).
+			AddRow(1),
+	)
+
+	rr = httptest.NewRecorder()
+
+	if _, _, err = GetMapSliceRowItems(
+		rr,
+		r,
+		dbx,
+		status,
+		func(db DBInterface) (*sqlx.Rows, int, error) {
+			return GetQueriedAndCountResults(
+				"select",
+				"select",
+				nil,
+				DbFields{},
+				r,
+				dbx,
+				ParamConfig{},
+				QueryConfig{},
+			)
+		},
+		nil,
+		serverErrCfg,
+	); err != nil {
+		t.Errorf("should not have error;got %v\n", err)
+	}
+}
+
+func TestGetMapSliceRowItemsWithRow(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlAnyMatcher))
+
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	scanErr := fmt.Errorf("scan error")
+	dbx := sqlx.NewDb(db, Postgres)
+	status := 406
+
+	serverErrCfg := ServerErrorConfig{
+		RecoverConfig: RecoverConfig{
+			RecoverDB: func(err error) (*sqlx.DB, error) {
+				return dbx, nil
+			},
+		},
+	}
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"value", "text"}).
+			AddRow(nil, "bar").
+			AddRow("hey", "there").
+			RowError(1, scanErr),
+	)
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "count"}).
+			AddRow(1, 1),
+	)
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"value", "text"}).
+			AddRow(nil, "bar").
+			AddRow("hey", "there").
+			RowError(1, scanErr),
+	)
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "count"}).
+			AddRow(1, 1),
+	)
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/url", nil)
+
+	if _, _, err = GetMapSliceRowItemsWithRow(
+		rr,
+		r,
+		dbx,
+		status,
+		func(db DBInterface) (*sqlx.Rows, *sqlx.Row, error) {
+			return GetQueriedAndCountRowResults(
+				"select",
+				"select",
+				nil,
+				DbFields{},
+				r,
+				dbx,
+				ParamConfig{},
+				QueryConfig{},
+			)
+		},
+		nil,
+		serverErrCfg,
+	); err == nil {
+		t.Errorf("should have error")
+	} else if !errors.Is(err, scanErr) {
+		t.Errorf("should hvae scan err; got %s\n", err.Error())
+	}
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"value", "text"}).
+			AddRow(nil, "bar"),
+	)
+
+	mock.ExpectQuery("select").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "count"}).
+			AddRow(1, 1),
+	)
+
+	rr = httptest.NewRecorder()
+
+	if _, _, err = GetMapSliceRowItemsWithRow(
+		rr,
+		r,
+		dbx,
+		status,
+		func(db DBInterface) (*sqlx.Rows, *sqlx.Row, error) {
+			return GetQueriedAndCountRowResults(
+				"select",
+				"select",
+				nil,
+				DbFields{},
+				r,
+				dbx,
+				ParamConfig{},
+				QueryConfig{},
+			)
+		},
+		nil,
+		serverErrCfg,
+	); err != nil {
+		t.Errorf("should not have error;got %v\n", err)
+	}
+}
 
 ////////////////////////////////////////////////////////////
 // REPLACEMENT FUNCTION TESTS
@@ -79,7 +273,7 @@ func TestGetValueResultsTest(t *testing.T) {
 	query := defaultQuery
 
 	filterFields := map[string]FieldConfig{
-		idField: FieldConfig{
+		idField: {
 			DBField: idField,
 			OperationConf: OperationConfig{
 				CanSortBy:   true,
@@ -87,7 +281,7 @@ func TestGetValueResultsTest(t *testing.T) {
 				CanGroupBy:  true,
 			},
 		},
-		nameField: FieldConfig{
+		nameField: {
 			DBField: nameField,
 			OperationConf: OperationConfig{
 				CanSortBy:   true,
@@ -98,7 +292,7 @@ func TestGetValueResultsTest(t *testing.T) {
 	}
 
 	invalidSortFields := map[string]FieldConfig{
-		idField: FieldConfig{
+		idField: {
 			DBField: idField,
 			OperationConf: OperationConfig{
 				CanSortBy:   false,
@@ -106,7 +300,7 @@ func TestGetValueResultsTest(t *testing.T) {
 				CanGroupBy:  true,
 			},
 		},
-		nameField: FieldConfig{
+		nameField: {
 			DBField: nameField,
 			OperationConf: OperationConfig{
 				CanSortBy:   false,
@@ -416,7 +610,7 @@ func TestGetGroupReplacementsUnitTest(t *testing.T) {
 	}
 
 	fields := map[string]FieldConfig{
-		idField: FieldConfig{
+		idField: {
 			DBField: idField,
 			OperationConf: OperationConfig{
 				CanFilterBy: true,
@@ -549,7 +743,7 @@ func TestGetSortReplacementsUnitTest(t *testing.T) {
 	}
 
 	fields := map[string]FieldConfig{
-		idField: FieldConfig{
+		idField: {
 			DBField: idField,
 			OperationConf: OperationConfig{
 				CanFilterBy: true,
@@ -661,7 +855,7 @@ func TestGetFilterReplacementsUnitTest(t *testing.T) {
 	}
 
 	fields := map[string]FieldConfig{
-		idField: FieldConfig{
+		idField: {
 			DBField: idField,
 			OperationConf: OperationConfig{
 				CanFilterBy: true,
@@ -1076,7 +1270,7 @@ func TestReplaceGroupFieldsUnitTest(t *testing.T) {
 		},
 	}
 	fields := map[string]FieldConfig{
-		idField: FieldConfig{
+		idField: {
 			DBField: idField,
 			OperationConf: OperationConfig{
 				CanGroupBy:  true,
@@ -1084,7 +1278,7 @@ func TestReplaceGroupFieldsUnitTest(t *testing.T) {
 				CanSortBy:   true,
 			},
 		},
-		nameField: FieldConfig{
+		nameField: {
 			DBField: nameField,
 			OperationConf: OperationConfig{
 				CanGroupBy:  true,
@@ -1094,7 +1288,7 @@ func TestReplaceGroupFieldsUnitTest(t *testing.T) {
 		},
 	}
 	fields2 := map[string]FieldConfig{
-		idField: FieldConfig{
+		idField: {
 			DBField: idField,
 			OperationConf: OperationConfig{
 				CanGroupBy:  false,

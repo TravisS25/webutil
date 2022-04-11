@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/TravisS25/webutil/webutilcfg"
 	"github.com/go-redis/redis"
 	"github.com/gorilla/sessions"
 	"github.com/knq/snaker"
@@ -238,15 +239,15 @@ func SetCacheFromDB(cacheSetup CacheSetup, db Querier) error {
 
 				switch currentVal.(type) {
 				case int64:
-					val = strconv.FormatInt(currentVal.(int64), IntBase)
+					val = strconv.FormatInt(currentVal.(int64), webutilcfg.IntBase)
 				case *int64:
 					t := currentVal.(*int64)
 					if t != nil {
-						val = strconv.FormatInt(*t, IntBase)
+						val = strconv.FormatInt(*t, webutilcfg.IntBase)
 					}
 				case []byte:
 					t := val.([]byte)
-					val, err = strconv.ParseFloat(string(t), IntBitSize)
+					val, err = strconv.ParseFloat(string(t), webutilcfg.IntBitSize)
 					if err != nil {
 						panic(err)
 					}

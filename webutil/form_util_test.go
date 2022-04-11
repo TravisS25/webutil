@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TravisS25/webutil/webutilcfg"
 	"github.com/shopspring/decimal"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -77,8 +78,8 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	var err error
 	var rule *validateDateRule
 
-	futureDateStr := time.Now().AddDate(0, 0, 1).Format(FormDateTimeLayout)
-	pastDateStr := time.Now().AddDate(0, 0, -1).Format(FormDateTimeLayout)
+	futureDateStr := time.Now().AddDate(0, 0, 1).Format(webutilcfg.FormDateTimeLayout)
+	pastDateStr := time.Now().AddDate(0, 0, -1).Format(webutilcfg.FormDateTimeLayout)
 
 	rule = &validateDateRule{
 		timezone: "invalid",
@@ -101,7 +102,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	// --------------------------------------------------------------------
 
 	rule = &validateDateRule{
-		layout: FormDateTimeLayout,
+		layout: webutilcfg.FormDateTimeLayout,
 	}
 
 	if err = rule.Validate("invalid"); err == nil {
@@ -115,7 +116,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	// --------------------------------------------------------------------
 
 	rule = &validateDateRule{
-		layout: FormDateTimeLayout,
+		layout: webutilcfg.FormDateTimeLayout,
 	}
 
 	if err = rule.Validate(pastDateStr); err == nil {
@@ -130,7 +131,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	// --------------------------------------------------------------------
 
 	rule = &validateDateRule{
-		layout:      FormDateTimeLayout,
+		layout:      webutilcfg.FormDateTimeLayout,
 		canBeFuture: true,
 		canBePast:   true,
 	}
@@ -143,7 +144,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	// --------------------------------------------------------------------
 
 	rule = &validateDateRule{
-		layout:      FormDateTimeLayout,
+		layout:      webutilcfg.FormDateTimeLayout,
 		canBeFuture: true,
 		canBePast:   false,
 	}
@@ -160,7 +161,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	// --------------------------------------------------------------------
 
 	rule = &validateDateRule{
-		layout:      FormDateTimeLayout,
+		layout:      webutilcfg.FormDateTimeLayout,
 		canBeFuture: false,
 		canBePast:   true,
 	}
@@ -177,7 +178,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	// --------------------------------------------------------------------
 
 	rule = &validateDateRule{
-		layout:      FormDateTimeLayout,
+		layout:      webutilcfg.FormDateTimeLayout,
 		canBeFuture: false,
 		canBePast:   false,
 	}
@@ -193,10 +194,10 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 
 	// --------------------------------------------------------------------
 
-	thenUTCTime := time.Now().UTC().Add(-time.Hour * 1).Format(FormDateTimeLayout)
+	thenUTCTime := time.Now().UTC().Add(-time.Hour * 1).Format(webutilcfg.FormDateTimeLayout)
 
 	rule = &validateDateRule{
-		layout:      FormDateTimeLayout,
+		layout:      webutilcfg.FormDateTimeLayout,
 		compareTime: true,
 		canBeFuture: false,
 		canBePast:   true,
@@ -209,7 +210,7 @@ func TestValidateDateRuleUnitTest(t *testing.T) {
 	// -------------------------------------------------------------------------
 
 	rule = &validateDateRule{
-		layout:      FormDateTimeLayout,
+		layout:      webutilcfg.FormDateTimeLayout,
 		timezone:    "America/New_York",
 		compareTime: true,
 		canBeFuture: false,

@@ -271,6 +271,11 @@ type FieldConfig struct {
 	// to apply configurations to
 	DBField string
 
+	// FieldTypeValidator is custom function that allows user
+	// to determine if db field value sent by user is valid
+	// and if not, return an error
+	FieldTypeValidator func(value interface{}) error
+
 	// OperationConf is config to set to determine which sql
 	// operations can be performed on DBField
 	OperationConf OperationConfig
@@ -976,6 +981,175 @@ func GetQueriedResults(
 	return rows, nil
 }
 
+// GetMapSliceRowItems is util function that allows us to take filters from client
+// and loop through to return queried values in a slice of map
+//
+// customFunc parameter is function that allows us to take in current queried row
+// and manipulate it within function. This function can be nil
+func GetMapSliceRowItems(
+	w http.ResponseWriter,
+	r *http.Request,
+	db DBInterface,
+	clientErrStatus int,
+	queryFunc func(DBInterface) (*sqlx.Rows, int, error),
+	customFunc func(map[string]interface{}) error,
+	serverErrCfg ServerErrorConfig,
+) ([]map[string]interface{}, int, error) {
+	var err error
+	var count int
+	var items []map[string]interface{}
+	var rows *sqlx.Rows
+
+	retryDB := func(db DBInterface) error {
+		if rows, count, err = queryFunc(db); err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasFilterOrServerError(
+		w,
+		r,
+		err,
+		retryDB,
+		clientErrStatus,
+		serverErrCfg,
+	) {
+		return nil, 0, errors.WithStack(err)
+	}
+
+	hasFailed := false
+
+	retryDB = func(db DBInterface) error {
+		if hasFailed {
+			if rows, count, err = queryFunc(db); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		innerItems := make([]map[string]interface{}, 0)
+
+		for rows.Next() {
+			dest := make(map[string]interface{})
+
+			if err = rows.MapScanMultiLvl(dest); err != nil {
+				hasFailed = true
+				return errors.WithStack(err)
+			}
+
+			if rows.Err() != nil {
+				hasFailed = true
+				return errors.WithStack(rows.Err())
+			}
+
+			if customFunc != nil {
+				if err = customFunc(dest); err != nil {
+					return errors.WithStack(err)
+				}
+			}
+
+			innerItems = append(innerItems, dest)
+		}
+
+		items = make([]map[string]interface{}, 0, len(innerItems))
+		items = append(items, innerItems...)
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasDBError(w, r, err, retryDB, serverErrCfg) {
+		return nil, 0, rows.Err()
+	}
+
+	return items, count, nil
+}
+
+func GetMapSliceRowItemsWithRow(
+	w http.ResponseWriter,
+	r *http.Request,
+	db DBInterface,
+	clientErrStatus int,
+	queryFunc func(DBInterface) (*sqlx.Rows, *sqlx.Row, error),
+	customFunc func(map[string]interface{}) error,
+	serverErrCfg ServerErrorConfig,
+) ([]map[string]interface{}, map[string]interface{}, error) {
+	var err error
+	var row *sqlx.Row
+	var rows *sqlx.Rows
+
+	retryDB := func(db DBInterface) error {
+		if rows, row, err = queryFunc(db); err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasFilterOrServerError(
+		w,
+		r,
+		err,
+		retryDB,
+		clientErrStatus,
+		serverErrCfg,
+	) {
+		return nil, nil, errors.WithStack(err)
+	}
+
+	var items []map[string]interface{}
+	rowItem := make(map[string]interface{}, 0)
+
+	hasFailed := false
+	retryDB = func(db DBInterface) error {
+		if hasFailed {
+			if rows, row, err = queryFunc(db); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		innerItems := make([]map[string]interface{}, 0)
+
+		for rows.Next() {
+			dest := make(map[string]interface{})
+
+			if err = rows.MapScanMultiLvl(dest); err != nil {
+				hasFailed = true
+				return errors.WithStack(err)
+			}
+
+			innerItems = append(innerItems, dest)
+		}
+
+		if rows.Err() != nil {
+			hasFailed = true
+			return errors.WithStack(rows.Err())
+		}
+
+		if err = row.MapScanMultiLvl(rowItem); err != nil {
+			hasFailed = true
+			return errors.WithStack(row.Err())
+		}
+
+		items = make([]map[string]interface{}, 0, len(innerItems))
+		items = append(items, innerItems...)
+		return nil
+	}
+
+	err = retryDB(db)
+
+	if HasDBError(w, r, err, retryDB, serverErrCfg) {
+		return nil, nil, rows.Err()
+	}
+
+	return items, rowItem, nil
+}
+
 ////////////////////////////////////////////////////////////
 // GET REPLACEMENT FUNCTIONS
 ////////////////////////////////////////////////////////////
@@ -1083,13 +1257,6 @@ func GetSortReplacements(
 	allSorts = append(allSorts, queryConf.PrependSortFields...)
 	allSorts = append(allSorts, sortSlice...)
 
-	// for _, v := range queryConf.PrependSortFields {
-	// 	allSorts = append(allSorts, v)
-	// }
-	// for _, v := range sortSlice {
-	// 	allSorts = append(allSorts, v)
-	// }
-
 	return allSorts, nil
 }
 
@@ -1142,13 +1309,6 @@ func GetGroupReplacements(
 	allGroups := make([]Group, 0, len(queryConf.PrependGroupFields)+len(groupSlice))
 	allGroups = append(allGroups, queryConf.PrependGroupFields...)
 	allGroups = append(allGroups, groupSlice...)
-
-	// for _, v := range queryConf.PrependGroupFields {
-	// 	allGroups = append(allGroups, v)
-	// }
-	// for _, v := range groupSlice {
-	// 	allGroups = append(allGroups, v)
-	// }
 
 	return allGroups, nil
 }

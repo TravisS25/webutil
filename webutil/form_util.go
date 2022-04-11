@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TravisS25/webutil/webutilcfg"
 	"github.com/shopspring/decimal"
 
 	"github.com/gorilla/mux"
@@ -340,7 +341,7 @@ type Int64 int64
 
 // MarshalJSON takes int64 value and returns byte value
 func (i Int64) MarshalJSON() ([]byte, error) {
-	return json.Marshal(strconv.FormatInt(int64(i), IntBase))
+	return json.Marshal(strconv.FormatInt(int64(i), webutilcfg.IntBase))
 }
 
 // UnmarshalJSON first tries to convert given bytes
@@ -359,7 +360,7 @@ func (i *Int64) UnmarshalJSON(b []byte) error {
 			return nil
 		}
 
-		value, err := strconv.ParseInt(s, IntBase, IntBitSize)
+		value, err := strconv.ParseInt(s, webutilcfg.IntBase, webutilcfg.IntBitSize)
 		if err != nil {
 			return err
 		}
@@ -1292,15 +1293,15 @@ func convertToStr(typ interface{}) (interface{}, error) {
 		i := typ.(*int)
 		t = strconv.Itoa(*i)
 	case int64:
-		t = strconv.FormatInt(typ.(int64), IntBase)
+		t = strconv.FormatInt(typ.(int64), webutilcfg.IntBase)
 	case *int64:
 		i := typ.(*int64)
-		t = strconv.FormatInt(*i, IntBase)
+		t = strconv.FormatInt(*i, webutilcfg.IntBase)
 	case float64:
-		t = strconv.FormatFloat(typ.(float64), 'f', -1, IntBitSize)
+		t = strconv.FormatFloat(typ.(float64), 'f', -1, webutilcfg.IntBitSize)
 	case *float64:
 		i := typ.(*float64)
-		t = strconv.FormatFloat(*i, 'f', -1, IntBitSize)
+		t = strconv.FormatFloat(*i, 'f', -1, webutilcfg.IntBitSize)
 	case string:
 		t = typ.(string)
 	case *string:
