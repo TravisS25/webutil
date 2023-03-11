@@ -9,12 +9,14 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/TravisS25/webutil/webutilcfg"
 	"github.com/knq/snaker"
 
 	"github.com/jmoiron/sqlx"
 
 	"reflect"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
 )
 
@@ -67,6 +69,10 @@ var (
 //-------------------------- TYPES --------------------------
 //////////////////////////////////////////////////////////////////
 
+var (
+	validFilterTypes = map[string]bool{"string": true, "int": true, "float": true, "float64": true, "int64": true}
+)
+
 // DbFields is type used in various querying functions
 // The key value should be fields that will be sent in a
 // url query and the value is the configuration of each field
@@ -78,6 +84,19 @@ type DbFields map[string]FieldConfig
 //////////////////////////////////////////////////////////////////
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
+
+type QueryBuilderConfig struct {
+	FilterParam string
+	OrderParam  string
+	LimitParam  string
+	OffsetParam string
+
+	Limit  uint64
+	OffSet uint64
+
+	CanMultiColumnOrder bool
+	CanMultiColumnGroup bool
+}
 
 // SelectItem is struct used in conjunction with primeng's library api
 type SelectItem struct {
@@ -145,6 +164,14 @@ type FilterError struct {
 	isInvalidValue bool
 
 	invalidValue interface{}
+}
+
+type QueryBuilderError struct {
+	errorMsg string
+}
+
+func (q *QueryBuilderError) Error() string {
+	return q.errorMsg
 }
 
 func (f *FilterError) Error() string {
@@ -411,6 +438,8 @@ type Sort struct {
 	Dir   string `json:"dir"`
 	Field string `json:"field"`
 }
+
+type Order = Sort
 
 // Group is the group config struct for server side grouping
 type Group struct {
@@ -1319,15 +1348,15 @@ func GetGroupReplacements(
 func GetLimitWithOffsetValues(
 	req *http.Request,
 	query *string,
-	takeParam,
-	skipParam string,
+	limitParam,
+	offsetParam string,
 	takeLimit int,
 ) (*LimitOffset, error) {
 	var err error
 	var takeInt, skipInt int
 
-	take := req.FormValue(takeParam)
-	skip := req.FormValue(skipParam)
+	take := req.FormValue(limitParam)
+	skip := req.FormValue(offsetParam)
 
 	if take == "" {
 		takeInt = takeLimit
@@ -1884,4 +1913,499 @@ func QuerySingleColumn(db Querier, bindVar int, query string, args ...interface{
 	}
 
 	return items, nil
+}
+
+func queryBuilder(
+	r *http.Request,
+	dbFields DbFields,
+	builder sq.SelectBuilder,
+	cfg QueryBuilderConfig,
+) (string, []interface{}, error) {
+	var err error
+	var query string
+	var args []interface{}
+
+	if builder, err = GetQueryBuilder(
+		r,
+		dbFields,
+		builder,
+		cfg,
+	); err != nil {
+		return "", nil, errors.WithStack(err)
+	}
+
+	if query, args, err = builder.ToSql(); err != nil {
+		return "", nil, errors.WithStack(err)
+	}
+
+	return query, args, nil
+}
+
+func GetQueryBuilder(
+	r *http.Request,
+	dbFields DbFields,
+	builder sq.SelectBuilder,
+	cfg QueryBuilderConfig,
+) (sq.SelectBuilder, error) {
+	var err error
+	var ok bool
+
+	filterParam := r.FormValue(cfg.FilterParam)
+	orderParam := r.FormValue(cfg.OrderParam)
+	limitParam := r.FormValue(cfg.LimitParam)
+	offsetParam := r.FormValue(cfg.OffsetParam)
+
+	if filterParam != "" {
+		var filters []Filter
+
+		if err = json.Unmarshal([]byte(filterParam), &filters); err != nil {
+			return sq.SelectBuilder{}, errors.WithStack(&QueryBuilderError{
+				errorMsg: "invalid filter parameter"},
+			)
+		}
+
+		for _, filter := range filters {
+			var dbField FieldConfig
+			var fieldType string
+			invalidFilterValue := ""
+
+			if dbField, ok = dbFields[filter.Field]; !ok {
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{errorMsg: fmt.Sprintf("invalid field '%s' for filter parameter", filter.Field)},
+				)
+			}
+
+			if !dbField.OperationConf.CanFilterBy {
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{fmt.Sprintf("field '%s' can not be filtered", filter.Field)},
+				)
+			}
+
+			if filter.Value == nil {
+				if filter.Operator != "isnull" && filter.Operator != "isnotnull" {
+					return sq.SelectBuilder{}, &QueryBuilderError{
+						errorMsg: fmt.Sprintf("field '%s' does not contain value", filter.Field),
+					}
+				} else {
+
+				}
+			} else {
+				fieldType = reflect.TypeOf(filter.Value).String()
+			}
+
+			switch filter.Operator {
+			case "eq":
+				builder = builder.Where(sq.Eq{
+					dbField.DBField: filter.Value,
+				})
+			case "neq":
+				builder = builder.Where(sq.NotEq{
+					dbField.DBField: filter.Value,
+				})
+			case "startswith":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.ILike{
+						dbField.DBField: fmt.Sprintf("%v%%", filter.Value),
+					})
+				}
+			case "endswith":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.ILike{
+						dbField.DBField: fmt.Sprintf("%%%v", filter.Value),
+					})
+				}
+			case "contains":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.ILike{
+						dbField.DBField: fmt.Sprintf("%%%v%%", filter.Value),
+					})
+				}
+			case "doesnotcontain":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.NotILike{
+						dbField.DBField: fmt.Sprintf("%%%v%%", filter.Value),
+					})
+				}
+			case "isnull":
+				builder = builder.Where(sq.Eq{
+					dbField.DBField: nil,
+				})
+			case "isnotnull":
+				builder = builder.Where(sq.NotEq{
+					dbField.DBField: nil,
+				})
+			case "isempty":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.Eq{
+						dbField.DBField: "",
+					})
+				}
+			case "isnotempty":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.NotEq{
+						dbField.DBField: "",
+					})
+				}
+			case "lt":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.Lt{
+						dbField.DBField: fmt.Sprintf("%v", filter.Value),
+					})
+				}
+			case "lte":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.LtOrEq{
+						dbField.DBField: fmt.Sprintf("%v", filter.Value),
+					})
+				}
+			case "gt":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.Gt{
+						dbField.DBField: fmt.Sprintf("%v", filter.Value),
+					})
+				}
+			case "gte":
+				if _, ok = validFilterTypes[fieldType]; !ok {
+					invalidFilterValue = filter.Field
+				} else {
+					builder = builder.Where(sq.GtOrEq{
+						dbField.DBField: fmt.Sprintf("%v", filter.Value),
+					})
+				}
+			default:
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{errorMsg: fmt.Sprintf("invalid operator for field '%s'", filter.Field)},
+				)
+			}
+
+			if invalidFilterValue != "" {
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{errorMsg: fmt.Sprintf("invalid filter value for field '%s'", invalidFilterValue)},
+				)
+			}
+		}
+	}
+
+	if orderParam != "" {
+		var sorts []Order
+
+		if err = json.Unmarshal([]byte(orderParam), &sorts); err != nil {
+			return sq.SelectBuilder{}, errors.WithStack(
+				&QueryBuilderError{errorMsg: fmt.Sprintf("invalid order parameter")},
+			)
+		}
+
+		for _, sort := range sorts {
+			var dbField FieldConfig
+
+			if sort.Dir != "asc" && sort.Dir != "desc" {
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{errorMsg: fmt.Sprintf("invalid sort dir for field '%s'", sort.Field)},
+				)
+			}
+
+			if dbField, ok = dbFields[sort.Field]; !ok {
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{errorMsg: fmt.Sprintf("invalid field '%s' for order parameter", sort.Field)},
+				)
+			}
+
+			if !dbField.OperationConf.CanSortBy {
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{errorMsg: fmt.Sprintf("field '%s' can not be ordered", sort.Field)},
+				)
+			}
+
+			builder = builder.OrderByClause("? " + sort.Dir)
+
+			if !cfg.CanMultiColumnOrder {
+				break
+			}
+		}
+	}
+
+	if limitParam != "" {
+		var limit uint64
+
+		if limit, err = strconv.ParseUint(
+			limitParam,
+			webutilcfg.IntBase,
+			webutilcfg.IntBitSize,
+		); err != nil {
+			return sq.SelectBuilder{}, errors.WithStack(
+				&QueryBuilderError{errorMsg: fmt.Sprintf("invalid limit")},
+			)
+		}
+
+		if cfg.Limit > 0 && limit > cfg.Limit {
+			limit = cfg.Limit
+		}
+
+		builder = builder.Limit(limit)
+	}
+
+	if offsetParam != "" {
+		var offset uint64
+
+		if offset, err = strconv.ParseUint(
+			offsetParam,
+			webutilcfg.IntBase,
+			webutilcfg.IntBitSize,
+		); err != nil {
+			return sq.SelectBuilder{}, errors.WithStack(
+				&QueryBuilderError{errorMsg: fmt.Sprintf("invalid offset")},
+			)
+		}
+
+		if cfg.OffSet > 0 && offset > cfg.OffSet {
+			offset = cfg.OffSet
+		}
+
+		builder = builder.Offset(offset)
+	}
+
+	return builder, nil
+}
+
+func GetQueryBuilderResult(
+	db DBInterface,
+	bindvar int,
+	req *http.Request,
+	dbFields DbFields,
+	builder sq.SelectBuilder,
+	isCountQuery bool,
+	cfg QueryBuilderConfig,
+) (interface{}, error) {
+	var err error
+	var query string
+	var args []interface{}
+
+	if builder, err = GetQueryBuilder(
+		req,
+		dbFields,
+		builder,
+		cfg,
+	); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if query, args, err = builder.ToSql(); err != nil {
+		return nil, errors.WithStack(fmt.Errorf("err: %s\n query: %s, args: %+v", err.Error(), query, args))
+	}
+
+	if isCountQuery {
+		var row *sqlx.Row
+		var count uint64
+
+		if row, err = db.QueryRowxRebind(bindvar, query, args...); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		if row.Scan(&count); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		return count, nil
+	}
+
+	var rows *sqlx.Rows
+
+	data := make([]map[string]interface{}, 0, cfg.Limit)
+
+	if rows, err = db.QueryxRebind(bindvar, query, args...); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	for rows.Next() {
+		row := map[string]interface{}{}
+
+		if err = rows.MapScanMultiLvl(row); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		data = append(data, row)
+	}
+
+	return data, nil
+}
+
+func GetQueryBuilderResultL(
+	db DBInterface,
+	bindvar int,
+	req *http.Request,
+	dbFields DbFields,
+	customFunc func(map[string]interface{}) error,
+	builder sq.SelectBuilder,
+	isCountQuery bool,
+	cfg QueryBuilderConfig,
+) (interface{}, error) {
+	var err error
+	var query string
+	var args []interface{}
+
+	if builder, err = GetQueryBuilder(
+		req,
+		dbFields,
+		builder,
+		cfg,
+	); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if query, args, err = builder.ToSql(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if isCountQuery {
+		var row *sqlx.Row
+		var count uint64
+
+		if row, err = db.QueryRowxRebind(bindvar, query, args...); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		if row.Scan(&count); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		return count, nil
+	}
+
+	var rows *sqlx.Rows
+
+	data := make([]map[string]interface{}, 0, cfg.Limit)
+
+	if rows, err = db.QueryxRebind(bindvar, query, args...); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	for rows.Next() {
+		row := map[string]interface{}{}
+
+		if err = rows.MapScanMultiLvl(row); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		if customFunc != nil {
+			if err = customFunc(row); err != nil {
+				return nil, errors.WithStack(err)
+			}
+		}
+
+		data = append(data, row)
+	}
+
+	return data, nil
+}
+
+func GetDataAndCountBuilderResult(
+	db DBInterface,
+	bindvar int,
+	r *http.Request,
+	dbFields DbFields,
+	dataBuilder sq.SelectBuilder,
+	countBuilder sq.SelectBuilder,
+	dataCfg QueryBuilderConfig,
+	countCfg QueryBuilderConfig,
+) ([]map[string]interface{}, uint64, error) {
+	data, err := GetQueryBuilderResult(
+		db,
+		bindvar,
+		r,
+		dbFields,
+		dataBuilder,
+		false,
+		dataCfg,
+	)
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	count, err := GetQueryBuilderResult(
+		db,
+		bindvar,
+		r,
+		dbFields,
+		countBuilder,
+		true,
+		dataCfg,
+	)
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return data.([]map[string]interface{}), count.(uint64), nil
+}
+
+func GetDataAndCountBuilderResultL(
+	db DBInterface,
+	bindvar int,
+	req *http.Request,
+	dbFields DbFields,
+	logFunc func(error),
+	customFunc func(map[string]interface{}) error,
+	dataBuilder sq.SelectBuilder,
+	countBuilder sq.SelectBuilder,
+	dataCfg QueryBuilderConfig,
+	countCfg QueryBuilderConfig,
+) ([]map[string]interface{}, uint64, error) {
+	data, err := GetQueryBuilderResultL(
+		db,
+		bindvar,
+		req,
+		dbFields,
+		customFunc,
+		dataBuilder,
+		false,
+		dataCfg,
+	)
+
+	if err != nil {
+		if logFunc != nil {
+			logFunc(err)
+		}
+
+		return nil, 0, err
+	}
+
+	count, err := GetQueryBuilderResultL(
+		db,
+		bindvar,
+		req,
+		dbFields,
+		customFunc,
+		countBuilder,
+		true,
+		dataCfg,
+	)
+
+	if err != nil {
+		if logFunc != nil {
+			logFunc(err)
+		}
+
+		return nil, 0, err
+	}
+
+	return data.([]map[string]interface{}), count.(uint64), nil
 }

@@ -66,7 +66,7 @@ func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedM
 			vals = append(vals, v)
 		}
 
-		errStr += fmt.Sprintf("expected entries not found: %v\n\n", vals)
+		errStr += fmt.Sprintf("\n\nexpected entries not found: %v\n\n", vals)
 	}
 
 	if len(unexpectedVals) > 0 {

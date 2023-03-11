@@ -16,6 +16,12 @@ const (
 	bodyRequiredTxt = "Request must have body"
 	invalidJSONTxt  = "Invalid json"
 	serverErrTxt    = "Server error, please try again later"
+
+	IDRegexStr   = "[0-9]+"
+	UUIDRegexStr = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[8|9|aA|bB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$"
+
+	IDParam   = "{id:" + IDRegexStr + "}"
+	UUIDParam = "{id}"
 )
 
 //////////////////////////////////////////////////////////////////
@@ -118,6 +124,21 @@ func GetRouting(r *http.Request) map[string]bool {
 func GetUserGroups(r *http.Request) map[string]bool {
 	if r.Context().Value(GroupCtxKey) != nil {
 		return r.Context().Value(GroupCtxKey).(map[string]bool)
+	}
+
+	return nil
+}
+
+func GetGroupArray(r *http.Request) []string {
+	if r.Context().Value(GroupCtxKey) != nil {
+		gMap := r.Context().Value(GroupCtxKey).(map[string]bool)
+		gl := make([]string, 0, len(gMap))
+
+		for k := range gMap {
+			gl = append(gl, k)
+		}
+
+		return gl
 	}
 
 	return nil

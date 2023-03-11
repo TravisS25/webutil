@@ -5,6 +5,11 @@ import (
 	"net/http"
 )
 
+type SessionAuth struct {
+	AuthKey    string `mapstructure:"auth_key"`
+	EncryptKey string `mapstructure:"encrypt_key"`
+}
+
 type LogConfig struct {
 	CauseErr error
 

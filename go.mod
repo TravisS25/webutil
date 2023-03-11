@@ -4,10 +4,12 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.4.0
+	github.com/Masterminds/squirrel v1.5.3 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/garyburd/redigo v1.6.0 // indirect
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/go-redis/redis v6.15.6+incompatible
+	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gorilla/csrf v1.6.2
 	github.com/gorilla/mux v1.7.3
 	github.com/gorilla/securecookie v1.1.1
@@ -29,4 +31,4 @@ require (
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
 
-replace github.com/jmoiron/sqlx => /home/travis/programming/go/src/github.com/jmoiron/sqlx
+replace github.com/jmoiron/sqlx => /home/travis/programming/playground/languages/go/open-source/sqlx

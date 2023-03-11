@@ -1,10 +1,14 @@
 package webutiltest
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pkg/errors"
@@ -13,6 +17,34 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation"
 )
+
+func FormRequestBuilder(t *testing.T, method, url string, form interface{}, ctxVals map[interface{}]interface{}) *http.Request {
+	t.Helper()
+
+	formBytes, err := json.Marshal(form)
+
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+
+	req, err := http.NewRequest(method, url, bytes.NewBuffer(formBytes))
+
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+
+	if ctxVals != nil {
+		ctx := req.Context()
+
+		for k, v := range ctxVals {
+			ctx = context.WithValue(ctx, k, v)
+		}
+
+		req = req.WithContext(ctx)
+	}
+
+	return req
+}
 
 func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 	if err != nil {

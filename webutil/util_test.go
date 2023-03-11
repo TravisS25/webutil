@@ -83,5 +83,5 @@ func initTestConfig() {
 }
 
 func init() {
-	initTestConfig()
+	//initTestConfig()
 }

@@ -1,6 +1,7 @@
 package webutil
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -173,11 +174,11 @@ type RecoverForm func(error) error
 // FormValidationConfig is config struct used in the initialization
 // of *FormValidation
 type FormValidationConfig struct {
-	Cache        CacheStore
-	RecoverDB    RecoverDB
-	RecoverCache RecoverCache
-	PathRegex    PathRegex
-	SQLBindVar   int
+	Cache CacheStore
+	// RecoverDB    RecoverDB
+	// RecoverCache RecoverCache
+	PathRegex  PathRegex
+	SQLBindVar int
 }
 
 // CacheValidate is config struct used in form validators
@@ -373,8 +374,35 @@ func (i *Int64) UnmarshalJSON(b []byte) error {
 }
 
 // Value returns given int64 value
-func (i Int64) Value() int64 {
+func (i Int64) Int64Val() int64 {
 	return int64(i)
+}
+
+func (i Int64) Str() string {
+	return strconv.FormatInt(int64(i), webutilcfg.IntBase)
+}
+
+func (i *Int64) Scan(value interface{}) error {
+	switch value.(type) {
+	case string:
+		num, err := strconv.ParseInt(value.(string), 10, 64)
+
+		if err != nil {
+			return err
+		}
+
+		*i = Int64(num)
+	case int64:
+		*i = Int64(value.(int64))
+	default:
+		return errors.New("webutil: Invalid data type for Int64")
+	}
+
+	return nil
+}
+
+func (i Int64) Value() (driver.Value, error) {
+	return int64(i), nil
 }
 
 // FormSelection is generic struct used for html forms
@@ -455,10 +483,10 @@ func (f *FormValidation) ValidateArgs(
 ) *validateArgsRule {
 	return &validateArgsRule{
 		validator: &validator{
-			querier:        f.entity,
-			cache:          f.config.Cache,
-			entityRecover:  f,
-			recoverDB:      f.config.RecoverDB,
+			querier: f.entity,
+			cache:   f.config.Cache,
+			//entityRecover: f,
+			//recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        f.config.SQLBindVar,
@@ -481,10 +509,10 @@ func (f *FormValidation) ValidateUniqueness(
 	return &validateUniquenessRule{
 		instanceValue: instanceValue,
 		validator: &validator{
-			querier:        f.entity,
-			cache:          f.config.Cache,
-			entityRecover:  f,
-			recoverDB:      f.config.RecoverDB,
+			querier: f.entity,
+			cache:   f.config.Cache,
+			//entityRecover: f,
+			//recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        f.config.SQLBindVar,
@@ -506,10 +534,10 @@ func (f *FormValidation) ValidateExists(
 ) *validateExistsRule {
 	return &validateExistsRule{
 		validator: &validator{
-			querier:        f.entity,
-			cache:          f.config.Cache,
-			entityRecover:  f,
-			recoverDB:      f.config.RecoverDB,
+			querier: f.entity,
+			cache:   f.config.Cache,
+			//entityRecover: f,
+			//recoverDB:      f.config.RecoverDB,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        f.config.SQLBindVar,
@@ -551,7 +579,7 @@ func (f *FormValidation) SetConfig(config FormValidationConfig) {
 }
 
 type validator struct {
-	entityRecover  EntityRecover
+	//entityRecover  EntityRecover
 	querier        Querier
 	cache          CacheStore
 	args           []interface{}
@@ -937,6 +965,89 @@ func HasFormErrors(
 	return hasError
 }
 
+func FormHasErrors(
+	w http.ResponseWriter,
+	err error,
+	clientStatus int,
+	serverResp HTTPResponseConfig,
+) bool {
+	if err != nil {
+		SetHTTPResponseDefaults(&serverResp, http.StatusInternalServerError, []byte(serverErrTxt))
+
+		hasFormError := false
+
+		var valErr validation.Errors
+
+		if errors.Is(err, ErrBodyRequired) {
+			hasFormError = true
+			w.WriteHeader(clientStatus)
+			w.Write([]byte(bodyRequiredTxt))
+		} else if errors.Is(err, ErrInvalidJSON) {
+			hasFormError = true
+			w.WriteHeader(clientStatus)
+			w.Write([]byte(invalidJSONTxt))
+		} else if errors.As(err, &valErr) {
+			hasFormError = true
+			jsonString, _ := json.Marshal(errors.Cause(err).(validation.Errors))
+			w.WriteHeader(clientStatus)
+			w.Write(jsonString)
+		}
+
+		if !hasFormError {
+			w.WriteHeader(*serverResp.HTTPStatus)
+			w.Write(serverResp.HTTPResponse)
+		}
+
+		return true
+	}
+
+	return false
+}
+
+func FormHasErrorsL(
+	w http.ResponseWriter,
+	err error,
+	logFunc func(err error),
+	clientStatus int,
+	serverResp HTTPResponseConfig,
+) bool {
+	if err != nil {
+		SetHTTPResponseDefaults(&serverResp, http.StatusInternalServerError, []byte(serverErrTxt))
+
+		hasFormError := false
+
+		var valErr validation.Errors
+
+		if errors.Is(err, ErrBodyRequired) {
+			hasFormError = true
+			w.WriteHeader(clientStatus)
+			w.Write([]byte(bodyRequiredTxt))
+		} else if errors.Is(err, ErrInvalidJSON) {
+			hasFormError = true
+			w.WriteHeader(clientStatus)
+			w.Write([]byte(invalidJSONTxt))
+		} else if errors.As(err, &valErr) {
+			hasFormError = true
+			jsonString, _ := json.Marshal(errors.Cause(err).(validation.Errors))
+			w.WriteHeader(clientStatus)
+			w.Write(jsonString)
+		}
+
+		if !hasFormError {
+			w.WriteHeader(*serverResp.HTTPStatus)
+			w.Write(serverResp.HTTPResponse)
+		}
+
+		if logFunc != nil {
+			logFunc(err)
+		}
+
+		return true
+	}
+
+	return false
+}
+
 // CheckBodyAndDecode takes request and decodes the json body from the request
 // to the passed struct
 //
@@ -1009,7 +1120,7 @@ func queryValidatorRows(v *validator, q string, args ...interface{}) (*sqlx.Rows
 		if v.recoverDB != nil {
 			if db, err := v.recoverDB(err); err == nil {
 				v.querier = db
-				v.entityRecover.SetEntity(db)
+				//v.entityRecover.SetEntity(db)
 
 				return v.querier.Queryx(q, args...)
 			}
@@ -1332,8 +1443,6 @@ func validatorRules(v *validator, value interface{}, validateType int) error {
 		var rows *sqlx.Rows
 
 		if rows, err = queryValidatorRows(v, q, args...); err != nil {
-			fmt.Printf("query: %s\n", q)
-			fmt.Printf("args: %s\n", args)
 			return validation.NewInternalError(err)
 		}
 
@@ -1342,6 +1451,8 @@ func validatorRules(v *validator, value interface{}, validateType int) error {
 		for rows.Next() {
 			counter++
 		}
+
+		fmt.Print("counter: %d", counter)
 
 		switch validateType {
 		case validateArgsType:

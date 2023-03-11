@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/jmoiron/sqlx"
@@ -90,7 +91,9 @@ type Executer interface {
 // Querier implementation is basic querying of a db
 type Querier interface {
 	QueryRowx(query string, args ...interface{}) *sqlx.Row
+	QueryRowxRebind(bindvar int, query string, args ...interface{}) (*sqlx.Row, error)
 	Queryx(query string, args ...interface{}) (*sqlx.Rows, error)
+	QueryxRebind(bindvar int, query string, args ...interface{}) (*sqlx.Rows, error)
 }
 
 // QuerierExec is for querying and executing against db
@@ -131,7 +134,9 @@ type QuerierTx interface {
 // easily query results into structs
 type SqlxDB interface {
 	Get(dest interface{}, query string, args ...interface{}) error
+	GetRebind(dest interface{}, bindType int, query string, args ...interface{}) error
 	Select(dest interface{}, query string, args ...interface{}) error
+	SelectRebind(dest interface{}, bindType int, query string, args ...interface{}) error
 }
 
 // Entity is mainly used for FormValidation
@@ -174,6 +179,16 @@ type Count struct {
 //////////////////////////////////////////////////////////////////
 //------------------------ FUNCTIONS ---------------------------
 //////////////////////////////////////////////////////////////////
+
+func GenUUID() uuid.UUID {
+	id, _ := uuid.NewV4()
+	return id
+}
+
+func GenUUIDStr() string {
+	id, _ := uuid.NewV4()
+	return id.String()
+}
 
 // GetDNSConnStr returns dns connection strings based on settings passed
 func GetDNSConnStr(dbConfig DatabaseSetting, dbType string) string {
@@ -415,6 +430,59 @@ func HasNoRowsOrDBError(
 	return dbError(w, r, err, retryDB, config)
 }
 
+func NoRowsOrDBError(
+	w http.ResponseWriter,
+	err error,
+	clientResp HTTPResponseConfig,
+	serverResp HTTPResponseConfig,
+) bool {
+	if err != nil {
+		SetHTTPResponseDefaults(&clientResp, http.StatusNotFound, []byte("Not Found"))
+		SetHTTPResponseDefaults(&serverResp, http.StatusInternalServerError, []byte(serverErrTxt))
+
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(*clientResp.HTTPStatus)
+			w.Write(clientResp.HTTPResponse)
+		} else {
+			w.WriteHeader(*serverResp.HTTPStatus)
+			w.Write(serverResp.HTTPResponse)
+		}
+
+		return true
+	}
+
+	return false
+}
+
+func NoRowsOrDBErrorL(
+	w http.ResponseWriter,
+	err error,
+	logFunc func(err error),
+	clientResp HTTPResponseConfig,
+	serverResp HTTPResponseConfig,
+) bool {
+	if err != nil {
+		SetHTTPResponseDefaults(&clientResp, http.StatusNotFound, []byte("Not Found"))
+		SetHTTPResponseDefaults(&serverResp, http.StatusInternalServerError, []byte(serverErrTxt))
+
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(*clientResp.HTTPStatus)
+			w.Write(clientResp.HTTPResponse)
+		} else {
+			w.WriteHeader(*serverResp.HTTPStatus)
+			w.Write(serverResp.HTTPResponse)
+		}
+
+		if logFunc != nil {
+			logFunc(err)
+		}
+
+		return true
+	}
+
+	return false
+}
+
 // PopulateDatabaseTables populates "database_table" in a database which
 // should reference the tables in the database
 //
@@ -443,13 +511,13 @@ func PopulateDatabaseTables(db DBInterface, dbType string, dbTables map[string]s
 		bindVar = sqlx.DOLLAR
 		columnQuery =
 			`
-		SELECT 
+		SELECT
 			column_name
-		FROM 
+		FROM
 			information_schema.columns
-		WHERE 
+		WHERE
 			table_schema = 'public'
-		AND 
+		AND
 			table_name = ?
 		`
 		publicQuery =

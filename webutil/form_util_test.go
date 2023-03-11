@@ -353,17 +353,17 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		DB: db,
 	}
 
-	formValidator := &FormValidation{
-		config: FormValidationConfig{},
-	}
+	// formValidator := &FormValidation{
+	// 	config: FormValidationConfig{},
+	// }
 
 	validatorS := &validator{
 		querier:        newDB,
 		bindVar:        sqlx.DOLLAR,
 		placeHolderIdx: -1,
 		query:          "select id from idStruct where id = ?;",
-		entityRecover:  formValidator,
-		err:            errors.New(InvalidTxt),
+		// entityRecover:  formValidator,
+		err: errors.New(InvalidTxt),
 		cacheValidate: &CacheValidate{
 			Key: "key",
 		},
@@ -909,8 +909,8 @@ func TestValidatorRulesUnitTest(t *testing.T) {
 		bindVar:        sqlx.DOLLAR,
 		placeHolderIdx: -1,
 		query:          "select id from idStruct where id = ?;",
-		entityRecover:  formValidator,
-		err:            errors.New(InvalidTxt),
+		// entityRecover:  formValidator,
+		err: errors.New(InvalidTxt),
 	}
 
 	vur := &validateUniquenessRule{
