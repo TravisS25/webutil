@@ -24,8 +24,7 @@ require (
 	github.com/spf13/viper v1.6.1
 	github.com/stretchr/objx v0.3.0
 	github.com/stretchr/testify v1.4.0
-	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
-	golang.org/x/sys v0.0.0-20190412213103-97732733099d // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 // indirect
 	gopkg.in/boj/redistore.v1 v1.0.0-20160128113310-fc113767cd6b
 	gopkg.in/yaml.v2 v2.2.7 // indirect
