@@ -85,6 +85,12 @@ type DbFields map[string]FieldConfig
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
 
+type InnerBuilderResult struct {
+	DataQuery  string
+	CountQuery string
+	Args       []interface{}
+}
+
 type QueryBuilderConfig struct {
 	FilterParam string
 	OrderParam  string
@@ -96,12 +102,20 @@ type QueryBuilderConfig struct {
 
 	CanMultiColumnOrder bool
 	CanMultiColumnGroup bool
+
+	IsCountQuery bool
+}
+
+type QueryBuilderErrorResponse struct {
+	QueryBuilderErrorStatus int
+	DatabaseErrorStatus     int
+	DatabaseErrorResponse   []byte
 }
 
 // SelectItem is struct used in conjunction with primeng's library api
 type SelectItem struct {
 	Value interface{} `json:"value" db:"value"`
-	Label string      `json:"label" db:"label"`
+	Text  string      `json:"text" db:"text"`
 }
 
 // FilteredResults is struct used for dynamically filtered results
@@ -1862,15 +1876,10 @@ func HasFilterOrServerError(w http.ResponseWriter, r *http.Request, err error, r
 // a list of SelectItem structs to be used with primeng's library components
 func QuerySelectItems(db SqlxDB, bindVar int, query string, args ...interface{}) ([]SelectItem, error) {
 	var err error
-
-	if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
-		return nil, err
-	}
-
 	var items []SelectItem
 
-	if err = db.Select(&items, query, args...); err != nil {
-		return []SelectItem{}, err
+	if err = db.SelectRebind(&items, bindVar, query, args...); err != nil {
+		return nil, err
 	}
 
 	return items, nil
@@ -1913,32 +1922,6 @@ func QuerySingleColumn(db Querier, bindVar int, query string, args ...interface{
 	}
 
 	return items, nil
-}
-
-func queryBuilder(
-	r *http.Request,
-	dbFields DbFields,
-	builder sq.SelectBuilder,
-	cfg QueryBuilderConfig,
-) (string, []interface{}, error) {
-	var err error
-	var query string
-	var args []interface{}
-
-	if builder, err = GetQueryBuilder(
-		r,
-		dbFields,
-		builder,
-		cfg,
-	); err != nil {
-		return "", nil, errors.WithStack(err)
-	}
-
-	if query, args, err = builder.ToSql(); err != nil {
-		return "", nil, errors.WithStack(err)
-	}
-
-	return query, args, nil
 }
 
 func GetQueryBuilder(
@@ -2134,7 +2117,7 @@ func GetQueryBuilder(
 				)
 			}
 
-			builder = builder.OrderByClause("? " + sort.Dir)
+			builder = builder.OrderByClause(dbField.DBField + " " + sort.Dir)
 
 			if !cfg.CanMultiColumnOrder {
 				break
@@ -2142,21 +2125,25 @@ func GetQueryBuilder(
 		}
 	}
 
-	if limitParam != "" {
+	if limitParam != "" || cfg.IsCountQuery {
 		var limit uint64
 
-		if limit, err = strconv.ParseUint(
-			limitParam,
-			webutilcfg.IntBase,
-			webutilcfg.IntBitSize,
-		); err != nil {
-			return sq.SelectBuilder{}, errors.WithStack(
-				&QueryBuilderError{errorMsg: fmt.Sprintf("invalid limit")},
-			)
-		}
-
-		if cfg.Limit > 0 && limit > cfg.Limit {
+		if cfg.IsCountQuery {
 			limit = cfg.Limit
+		} else {
+			if limit, err = strconv.ParseUint(
+				limitParam,
+				webutilcfg.IntBase,
+				webutilcfg.IntBitSize,
+			); err != nil {
+				return sq.SelectBuilder{}, errors.WithStack(
+					&QueryBuilderError{errorMsg: fmt.Sprintf("invalid limit")},
+				)
+			}
+
+			if cfg.Limit > 0 && limit > cfg.Limit {
+				limit = cfg.Limit
+			}
 		}
 
 		builder = builder.Limit(limit)
@@ -2186,12 +2173,11 @@ func GetQueryBuilder(
 }
 
 func GetQueryBuilderResult(
-	db DBInterface,
-	bindvar int,
 	req *http.Request,
+	db Querier,
+	bindvar int,
 	dbFields DbFields,
 	builder sq.SelectBuilder,
-	isCountQuery bool,
 	cfg QueryBuilderConfig,
 ) (interface{}, error) {
 	var err error
@@ -2208,10 +2194,10 @@ func GetQueryBuilderResult(
 	}
 
 	if query, args, err = builder.ToSql(); err != nil {
-		return nil, errors.WithStack(fmt.Errorf("err: %s\n query: %s, args: %+v", err.Error(), query, args))
+		return nil, errors.WithStack(err)
 	}
 
-	if isCountQuery {
+	if cfg.IsCountQuery {
 		var row *sqlx.Row
 		var count uint64
 
@@ -2248,13 +2234,13 @@ func GetQueryBuilderResult(
 }
 
 func GetQueryBuilderResultL(
-	db DBInterface,
-	bindvar int,
 	req *http.Request,
+	db Querier,
+	bindvar int,
 	dbFields DbFields,
+	logFunc func(error),
 	customFunc func(map[string]interface{}) error,
 	builder sq.SelectBuilder,
-	isCountQuery bool,
 	cfg QueryBuilderConfig,
 ) (interface{}, error) {
 	var err error
@@ -2274,12 +2260,12 @@ func GetQueryBuilderResultL(
 		return nil, errors.WithStack(err)
 	}
 
-	if isCountQuery {
+	if cfg.IsCountQuery {
 		var row *sqlx.Row
 		var count uint64
 
 		if row, err = db.QueryRowxRebind(bindvar, query, args...); err != nil {
-			return nil, errors.WithStack(err)
+			return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
 		}
 
 		if row.Scan(&count); err != nil {
@@ -2294,7 +2280,7 @@ func GetQueryBuilderResultL(
 	data := make([]map[string]interface{}, 0, cfg.Limit)
 
 	if rows, err = db.QueryxRebind(bindvar, query, args...); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
 	}
 
 	for rows.Next() {
@@ -2317,9 +2303,9 @@ func GetQueryBuilderResultL(
 }
 
 func GetDataAndCountBuilderResult(
-	db DBInterface,
+	req *http.Request,
+	db Querier,
 	bindvar int,
-	r *http.Request,
 	dbFields DbFields,
 	dataBuilder sq.SelectBuilder,
 	countBuilder sq.SelectBuilder,
@@ -2327,12 +2313,11 @@ func GetDataAndCountBuilderResult(
 	countCfg QueryBuilderConfig,
 ) ([]map[string]interface{}, uint64, error) {
 	data, err := GetQueryBuilderResult(
+		req,
 		db,
 		bindvar,
-		r,
 		dbFields,
 		dataBuilder,
-		false,
 		dataCfg,
 	)
 
@@ -2341,12 +2326,11 @@ func GetDataAndCountBuilderResult(
 	}
 
 	count, err := GetQueryBuilderResult(
+		req,
 		db,
 		bindvar,
-		r,
 		dbFields,
 		countBuilder,
-		true,
 		dataCfg,
 	)
 
@@ -2358,9 +2342,10 @@ func GetDataAndCountBuilderResult(
 }
 
 func GetDataAndCountBuilderResultL(
-	db DBInterface,
-	bindvar int,
+	w http.ResponseWriter,
 	req *http.Request,
+	db Querier,
+	bindvar int,
 	dbFields DbFields,
 	logFunc func(error),
 	customFunc func(map[string]interface{}) error,
@@ -2368,44 +2353,97 @@ func GetDataAndCountBuilderResultL(
 	countBuilder sq.SelectBuilder,
 	dataCfg QueryBuilderConfig,
 	countCfg QueryBuilderConfig,
+	statusCfg QueryBuilderErrorResponse,
 ) ([]map[string]interface{}, uint64, error) {
+	errFunc := func(e error) {
+		if logFunc != nil {
+			logFunc(e)
+		}
+
+		var valErr *QueryBuilderError
+
+		if errors.As(e, &valErr) {
+			w.WriteHeader(statusCfg.QueryBuilderErrorStatus)
+			w.Write([]byte(e.Error()))
+		} else {
+			w.WriteHeader(statusCfg.DatabaseErrorStatus)
+			w.Write(statusCfg.DatabaseErrorResponse)
+		}
+	}
+
 	data, err := GetQueryBuilderResultL(
+		req,
 		db,
 		bindvar,
-		req,
 		dbFields,
+		logFunc,
 		customFunc,
 		dataBuilder,
-		false,
 		dataCfg,
 	)
 
 	if err != nil {
-		if logFunc != nil {
-			logFunc(err)
-		}
-
+		errFunc(err)
 		return nil, 0, err
 	}
 
 	count, err := GetQueryBuilderResultL(
+		req,
 		db,
 		bindvar,
-		req,
 		dbFields,
+		logFunc,
 		customFunc,
 		countBuilder,
-		true,
-		dataCfg,
+		countCfg,
 	)
 
 	if err != nil {
-		if logFunc != nil {
-			logFunc(err)
-		}
-
+		errFunc(err)
 		return nil, 0, err
 	}
 
 	return data.([]map[string]interface{}), count.(uint64), nil
+}
+
+func GetInnerBuilderResults(r *http.Request, builder sq.SelectBuilder, dbFields DbFields, dataCfg QueryBuilderConfig, countCfg QueryBuilderConfig) (InnerBuilderResult, error) {
+	innerDataBuilder, err := GetQueryBuilder(
+		r,
+		dbFields,
+		builder,
+		dataCfg,
+	)
+
+	if err != nil {
+		return InnerBuilderResult{}, errors.WithStack(err)
+	}
+
+	innerDataQuery, innerArgs, err := innerDataBuilder.ToSql()
+
+	if err != nil {
+		return InnerBuilderResult{}, errors.WithStack(err)
+	}
+
+	innerCountBuilder, err := GetQueryBuilder(
+		r,
+		dbFields,
+		builder,
+		countCfg,
+	)
+
+	if err != nil {
+		return InnerBuilderResult{}, errors.WithStack(err)
+	}
+
+	innerCountQuery, _, err := innerCountBuilder.ToSql()
+
+	if err != nil {
+		return InnerBuilderResult{}, errors.WithStack(err)
+	}
+
+	return InnerBuilderResult{
+		DataQuery:  innerDataQuery,
+		CountQuery: innerCountQuery,
+		Args:       innerArgs,
+	}, nil
 }

@@ -32,6 +32,11 @@ func TestGetQueryBuilder(t *testing.T) {
 	cfg := QueryBuilderConfig{
 		FilterParam: "filters",
 		OrderParam:  "sorts",
+		LimitParam:  "take",
+		OffsetParam: "skip",
+
+		Limit:  100,
+		OffSet: 10000,
 	}
 	dbFields := DbFields{
 		"user.id": FieldConfig{
@@ -760,6 +765,59 @@ func TestGetQueryBuilder(t *testing.T) {
 
 	urlVals = url.Values{}
 	urlVals.Add(cfg.FilterParam, string(jsonBytes))
+
+	req = httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
+	builder = sq.Select(
+		"user.id",
+		"user.name",
+		"phone.number",
+	).
+		From("user").
+		Join("phone on phone.user_id = user.id")
+
+	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+		t.Errorf("should not have error; got %s\n", err.Error())
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	urlVals = url.Values{}
+	urlVals.Add(cfg.LimitParam, "1000")
+
+	req = httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
+	builder = sq.Select(
+		"user.id",
+		"user.name",
+		"phone.number",
+	).
+		From("user").
+		Join("phone on phone.user_id = user.id")
+
+	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+		t.Errorf("should not have error; got %s\n", err.Error())
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	cfg.IsCountQuery = true
+	req = httptest.NewRequest(http.MethodGet, "/url", nil)
+	builder = sq.Select(
+		"user.id",
+		"user.name",
+		"phone.number",
+	).
+		From("user").
+		Join("phone on phone.user_id = user.id")
+
+	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+		t.Errorf("should not have error; got %s\n", err.Error())
+	}
+	cfg.IsCountQuery = false
+
+	// ----------------------------------------------------------------------------------
+
+	urlVals = url.Values{}
+	urlVals.Add(cfg.OffsetParam, "100000")
 
 	req = httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
 	builder = sq.Select(

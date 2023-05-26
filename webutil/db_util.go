@@ -483,6 +483,28 @@ func NoRowsOrDBErrorL(
 	return false
 }
 
+func DBErrorL(
+	w http.ResponseWriter,
+	err error,
+	logFunc func(err error),
+	serverResp HTTPResponseConfig,
+) bool {
+	if err != nil {
+		SetHTTPResponseDefaults(&serverResp, http.StatusInternalServerError, []byte(serverErrTxt))
+
+		w.WriteHeader(*serverResp.HTTPStatus)
+		w.Write(serverResp.HTTPResponse)
+
+		if logFunc != nil {
+			logFunc(err)
+		}
+
+		return true
+	}
+
+	return false
+}
+
 // PopulateDatabaseTables populates "database_table" in a database which
 // should reference the tables in the database
 //

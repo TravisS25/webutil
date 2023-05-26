@@ -80,7 +80,7 @@ var (
 	PhoneNumberRegex = regexp.MustCompile("^\\([0-9]{3}\\)-[0-9]{3}-[0-9]{4}$")
 
 	// ColorRegex is regex expression used for forms to validate color format is correct
-	ColorRegex = regexp.MustCompile("^#[0-9a-z]{6}$")
+	ColorRegex = regexp.MustCompile("^#[0-9a-f]{6}$")
 
 	// RequiredStringRegex is regex expression used for forms to validate that a field
 	// has at least one character that is NOT a space
@@ -174,9 +174,7 @@ type RecoverForm func(error) error
 // FormValidationConfig is config struct used in the initialization
 // of *FormValidation
 type FormValidationConfig struct {
-	Cache CacheStore
-	// RecoverDB    RecoverDB
-	// RecoverCache RecoverCache
+	Cache      CacheStore
 	PathRegex  PathRegex
 	SQLBindVar int
 }
@@ -483,10 +481,8 @@ func (f *FormValidation) ValidateArgs(
 ) *validateArgsRule {
 	return &validateArgsRule{
 		validator: &validator{
-			querier: f.entity,
-			cache:   f.config.Cache,
-			//entityRecover: f,
-			//recoverDB:      f.config.RecoverDB,
+			querier:        f.entity,
+			cache:          f.config.Cache,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        f.config.SQLBindVar,
@@ -509,10 +505,8 @@ func (f *FormValidation) ValidateUniqueness(
 	return &validateUniquenessRule{
 		instanceValue: instanceValue,
 		validator: &validator{
-			querier: f.entity,
-			cache:   f.config.Cache,
-			//entityRecover: f,
-			//recoverDB:      f.config.RecoverDB,
+			querier:        f.entity,
+			cache:          f.config.Cache,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        f.config.SQLBindVar,
@@ -534,10 +528,7 @@ func (f *FormValidation) ValidateExists(
 ) *validateExistsRule {
 	return &validateExistsRule{
 		validator: &validator{
-			querier: f.entity,
-			cache:   f.config.Cache,
-			//entityRecover: f,
-			//recoverDB:      f.config.RecoverDB,
+			querier:        f.entity,
 			cacheValidate:  cacheValidate,
 			placeHolderIdx: placeHolderIdx,
 			bindVar:        f.config.SQLBindVar,
@@ -1067,6 +1058,7 @@ func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...s
 		dec := json.NewDecoder(req.Body)
 
 		if err := dec.Decode(&form); err != nil {
+			fmt.Printf("%s", err.Error())
 			return ErrInvalidJSON
 		}
 	} else {
@@ -1333,6 +1325,98 @@ func cacheResults(v *validator, value interface{}, queryFunc func() error, valid
 	return nil
 }
 
+// func queryResults(v *validator, value interface{}) (string, []interface{}, int, error) {
+// 	var err error
+// 	var searchVals []interface{}
+// 	var singleVal interface{}
+// 	var expectedLen int
+// 	var q string
+
+// 	if isNilValue(value) {
+// 		return "", nil, 0, errNilValidation
+// 	}
+
+// 	isSlice := false
+
+// 	// First determine whether the interface is slice or not
+// 	switch reflect.TypeOf(value).Kind() {
+// 	case reflect.Slice:
+// 		isSlice = true
+// 		s := reflect.ValueOf(value)
+// 		expectedLen = s.Len()
+
+// 		for k := 0; k < s.Len(); k++ {
+// 			i := s.Index(k).Interface()
+// 			searchVals = append(searchVals, i)
+// 		}
+// 	default:
+// 		expectedLen = 1
+// 		singleVal = value
+// 	}
+
+// 	// If type is slice and is empty, simply return nil as we will get an error
+// 	// when trying to query with empty slice
+// 	if isSlice && len(searchVals) == 0 {
+// 		return "", nil, 0, nil
+// 	}
+
+// 	var args []interface{}
+
+// 	if v.placeHolderIdx > -1 {
+// 		args = make([]interface{}, 0, len(v.args)+1)
+// 		args = append(args, v.args...)
+
+// 		if isSlice {
+// 			args = InsertAt(args, searchVals, v.placeHolderIdx)
+// 		} else {
+// 			args = InsertAt(args, singleVal, v.placeHolderIdx)
+// 		}
+// 	} else {
+// 		args = make([]interface{}, 0, len(v.args))
+// 		args = append(args, v.args...)
+// 	}
+
+// 	q, args, err = InQueryRebind(v.bindVar, v.query, args...)
+
+// 	if err != nil {
+// 		messageErr := fmt.Errorf("err: %s\n query: %s\n args:%v\n", err, q, args)
+// 		return "", nil, 0, errors.WithStack(validation.NewInternalError(messageErr))
+// 	}
+
+// 	return q, args, expectedLen, nil
+// }
+
+func convertToStr(typ interface{}) (interface{}, error) {
+	var t interface{}
+
+	switch typ.(type) {
+	case int:
+		t = strconv.Itoa(typ.(int))
+	case *int:
+		i := typ.(*int)
+		t = strconv.Itoa(*i)
+	case int64:
+		t = strconv.FormatInt(typ.(int64), webutilcfg.IntBase)
+	case *int64:
+		i := typ.(*int64)
+		t = strconv.FormatInt(*i, webutilcfg.IntBase)
+	case float64:
+		t = strconv.FormatFloat(typ.(float64), 'f', -1, webutilcfg.IntBitSize)
+	case *float64:
+		i := typ.(*float64)
+		t = strconv.FormatFloat(*i, 'f', -1, webutilcfg.IntBitSize)
+	case string:
+		t = typ.(string)
+	case *string:
+		i := typ.(*string)
+		t = *i
+	default:
+		return nil, errors.New("error")
+	}
+
+	return t, nil
+}
+
 func queryResults(v *validator, value interface{}) (string, []interface{}, int, error) {
 	var err error
 	var searchVals []interface{}
@@ -1387,96 +1471,77 @@ func queryResults(v *validator, value interface{}) (string, []interface{}, int, 
 	q, args, err = InQueryRebind(v.bindVar, v.query, args...)
 
 	if err != nil {
-		messageErr := fmt.Errorf(err.Error()+"\n query: %s\n args:%v\n", q, args)
-		return "", nil, 0, validation.NewInternalError(messageErr)
+		messageErr := fmt.Errorf("err: %s\n query: %s\n args:%v\n", err, q, args)
+		return "", nil, 0, errors.WithStack(validation.NewInternalError(messageErr))
 	}
 
 	return q, args, expectedLen, nil
 }
 
-func convertToStr(typ interface{}) (interface{}, error) {
-	var t interface{}
-
-	switch typ.(type) {
-	case int:
-		t = strconv.Itoa(typ.(int))
-	case *int:
-		i := typ.(*int)
-		t = strconv.Itoa(*i)
-	case int64:
-		t = strconv.FormatInt(typ.(int64), webutilcfg.IntBase)
-	case *int64:
-		i := typ.(*int64)
-		t = strconv.FormatInt(*i, webutilcfg.IntBase)
-	case float64:
-		t = strconv.FormatFloat(typ.(float64), 'f', -1, webutilcfg.IntBitSize)
-	case *float64:
-		i := typ.(*float64)
-		t = strconv.FormatFloat(*i, 'f', -1, webutilcfg.IntBitSize)
-	case string:
-		t = typ.(string)
-	case *string:
-		i := typ.(*string)
-		t = *i
-	default:
-		return nil, errors.New("error")
-	}
-
-	return t, nil
-}
-
 func validatorRules(v *validator, value interface{}, validateType int) error {
 	var err error
-	var q string
 	var expectedLen int
+	var tmpVal interface{}
 	var args []interface{}
 
-	if q, args, expectedLen, err = queryResults(v, value); err != nil {
-		if err == errNilValidation {
+	switch reflect.TypeOf(value).Kind() {
+	case reflect.Slice:
+		s := reflect.ValueOf(value)
+		expectedLen = s.Len()
+
+		var searchVals []interface{}
+
+		for k := 0; k < s.Len(); k++ {
+			i := s.Index(k).Interface()
+			searchVals = append(searchVals, i)
+		}
+
+		// If type is slice and is empty, simply return nil as we will get an error
+		// when trying to query with empty slice
+		if len(searchVals) == 0 {
 			return nil
 		}
 
-		return err
+		tmpVal = searchVals
+	default:
+		tmpVal = value
+		expectedLen = 1
 	}
 
-	queryFunc := func() error {
-		var rows *sqlx.Rows
+	args = make([]interface{}, 0, len(v.args)+1)
+	args = append(args, v.args...)
 
-		if rows, err = queryValidatorRows(v, q, args...); err != nil {
-			return validation.NewInternalError(err)
-		}
-
-		counter := 0
-
-		for rows.Next() {
-			counter++
-		}
-
-		fmt.Print("counter: %d", counter)
-
-		switch validateType {
-		case validateArgsType:
-			if counter != expectedLen {
-				return v.err
-			}
-		case validateUniquenessType:
-			if counter > 0 {
-				return v.err
-			}
-		case validateExistsType:
-			if counter == 0 {
-				return v.err
-			}
-		}
-
-		return nil
+	if v.placeHolderIdx > -1 {
+		args = InsertAt(args, tmpVal, v.placeHolderIdx)
 	}
 
-	if v.cache != nil && v.cacheValidate != nil {
-		err = cacheResults(v, value, queryFunc, validateType)
-	} else {
-		err = queryFunc()
+	rows, err := v.querier.QueryxRebind(v.bindVar, v.query, args...)
+
+	if err != nil {
+		msg := fmt.Errorf("err: %s\n query:%s\n args:%v\n", err, v.query, args)
+		return errors.WithStack(validation.NewInternalError(msg))
 	}
 
-	return err
+	counter := 0
+
+	for rows.Next() {
+		counter++
+	}
+
+	switch validateType {
+	case validateArgsType:
+		if counter != expectedLen {
+			return v.err
+		}
+	case validateUniquenessType:
+		if counter > 0 {
+			return v.err
+		}
+	case validateExistsType:
+		if counter == 0 {
+			return v.err
+		}
+	}
+
+	return nil
 }

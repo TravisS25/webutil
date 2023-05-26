@@ -15,6 +15,10 @@ const (
 	IDParam = "{id:[0-9]+}"
 )
 
+type ValidateResponseConfig struct {
+	ErrorResponses []int
+}
+
 // ValidateObjectSlice takes in a slice of maps, with a mapkey to then test against the expectedMap keys
 // which should be the value expected and the value of expectedMap should be unique name of value
 func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedMap map[interface{}]string) error {
@@ -141,3 +145,29 @@ func LoginUser(client HTTPClient, url string, loginForm interface{}) (string, er
 
 	return "", fmt.Errorf("webutiltest: no cookie value returned")
 }
+
+// func ValidateResponse(t TestLog, res *httpexpect.Response, config ValidateResponseConfig) error {
+// 	t.Helper()
+
+// 	for _, resStatus := range config.ErrorResponses {
+// 		if res.StatusCode == resStatus {
+// 			if res.Body != nil {
+// 				resBytes, err := io.ReadAll(res.Body)
+// 				fmt.Printf("bytes after read: %s\n", resBytes)
+
+// 				if err != nil {
+// 					t.Errorf("%+v", errors.WithStack(err))
+// 					return errors.WithStack(err)
+// 				}
+
+// 				t.Errorf("response error: %s\n", string(resBytes))
+// 			} else {
+// 				msg := "response has no body but did contain status code considered error of %d"
+// 				t.Errorf(msg, res.StatusCode)
+// 				return fmt.Errorf(msg, res.StatusCode)
+// 			}
+// 		}
+// 	}
+
+// 	return nil
+// }
