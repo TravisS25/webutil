@@ -108,7 +108,7 @@ func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 
 					// walkMapFunc helps us remove key from errMap so at
 					// the end of the key loop, if there is any values left,
-					// those will be given back in an error at those will be
+					// those will be given back in an error as those will be
 					// errors that weren't in the validatorMap passed
 					var walkMapFunc func(string)
 

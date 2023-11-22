@@ -230,6 +230,9 @@ type CacheValidate struct {
 // The reason for having this is that floats do not give exact returns all the
 // time so FormCurrency (which embeds the github.com/shopspring/decimal library)
 // is for manipulating currency with exact returns
+//
+// Another reason for this struct is that it does not play nice with the ozzo
+// validators such a "Min" so we much implement that logic here
 type FormCurrency struct {
 	decimal.Decimal
 

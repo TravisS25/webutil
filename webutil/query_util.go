@@ -2406,7 +2406,13 @@ func GetDataAndCountBuilderResultL(
 	return data.([]map[string]interface{}), count.(uint64), nil
 }
 
-func GetInnerBuilderResults(r *http.Request, builder sq.SelectBuilder, dbFields DbFields, dataCfg QueryBuilderConfig, countCfg QueryBuilderConfig) (InnerBuilderResult, error) {
+func GetInnerBuilderResults(
+	r *http.Request,
+	builder sq.SelectBuilder,
+	dbFields DbFields,
+	dataCfg QueryBuilderConfig,
+	countCfg QueryBuilderConfig,
+) (InnerBuilderResult, error) {
 	innerDataBuilder, err := GetQueryBuilder(
 		r,
 		dbFields,

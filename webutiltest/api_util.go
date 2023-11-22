@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/pkg/errors"
+	"github.com/sanity-io/litter"
+	"github.com/stretchr/objx"
 
 	"github.com/TravisS25/webutil/webutilcfg"
 )
@@ -48,16 +50,16 @@ func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedM
 			return errors.New(errStr)
 		}
 
-		var keyVal interface{}
+		objEntry := objx.New(entry)
 
-		if keyVal, ok = entry[mapKey]; !ok {
+		if !objEntry.Has(mapKey) {
 			errStr = "passed 'mapkey' parameter value not found in object"
 			t.Errorf(errStr)
 			return errors.New(errStr)
 		}
 
-		if _, ok = newExpectedMap[keyVal]; ok {
-			delete(newExpectedMap, keyVal)
+		if _, ok = newExpectedMap[objEntry.Get(mapKey).Data()]; ok {
+			delete(newExpectedMap, objEntry.Get(mapKey).Data())
 		} else {
 			unexpectedVals = append(unexpectedVals, val)
 		}
@@ -74,7 +76,7 @@ func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedM
 	}
 
 	if len(unexpectedVals) > 0 {
-		errStr += fmt.Sprintf("unexpected entries found: %v\n\n", unexpectedVals)
+		errStr += fmt.Sprintf("unexpected entries found: %s\n\n", litter.Sdump(unexpectedVals))
 	}
 
 	if errStr != "" {
@@ -103,9 +105,7 @@ func LoginUser(client HTTPClient, url string, loginForm interface{}) (string, er
 	if res.StatusCode != http.StatusOK {
 		buf := bytes.Buffer{}
 		buf.ReadFrom(res.Body)
-		return "", errors.New(
-			fmt.Sprintf("status code: %d\n  response: %s\n", res.StatusCode, buf.String()),
-		)
+		return "", fmt.Errorf("status code: %d\n  response: %s", res.StatusCode, buf.String())
 	}
 
 	var buffer bytes.Buffer

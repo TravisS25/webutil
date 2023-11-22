@@ -4,12 +4,12 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.4.0
-	github.com/Masterminds/squirrel v1.5.3 // indirect
+	github.com/Masterminds/squirrel v1.5.3
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496 // indirect
 	github.com/garyburd/redigo v1.6.0 // indirect
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/go-redis/redis v6.15.6+incompatible
-	github.com/gofrs/uuid v4.4.0+incompatible // indirect
+	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gorilla/csrf v1.6.2
 	github.com/gorilla/mux v1.7.3
 	github.com/gorilla/securecookie v1.1.1
@@ -20,6 +20,7 @@ require (
 	github.com/onsi/ginkgo v1.11.0 // indirect
 	github.com/onsi/gomega v1.8.1 // indirect
 	github.com/pkg/errors v0.9.0
+	github.com/sanity-io/litter v1.5.5
 	github.com/shopspring/decimal v1.2.0
 	github.com/spf13/viper v1.6.1
 	github.com/stretchr/objx v0.3.0
