@@ -1,0 +1,32 @@
+package webutil
+
+const (
+	// DateTimeMilliLayout is global format for date time with adding milliseconds for precise calculations
+	DateTimeMilliLayout = "2006-01-02 15:04:05.00000"
+
+	// DateTimeLayout is global format for date time
+	DateTimeLayout = "2006-01-02 15:04:05"
+
+	// DateTimeOffsetLayout is global format for date time with time zone offset
+	DateTimeOffsetLayout = "2006-01-02 15:04:05-07:00"
+
+	// DateLayout is global format for date
+	DateLayout = "2006-01-02"
+
+	// PostgresDateLayout is date format used when receiving time from database
+	PostgresDateLayout = "2006-01-02T15:04:05Z"
+
+	// FormDateTimeLayout is format that should be received from a form
+	FormDateTimeLayout = "01/02/2006 3:04 pm"
+
+	// FormDateLayout is format that should be received from a form
+	FormDateLayout = "01/02/2006"
+
+	// FormDateTimeStrf is format used when formatting date in sql query
+	// to use a form format
+	FormDateTimeStrf = "%m/%d/%Y %I:%M %p"
+
+	// FormDateStrf is format used when formatting date in sql query
+	// to use a form format
+	FormDateStrf = "%m/%d/%Y"
+)

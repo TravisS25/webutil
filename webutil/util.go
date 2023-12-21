@@ -1,69 +1,8 @@
 package webutil
 
-import (
-	"encoding/json"
-	"net/http"
-)
-
 type SessionAuth struct {
 	AuthKey    string `mapstructure:"auth_key"`
 	EncryptKey string `mapstructure:"encrypt_key"`
-}
-
-type LogConfig struct {
-	CauseErr error
-
-	RecoverDBErr error
-	RetryDBErr   error
-
-	RecoverCacheErr error
-	RetryCacheErr   error
-
-	RecoverFormErr error
-	RetryFormErr   error
-
-	PanicErr error
-}
-
-// RequestLog is func that should implement logging for when
-// server error occurs
-type RequestLog func(r *http.Request, conf LogConfig)
-
-// ServerErrorConfig is a generic config struct to use
-// with various functions to give default responses if error occurs
-type ServerErrorConfig struct {
-	RecoverConfig
-
-	// ServerErrorResponse is used to give response header and text
-	// of when a server error occurs
-	ServerErrorResponse HTTPResponseConfig
-
-	// Logger is used to take in a request with thrown
-	// error and implement custom logging of error
-	Logger RequestLog
-}
-
-// RecoverConfig is config struct used to allow user to implement
-// a way of recovering from different types of failures
-type RecoverConfig struct {
-	// RecoverDB is func that should be used to try to recover
-	// from a db failure
-	RecoverDB RecoverDB
-
-	// RecoverCache is func that should be used to try to recover
-	// from cache failure
-	RecoverCache RecoverCache
-
-	// RecoverForm is func that should be used to try to recover
-	// from form failure
-	RecoverForm RecoverForm
-}
-
-// ServerErrorCacheConfig is config struct used to respond to server
-// error but also have ability to use cache
-type ServerErrorCacheConfig struct {
-	ServerErrorConfig
-	CacheConfig
 }
 
 //////////////////////////////////////////////////////////////////
@@ -100,20 +39,4 @@ func GetHTTPResponseDefaults(defaultStatus int, defaultResponse []byte) HTTPResp
 	res := HTTPResponseConfig{}
 	SetHTTPResponseDefaults(&res, defaultStatus, defaultResponse)
 	return res
-}
-
-func ExtendJSONMarshal(val interface{}, extBytes []byte) ([]byte, error) {
-	entityBytes, err := json.Marshal(&val)
-
-	if err != nil {
-		return nil, err
-	}
-
-	t := entityBytes[:len(entityBytes)-1]
-	t = append(t, ',')
-	v := extBytes[1:]
-
-	t = append(t, v...)
-
-	return t, nil
 }
