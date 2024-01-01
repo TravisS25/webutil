@@ -7,6 +7,7 @@ type HTTPClient interface {
 }
 
 type TestLog interface {
-	Errorf(format string, args ...interface{})
+	Errorf(string, ...interface{})
+	Fatalf(string, ...interface{})
 	Helper()
 }

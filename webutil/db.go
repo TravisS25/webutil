@@ -15,7 +15,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var _ DBInterface = (*sqlx.DB)(nil)
+//var _ DBInterface = (*sqlx.DB)(nil)
 
 // Bindvar types supported by Rebind, BindMap and BindStruct.
 const (

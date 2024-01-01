@@ -17,10 +17,10 @@ const (
 	serverErrTxt    = "Server error, please try again later"
 
 	IDRegexStr   = "[0-9]+"
-	UUIDRegexStr = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[8|9|aA|bB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$"
+	UUIDRegexStr = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 
 	IDParam   = "{id:" + IDRegexStr + "}"
-	UUIDParam = "{id}"
+	UUIDParam = "{id:" + UUIDRegexStr + "}"
 
 	// IntBase is default base to use for converting string to int64
 	IntBase = 10

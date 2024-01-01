@@ -30,7 +30,6 @@ type QueryConfig struct {
 
 type DataInputParams struct {
 	QueryCfg   QueryConfig
-	OrderByID  string
 	CustomFunc func(map[string]interface{}) error
 }
 
@@ -356,48 +355,45 @@ func GetNewInnerBuilderResults(
 	r *http.Request,
 	builder sq.SelectBuilder,
 	dbFields DbFields,
-	dataParams DataInputParams,
-	countParams CountInputParams,
-) (*InnerBuilderResult, error) {
+	defaultOrderBy string,
+	queryCfg QueryConfig,
+) (string, []interface{}, error) {
+	if queryCfg.OrderParam == "" && defaultOrderBy != "" {
+		builder = builder.OrderBy(defaultOrderBy)
+	}
+
 	innerDataBuilder, err := GetNewQueryBuilder(
 		r,
 		dbFields,
 		builder,
-		dataParams.QueryCfg,
+		queryCfg,
 	)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return "", nil, errors.WithStack(err)
 	}
 
-	if dataParams.QueryCfg.OrderParam == "" && dataParams.OrderByID != "" {
-		innerDataBuilder = innerDataBuilder.OrderBy(dataParams.OrderByID)
-	}
+	return innerDataBuilder.ToSql()
 
-	innerDataQuery, innerArgs, err := innerDataBuilder.ToSql()
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
+	// innerCountBuilder, err := GetNewQueryBuilder(
+	// 	r,
+	// 	dbFields,
+	// 	builder,
+	// 	countParams.QueryCfg,
+	// )
+	// if err != nil {
+	// 	return nil, errors.WithStack(err)
+	// }
 
-	innerCountBuilder, err := GetNewQueryBuilder(
-		r,
-		dbFields,
-		builder,
-		countParams.QueryCfg,
-	)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
+	// innerCountQuery, _, err := innerCountBuilder.ToSql()
+	// if err != nil {
+	// 	return nil, errors.WithStack(err)
+	// }
 
-	innerCountQuery, _, err := innerCountBuilder.ToSql()
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return &InnerBuilderResult{
-		DataQuery:  innerDataQuery,
-		CountQuery: innerCountQuery,
-		Args:       innerArgs,
-	}, nil
+	// return &InnerBuilderResult{
+	// 	DataQuery:  innerDataQuery,
+	// 	CountQuery: innerCountQuery,
+	// 	Args:       innerArgs,
+	// }, nil
 }
 
 func GetNewQueryBuilder(

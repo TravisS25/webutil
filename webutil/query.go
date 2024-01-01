@@ -709,9 +709,9 @@ func GetQueryBuilderResult(
 	for rows.Next() {
 		row := map[string]interface{}{}
 
-		if err = rows.MapScanMultiLvl(row); err != nil {
-			return nil, errors.WithStack(err)
-		}
+		// if err = rows.MapScanMultiLvl(row); err != nil {
+		// 	return nil, errors.WithStack(err)
+		// }
 
 		data = append(data, row)
 	}
@@ -772,9 +772,9 @@ func GetQueryBuilderResultL(
 	for rows.Next() {
 		row := map[string]interface{}{}
 
-		if err = rows.MapScanMultiLvl(row); err != nil {
-			return nil, errors.WithStack(err)
-		}
+		// if err = rows.MapScanMultiLvl(row); err != nil {
+		// 	return nil, errors.WithStack(err)
+		// }
 
 		if customFunc != nil {
 			if err = customFunc(row); err != nil {

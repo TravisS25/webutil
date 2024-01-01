@@ -241,24 +241,22 @@ func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 				}
 			}
 
-			if len(errFlatMap) > len(validatorMap) {
-				for errKey, errVal := range errFlatMap {
-					if _, ok := validatorMap[errKey]; !ok {
-						errNotFoundStr += fmt.Sprintf("key: %s; value: %s\n", errKey, errVal)
-					}
+			for errKey, errVal := range errFlatMap {
+				if _, ok := validatorMap[errKey]; !ok {
+					errNotFoundStr += fmt.Sprintf("key: %s; value: %s\n", errKey, errVal)
 				}
 			}
 
 			errStr := ""
 
 			if expectedNotFoundStr != "" {
-				errStr += "\n\nThe following validator key/values were not found in err map:\n" + expectedNotFoundStr
+				errStr += "\nThe following validator key/values were not found in err map:\n" + expectedNotFoundStr
 			}
 			if valueMisMatchStr != "" {
-				errStr += "\n\nThe following key/values don't match:\n" + valueMisMatchStr
+				errStr += "\nThe following key/values don't match:\n" + valueMisMatchStr
 			}
 			if errNotFoundStr != "" {
-				errStr += "\n\nThe following err key/values were not found in validator map:\n" + errNotFoundStr
+				errStr += "\nThe following err key/values were not found in validator map:\n" + errNotFoundStr
 			}
 
 			if errStr != "" {
