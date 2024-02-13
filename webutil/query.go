@@ -1,6 +1,8 @@
 package webutil
 
 import (
+	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -8,21 +10,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-
 	"reflect"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/go-jet/jet/v2/qrm"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
-)
-
-//////////////////////////////////////////////////////////////////
-//------------------------ STRING CONSTS -----------------------
-//////////////////////////////////////////////////////////////////
-
-const (
-	// Select string for queries
-	Select = "select "
 )
 
 var (
@@ -30,23 +23,20 @@ var (
 )
 
 //////////////////////////////////////////////////////////////////
-//----------------------- CUSTOM ERRORS -------------------------
+//----------------------- INTERFACES -------------------------
 //////////////////////////////////////////////////////////////////
 
-var (
-	// ErrInvalidSort is error returned if client tries
-	// to pass filter parameter that is not sortable
-	ErrInvalidSort = errors.New("webutil: invalid sort")
+type ColScanner interface {
+	Columns() ([]string, error)
+	Scan(dest ...interface{}) error
+	Err() error
+}
 
-	// ErrInvalidArray is error returned if client tries
-	// to pass array parameter that is invalid array type
-	ErrInvalidArray = errors.New("webutil: invalid array for field")
-
-	// ErrInvalidValue is error returned if client tries
-	// to pass filter parameter that had invalid field
-	// value for certain field
-	ErrInvalidValue = errors.New("webutil: invalid field value")
-)
+type Database interface {
+	qrm.DB
+	Begin() (*sql.Tx, error)
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+}
 
 //////////////////////////////////////////////////////////////////
 //-------------------------- TYPES --------------------------
@@ -64,13 +54,7 @@ type DbFields map[string]FieldConfig
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
 
-type InnerBuilderResult struct {
-	DataQuery  string
-	CountQuery string
-	Args       []interface{}
-}
-
-type QueryBuilderConfig struct {
+type QueryConfig struct {
 	FilterParam string
 	OrderParam  string
 	LimitParam  string
@@ -81,21 +65,16 @@ type QueryBuilderConfig struct {
 
 	CanMultiColumnOrder bool
 	CanMultiColumnGroup bool
-
-	IsCountQuery bool
 }
 
-type QueryBuilderErrorResponse struct {
-	QueryBuilderErrorStatus int
-	DatabaseErrorStatus     int
-	DatabaseErrorResponse   []byte
+type DataInputParams struct {
+	QueryCfg   QueryConfig
+	CustomFunc func(map[string]interface{}) error
 }
 
-// SelectItem is struct used in conjunction with primeng's library api
-// type SelectItem struct {
-// 	Value interface{} `json:"value" db:"value" alias:"value"`
-// 	Text  string      `json:"text" db:"text" alias:"text"`
-// }
+type CountInputParams struct {
+	QueryCfg QueryConfig
+}
 
 type SelectItem struct {
 	Value string `json:"value" mapstructure:"value" db:"value" alias:"select.value"`
@@ -115,10 +94,6 @@ type QueryBuilderError struct {
 func (q *QueryBuilderError) Error() string {
 	return q.errorMsg
 }
-
-//////////////////////////////////////////////////////////////////
-//-------------------------- STRUCTS --------------------------
-//////////////////////////////////////////////////////////////////
 
 // OperationConfig is used in conjunction with FieldConfig{}
 // to determine if the field associated can perform certain
@@ -206,9 +181,22 @@ type LimitOffset struct {
 // --------------------- FUNCTIONS ---------------------
 ////////////////////////////////////////////////////////////
 
-// CountSelect take column string and applies count select
-func CountSelect(column string) string {
-	return fmt.Sprintf("count(%s) as total", column)
+// GetDSNConnStr returns dns connection strings based on settings passed
+func GetDSNConnStr(dbCfg DatabaseSetting) string {
+	return fmt.Sprintf(
+		DB_CONN_STR,
+		dbCfg.DBType,
+		dbCfg.User,
+		dbCfg.Password,
+		dbCfg.Host,
+		dbCfg.Port,
+		dbCfg.DBName,
+		dbCfg.SSL,
+		dbCfg.SSLMode,
+		dbCfg.SSLRootCert,
+		dbCfg.SSLKey,
+		dbCfg.SSLCert,
+	)
 }
 
 func In(query string, args ...interface{}) (string, []interface{}, error) {
@@ -317,7 +305,7 @@ func In(query string, args ...interface{}) (string, []interface{}, error) {
 
 func Rebind(bindType int, query string) string {
 	switch bindType {
-	case QUESTION, UNKNOWN:
+	case QUESTION_SQL_BIND_VAR, UNKNOWN_SQL_BIND_VAR:
 		return query
 	}
 
@@ -330,11 +318,11 @@ func Rebind(bindType int, query string) string {
 		rqb = append(rqb, query[:i]...)
 
 		switch bindType {
-		case DOLLAR:
+		case DOLLAR_SQL_BIND_VAR:
 			rqb = append(rqb, '$')
-		case NAMED:
+		case NAMED_SQL_BIND_VAR:
 			rqb = append(rqb, ':', 'a', 'r', 'g')
-		case AT:
+		case AT_SQL_BIND_VAR:
 			rqb = append(rqb, '@', 'p')
 		}
 
@@ -347,76 +335,413 @@ func Rebind(bindType int, query string) string {
 	return string(append(rqb, query...))
 }
 
-// InQueryRebind is wrapper function for combining sqlx.In() and sqlx.Rebind()
-// to handle passing database bind type along with handling errors
 func InQueryRebind(bindType int, query string, args ...interface{}) (string, []interface{}, error) {
-	query, args, err := sqlx.In(query, args...)
-
+	query, args, err := In(query, args...)
 	if err != nil {
-		return query, nil, err
+		return query, args, err
 	}
 
-	query = sqlx.Rebind(bindType, query)
+	query = Rebind(bindType, query)
 	return query, args, nil
 }
 
-// QuerySelectItems is utility function for querying against a table and returning
-// a list of SelectItem structs to be used with primeng's library components
-func QuerySelectItems(db SqlxDB, bindVar int, query string, args ...interface{}) ([]SelectItem, error) {
-	var err error
-	var items []SelectItem
+func MapScanner(r ColScanner, dest map[string]interface{}) error {
+	columns, values, err := scanColVals(r)
 
-	if err = db.SelectRebind(&items, bindVar, query, args...); err != nil {
-		return nil, err
+	if err != nil {
+		return err
 	}
 
-	return items, nil
+	// getInnerMap takes in colMap and colWords and gets the inner most map and returns it
+	getInnerMap := func(colMap map[string]interface{}, colWords []string) map[string]interface{} {
+		if len(colWords) == 0 {
+			return nil
+		}
+
+		var innerMap map[string]interface{}
+
+		for i := 0; i < len(colWords); i++ {
+			if i == 0 {
+				innerMap = colMap[colWords[i]].(map[string]interface{})
+			} else {
+				innerMap = innerMap[colWords[i]].(map[string]interface{})
+			}
+		}
+
+		return innerMap
+	}
+
+	for i := range columns {
+		colWords := strings.Split(columns[i], ".")
+
+		for idx := range colWords {
+			if idx == len(colWords)-1 {
+				innerMap := getInnerMap(dest, colWords[:idx])
+
+				if innerMap == nil {
+					dest[colWords[idx]] = *(values[i].(*interface{}))
+				} else {
+					innerMap[colWords[idx]] = *(values[i].(*interface{}))
+				}
+			} else {
+				innerMap := getInnerMap(dest, colWords[:idx])
+
+				if innerMap == nil {
+					if _, ok := dest[colWords[idx]]; !ok {
+						dest[colWords[idx]] = make(map[string]interface{})
+					}
+				} else {
+					if _, ok := innerMap[colWords[idx]]; !ok {
+						innerMap[colWords[idx]] = make(map[string]interface{})
+					}
+				}
+			}
+		}
+	}
+
+	return r.Err()
 }
 
-// QuerySingleColumn is utility function used to query for single column
-// Will return error if length of *sql.Rows#Columns does not return 1
-func QuerySingleColumn(db Querier, bindVar int, query string, args ...interface{}) ([]interface{}, error) {
+////////////////////////////////////////////////////////////
+// --------------------- QUERY FUNCTIONS ----------------
+////////////////////////////////////////////////////////////
+
+func QuerySingleColumn(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}, destPtr interface{}) error {
+	data, ok := destPtr.(*[]interface{})
+	if !ok {
+		return fmt.Errorf("destPtr parameter must be pointer of []interface{}")
+	}
+
+	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
+	if err != nil {
+		return errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
+	}
+
+	rows, err := db.QueryContext(ctx, newQuery, newArgs...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id interface{}
+
+		if rows.Scan(&id); err != nil {
+			return err
+		}
+
+		*data = append(*data, id)
+	}
+
+	return nil
+}
+
+func Query(
+	ctx context.Context,
+	decoderFunc func(dest interface{}) *mapstructure.DecoderConfig,
+	db qrm.Queryable,
+	bindType int,
+	query string,
+	args []interface{},
+	destPtr interface{},
+) error {
+	destType := reflect.TypeOf(destPtr)
+
+	if destType.Kind() != reflect.Ptr {
+		return fmt.Errorf("webutil: destPtr parameter must be a pointer")
+	}
+
+	var decoder *mapstructure.Decoder
 	var err error
 
-	if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
-		return nil, err
+	if decoderFunc != nil {
+		if decoder, err = mapstructure.NewDecoder(decoderFunc(destPtr)); err != nil {
+			return fmt.Errorf("webutil: error trying to create decoder: %s", err)
+		}
 	}
 
-	items := make([]interface{}, 0)
-	rows, err := db.Queryx(query, args...)
-
+	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args)
 	}
 
-	cols, err := rows.Columns()
+	switch destType.Elem().Kind() {
+	case reflect.Slice:
+		var data *[]map[string]interface{}
+		var ok bool
 
+		if decoder == nil {
+			data, ok = destPtr.(*[]map[string]interface{})
+			if !ok {
+				return fmt.Errorf("destPtr parameter must be pointer of []map[string]interface{} if decoderFunc parameter is nil")
+			}
+		}
+
+		rows, err := db.QueryContext(ctx, newQuery, newArgs...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		list := []map[string]interface{}{}
+
+		for rows.Next() {
+			row := map[string]interface{}{}
+
+			if err = MapScanner(rows, row); err != nil {
+				return errors.WithStack(err)
+			}
+
+			list = append(list, row)
+		}
+
+		if decoder != nil {
+			if err = decoder.Decode(list); err != nil {
+				return fmt.Errorf("webutil: error trying to decode into slice: %s", err)
+			}
+		} else {
+			*data = list
+		}
+	case reflect.Struct, reflect.Map:
+		var data *map[string]interface{}
+		var ok bool
+
+		if decoder == nil {
+			data, ok = destPtr.(*map[string]interface{})
+			if !ok {
+				return fmt.Errorf("destPtr parameter must be pointer of map[string]interface{} if decoderFunc parameter is nil")
+			}
+		}
+
+		rows, err := db.QueryContext(ctx, newQuery, newArgs...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		if rows.Next() {
+			dest := map[string]interface{}{}
+
+			if err = MapScanner(rows, dest); err != nil {
+				return fmt.Errorf("webutil: error trying to scan row %s", err)
+			}
+
+			if decoder != nil {
+				if err = decoder.Decode(dest); err != nil {
+					return fmt.Errorf("webutil: error trying to decode into slice: %s", err)
+				}
+			} else {
+				*data = dest
+			}
+		} else {
+			return sql.ErrNoRows
+		}
+	default:
+		return fmt.Errorf("webutil: destination has to be a pointer to slice or pointer to struct")
+	}
+
+	return nil
+}
+
+func QueryRows(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}) (*sql.Rows, error) {
+	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
 	}
 
-	if len(cols) != 1 {
-		return nil, fmt.Errorf("webutil: query should only return one column")
+	return db.QueryContext(ctx, newQuery, newArgs...)
+}
+
+func QueryCount(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}, dest *int64) error {
+	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
+	if err != nil {
+		return errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
+	}
+
+	rows, err := db.QueryContext(ctx, newQuery, newArgs...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		if rows.Scan(dest); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+////////////////////////////////////////////////////////////
+// --------------------- BUILDER FUNCTIONS ---------------
+////////////////////////////////////////////////////////////
+
+func QueryDataResult(
+	ctx context.Context,
+	req *http.Request,
+	builder sq.SelectBuilder,
+	dbFields DbFields,
+	db qrm.Queryable,
+	bindVar int,
+	dest interface{},
+	params DataInputParams,
+) error {
+	data, ok := dest.(*[]map[string]interface{})
+	if !ok {
+		return fmt.Errorf("dest parameter must pointer to []map[string]interface{}; got %s", reflect.TypeOf(dest))
+	}
+
+	var err error
+
+	if builder, err = GetQueryBuilder(
+		req,
+		builder,
+		dbFields,
+		params.QueryCfg,
+	); err != nil {
+		return errors.WithStack(err)
+	}
+
+	rows, err := getRowsFromBuilder(ctx, builder, db, bindVar)
+	if err != nil {
+		return err
 	}
 
 	for rows.Next() {
-		var item interface{}
+		row := map[string]interface{}{}
 
-		if err = rows.Scan(&item); err != nil {
-			return nil, err
+		if err = MapScanner(rows, row); err != nil {
+			return errors.WithStack(err)
 		}
 
-		items = append(items, item)
+		if params.CustomFunc != nil {
+			if err = params.CustomFunc(row); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+
+		*data = append(*data, row)
 	}
 
-	return items, nil
+	return nil
+}
+
+func QueryCountResult(
+	ctx context.Context,
+	req *http.Request,
+	builder sq.SelectBuilder,
+	dbFields DbFields,
+	db qrm.Queryable,
+	bindVar int,
+	dest interface{},
+	params CountInputParams,
+) error {
+	count, ok := dest.(*uint64)
+	if !ok {
+		return fmt.Errorf("dest parameter must pointer to uint64; got %s", reflect.TypeOf(dest))
+	}
+
+	var err error
+
+	if builder, err = GetQueryBuilder(
+		req,
+		builder,
+		dbFields,
+		params.QueryCfg,
+	); err != nil {
+		return errors.WithStack(err)
+	}
+
+	rows, err := getRowsFromBuilder(ctx, builder, db, bindVar)
+	if err != nil {
+		return err
+	}
+
+	for rows.Next() {
+		for rows.Next() {
+			if err = rows.Scan(count); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func QueryDataAndCountResults(
+	ctx context.Context,
+	req *http.Request,
+	dataBuilder sq.SelectBuilder,
+	countBuilder sq.SelectBuilder,
+	dbFields DbFields,
+	db qrm.Queryable,
+	bindVar int,
+	dataDest interface{},
+	countDest *uint64,
+	dataParams DataInputParams,
+	countParams CountInputParams,
+) error {
+	err := QueryDataResult(
+		ctx,
+		req,
+		dataBuilder,
+		dbFields,
+		db,
+		bindVar,
+		dataDest,
+		dataParams,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = QueryCountResult(
+		ctx,
+		req,
+		countBuilder,
+		dbFields,
+		db,
+		bindVar,
+		countDest,
+		countParams,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetInnerBuilderResults(
+	r *http.Request,
+	builder sq.SelectBuilder,
+	dbFields DbFields,
+	defaultOrderBy string,
+	queryCfg QueryConfig,
+) (string, []interface{}, error) {
+	innerDataBuilder, err := GetQueryBuilder(
+		r,
+		builder,
+		dbFields,
+		queryCfg,
+	)
+	if err != nil {
+		return "", nil, errors.WithStack(err)
+	}
+
+	if defaultOrderBy != "" && r.FormValue(queryCfg.OrderParam) == "" {
+		innerDataBuilder = innerDataBuilder.OrderBy(defaultOrderBy)
+	}
+
+	return innerDataBuilder.ToSql()
 }
 
 func GetQueryBuilder(
 	r *http.Request,
-	dbFields DbFields,
 	builder sq.SelectBuilder,
-	cfg QueryBuilderConfig,
+	dbFields DbFields,
+	cfg QueryConfig,
 ) (sq.SelectBuilder, error) {
 	var err error
 	var ok bool
@@ -611,25 +936,21 @@ func GetQueryBuilder(
 		}
 	}
 
-	if limitParam != "" || cfg.IsCountQuery {
+	if limitParam != "" {
 		var limit uint64
 
-		if cfg.IsCountQuery {
-			limit = cfg.Limit
-		} else {
-			if limit, err = strconv.ParseUint(
-				limitParam,
-				IntBase,
-				IntBitSize,
-			); err != nil {
-				return sq.SelectBuilder{}, errors.WithStack(
-					&QueryBuilderError{errorMsg: "invalid limit"},
-				)
-			}
+		if limit, err = strconv.ParseUint(
+			limitParam,
+			IntBase,
+			IntBitSize,
+		); err != nil {
+			return sq.SelectBuilder{}, errors.WithStack(
+				&QueryBuilderError{errorMsg: "invalid limit"},
+			)
+		}
 
-			if cfg.Limit > 0 && limit > cfg.Limit {
-				limit = cfg.Limit
-			}
+		if cfg.Limit > 0 && limit > cfg.Limit {
+			limit = cfg.Limit
 		}
 
 		builder = builder.Limit(limit)
@@ -658,284 +979,93 @@ func GetQueryBuilder(
 	return builder, nil
 }
 
-func GetQueryBuilderResult(
-	req *http.Request,
-	db Querier,
-	bindvar int,
-	dbFields DbFields,
-	builder sq.SelectBuilder,
-	cfg QueryBuilderConfig,
-) (interface{}, error) {
-	var err error
-	var query string
-	var args []interface{}
-
-	if builder, err = GetQueryBuilder(
-		req,
-		dbFields,
-		builder,
-		cfg,
-	); err != nil {
-		return nil, errors.WithStack(err)
+func scanColVals(r ColScanner) ([]string, []interface{}, error) {
+	// ignore r.started, since we needn't use reflect for anything.
+	columns, err := r.Columns()
+	if err != nil {
+		return nil, nil, err
 	}
+
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		values[i] = new(interface{})
+	}
+
+	err = r.Scan(values...)
+	return columns, values, err
+}
+
+func appendReflectSlice(args []interface{}, v reflect.Value, vlen int) []interface{} {
+	switch val := v.Interface().(type) {
+	case []interface{}:
+		args = append(args, val...)
+	case []int:
+		for i := range val {
+			args = append(args, val[i])
+		}
+	case []string:
+		for i := range val {
+			args = append(args, val[i])
+		}
+	default:
+		for si := 0; si < vlen; si++ {
+			args = append(args, v.Index(si).Interface())
+		}
+	}
+
+	return args
+}
+
+func asSliceForIn(i interface{}) (v reflect.Value, ok bool) {
+	if i == nil {
+		return reflect.Value{}, false
+	}
+
+	v = reflect.ValueOf(i)
+	t := deref(v.Type())
+
+	// Only expand slices
+	if t.Kind() != reflect.Slice {
+		return reflect.Value{}, false
+	}
+
+	// []byte is a driver.Value type so it should not be expanded
+	if t == reflect.TypeOf([]byte{}) {
+		return reflect.Value{}, false
+
+	}
+
+	return v, true
+}
+
+// Deref is Indirect for reflect.Types
+func deref(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t
+}
+
+func getRowsFromBuilder(ctx context.Context, builder sq.SelectBuilder, db qrm.Queryable, bindVar int) (*sql.Rows, error) {
+	var query string
+	var err error
+	var args []interface{}
 
 	if query, args, err = builder.ToSql(); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	if cfg.IsCountQuery {
-		var row *sqlx.Row
-		var count uint64
+	resQuery := query
+	resArgs := args
 
-		if row, err = db.QueryRowxRebind(bindvar, query, args...); err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		if row.Scan(&count); err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		return count, nil
+	if query, args, err = InQueryRebind(bindVar, query, args...); err != nil {
+		return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), resQuery, resArgs))
 	}
 
-	var rows *sqlx.Rows
-
-	data := make([]map[string]interface{}, 0, cfg.Limit)
-
-	if rows, err = db.QueryxRebind(bindvar, query, args...); err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	for rows.Next() {
-		row := map[string]interface{}{}
-
-		// if err = rows.MapScanMultiLvl(row); err != nil {
-		// 	return nil, errors.WithStack(err)
-		// }
-
-		data = append(data, row)
-	}
-
-	return data, nil
-}
-
-func GetQueryBuilderResultL(
-	req *http.Request,
-	db Querier,
-	bindvar int,
-	dbFields DbFields,
-	logFunc func(error),
-	customFunc func(map[string]interface{}) error,
-	builder sq.SelectBuilder,
-	cfg QueryBuilderConfig,
-) (interface{}, error) {
-	var err error
-	var query string
-	var args []interface{}
-
-	if builder, err = GetQueryBuilder(
-		req,
-		dbFields,
-		builder,
-		cfg,
-	); err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	if query, args, err = builder.ToSql(); err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	if cfg.IsCountQuery {
-		var row *sqlx.Row
-		var count uint64
-
-		if row, err = db.QueryRowxRebind(bindvar, query, args...); err != nil {
-			return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
-		}
-
-		if row.Scan(&count); err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		return count, nil
-	}
-
-	var rows *sqlx.Rows
-
-	data := make([]map[string]interface{}, 0, cfg.Limit)
-
-	if rows, err = db.QueryxRebind(bindvar, query, args...); err != nil {
-		return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
-	}
-
-	for rows.Next() {
-		row := map[string]interface{}{}
-
-		// if err = rows.MapScanMultiLvl(row); err != nil {
-		// 	return nil, errors.WithStack(err)
-		// }
-
-		if customFunc != nil {
-			if err = customFunc(row); err != nil {
-				return nil, errors.WithStack(err)
-			}
-		}
-
-		data = append(data, row)
-	}
-
-	return data, nil
-}
-
-func GetDataAndCountBuilderResult(
-	req *http.Request,
-	db Querier,
-	bindvar int,
-	dbFields DbFields,
-	dataBuilder sq.SelectBuilder,
-	countBuilder sq.SelectBuilder,
-	dataCfg QueryBuilderConfig,
-	countCfg QueryBuilderConfig,
-) ([]map[string]interface{}, uint64, error) {
-	data, err := GetQueryBuilderResult(
-		req,
-		db,
-		bindvar,
-		dbFields,
-		dataBuilder,
-		dataCfg,
-	)
-
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), resQuery, resArgs))
 	}
 
-	count, err := GetQueryBuilderResult(
-		req,
-		db,
-		bindvar,
-		dbFields,
-		countBuilder,
-		dataCfg,
-	)
-
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return data.([]map[string]interface{}), count.(uint64), nil
-}
-
-func GetDataAndCountBuilderResultL(
-	w http.ResponseWriter,
-	req *http.Request,
-	db Querier,
-	bindvar int,
-	dbFields DbFields,
-	logFunc func(error),
-	customFunc func(map[string]interface{}) error,
-	dataBuilder sq.SelectBuilder,
-	countBuilder sq.SelectBuilder,
-	dataCfg QueryBuilderConfig,
-	countCfg QueryBuilderConfig,
-	statusCfg QueryBuilderErrorResponse,
-) ([]map[string]interface{}, uint64, error) {
-	errFunc := func(e error) {
-		if logFunc != nil {
-			logFunc(e)
-		}
-
-		var valErr *QueryBuilderError
-
-		if errors.As(e, &valErr) {
-			w.WriteHeader(statusCfg.QueryBuilderErrorStatus)
-			w.Write([]byte(e.Error()))
-		} else {
-			w.WriteHeader(statusCfg.DatabaseErrorStatus)
-			w.Write(statusCfg.DatabaseErrorResponse)
-		}
-	}
-
-	data, err := GetQueryBuilderResultL(
-		req,
-		db,
-		bindvar,
-		dbFields,
-		logFunc,
-		customFunc,
-		dataBuilder,
-		dataCfg,
-	)
-
-	if err != nil {
-		errFunc(err)
-		return nil, 0, err
-	}
-
-	count, err := GetQueryBuilderResultL(
-		req,
-		db,
-		bindvar,
-		dbFields,
-		logFunc,
-		customFunc,
-		countBuilder,
-		countCfg,
-	)
-
-	if err != nil {
-		errFunc(err)
-		return nil, 0, err
-	}
-
-	return data.([]map[string]interface{}), count.(uint64), nil
-}
-
-func GetInnerBuilderResults(
-	r *http.Request,
-	builder sq.SelectBuilder,
-	dbFields DbFields,
-	dataCfg QueryBuilderConfig,
-	countCfg QueryBuilderConfig,
-) (InnerBuilderResult, error) {
-	innerDataBuilder, err := GetQueryBuilder(
-		r,
-		dbFields,
-		builder,
-		dataCfg,
-	)
-
-	if err != nil {
-		return InnerBuilderResult{}, errors.WithStack(err)
-	}
-
-	innerDataQuery, innerArgs, err := innerDataBuilder.ToSql()
-
-	if err != nil {
-		return InnerBuilderResult{}, errors.WithStack(err)
-	}
-
-	innerCountBuilder, err := GetQueryBuilder(
-		r,
-		dbFields,
-		builder,
-		countCfg,
-	)
-
-	if err != nil {
-		return InnerBuilderResult{}, errors.WithStack(err)
-	}
-
-	innerCountQuery, _, err := innerCountBuilder.ToSql()
-
-	if err != nil {
-		return InnerBuilderResult{}, errors.WithStack(err)
-	}
-
-	return InnerBuilderResult{
-		DataQuery:  innerDataQuery,
-		CountQuery: innerCountQuery,
-		Args:       innerArgs,
-	}, nil
+	return rows, nil
 }

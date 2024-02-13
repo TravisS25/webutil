@@ -48,9 +48,9 @@ func (p phone) Validate() error {
 func TestValidateFormError(t *testing.T) {
 	var err error
 	vm := map[string]string{
-		"name":             webutil.RequiredTxt,
-		"phones.0.number":  webutil.RequiredTxt,
-		"address.address1": webutil.RequiredTxt,
+		"name":             webutil.REQUIRED_TXT,
+		"phones.0.number":  webutil.REQUIRED_TXT,
+		"address.address1": webutil.REQUIRED_TXT,
 	}
 
 	u := user{

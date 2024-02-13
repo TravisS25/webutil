@@ -21,7 +21,7 @@ func TestGetQueryBuilder(t *testing.T) {
 	var sorts []Order
 	//var newBuilder sq.SelectBuilder
 
-	cfg := QueryBuilderConfig{
+	cfg := QueryConfig{
 		FilterParam: "filters",
 		OrderParam:  "sorts",
 		LimitParam:  "take",
@@ -62,7 +62,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "invalid filter parameter") {
@@ -84,7 +84,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "invalid order parameter") {
@@ -116,7 +116,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "invalid sort dir for field") {
@@ -148,7 +148,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "invalid field '' for order parameter") {
@@ -181,7 +181,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "can not be ordered") {
@@ -214,7 +214,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -242,7 +242,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "invalid field") {
@@ -274,7 +274,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "can not be filtered") {
@@ -306,7 +306,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "does not contain value") {
@@ -339,7 +339,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
 		if !strings.Contains(err.Error(), "invalid operator for field") {
@@ -373,7 +373,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -403,7 +403,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -433,7 +433,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err == nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error")
 	} else {
 		if !strings.Contains(err.Error(), "invalid filter value for field") {
@@ -467,7 +467,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -497,7 +497,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -527,7 +527,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -557,7 +557,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -587,7 +587,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -617,7 +617,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -647,7 +647,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -677,7 +677,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -707,7 +707,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -737,7 +737,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -767,7 +767,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -785,42 +785,7 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
-		t.Errorf("should not have error; got %s\n", err.Error())
-	}
-
-	// ----------------------------------------------------------------------------------
-
-	cfg.IsCountQuery = true
-	req = httptest.NewRequest(http.MethodGet, "/url", nil)
-	builder = sq.Select(
-		"user.id",
-		"user.name",
-		"phone.number",
-	).
-		From("user").
-		Join("phone on phone.user_id = user.id")
-
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
-		t.Errorf("should not have error; got %s\n", err.Error())
-	}
-	cfg.IsCountQuery = false
-
-	// ----------------------------------------------------------------------------------
-
-	urlVals = url.Values{}
-	urlVals.Add(cfg.OffsetParam, "100000")
-
-	req = httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
-	builder = sq.Select(
-		"user.id",
-		"user.name",
-		"phone.number",
-	).
-		From("user").
-		Join("phone on phone.user_id = user.id")
-
-	if _, err = GetQueryBuilder(req, dbFields, builder, cfg); err != nil {
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 }

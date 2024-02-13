@@ -1,10 +1,5 @@
 package webutil
 
-type SessionAuth struct {
-	AuthKey    string `mapstructure:"auth_key"`
-	EncryptKey string `mapstructure:"encrypt_key"`
-}
-
 //////////////////////////////////////////////////////////////////
 //------------------------ FUNCTIONS --------------------------
 //////////////////////////////////////////////////////////////////

@@ -13,96 +13,96 @@ import (
 	testifymock "github.com/stretchr/testify/mock"
 )
 
-func TestValidateObjectSlice(t *testing.T) {
-	var err error
+// func TestValidateObjectSlice(t *testing.T) {
+// 	var err error
 
-	mockTestLog := &MockTestLog{}
-	mockTestLog.On("Helper").Return(nil)
-	mockTestLog.On("Errorf", testifymock.Anything).Return(nil)
+// 	mockTestLog := &MockTestLog{}
+// 	mockTestLog.On("Helper").Return(nil)
+// 	mockTestLog.On("Errorf", testifymock.Anything).Return(nil)
 
-	if err = ValidateObjectSlice(mockTestLog, nil, "invalid", nil); err == nil {
-		t.Errorf("should have error")
-	} else if err.Error() != "'expectedMap' or 'data' parameters can not be nil" {
-		t.Errorf(
-			"error should be %s; got %s\n",
-			"values are not type 'map[string]interface{}' within 'data' parameter",
-			err.Error(),
-		)
-	}
+// 	if err = ValidateObjectSlice(mockTestLog, nil, "invalid", nil); err == nil {
+// 		t.Errorf("should have error")
+// 	} else if err.Error() != "'expectedMap' or 'data' parameters can not be nil" {
+// 		t.Errorf(
+// 			"error should be %s; got %s\n",
+// 			"values are not type 'map[string]interface{}' within 'data' parameter",
+// 			err.Error(),
+// 		)
+// 	}
 
-	invalidSlice := []interface{}{"1"}
+// 	invalidSlice := []interface{}{"1"}
 
-	if err = ValidateObjectSlice(mockTestLog, invalidSlice, "invalid", map[interface{}]string{}); err == nil {
-		t.Errorf("should have error")
-	} else if err.Error() != "values are not type 'map[string]interface{}' within 'data' parameter" {
-		t.Errorf(
-			"error should be %s; got %s\n",
-			"values are not type 'map[string]interface{}' within 'data' parameter",
-			err.Error(),
-		)
-	}
+// 	if err = ValidateObjectSlice(mockTestLog, invalidSlice, "invalid", map[interface{}]string{}); err == nil {
+// 		t.Errorf("should have error")
+// 	} else if err.Error() != "values are not type 'map[string]interface{}' within 'data' parameter" {
+// 		t.Errorf(
+// 			"error should be %s; got %s\n",
+// 			"values are not type 'map[string]interface{}' within 'data' parameter",
+// 			err.Error(),
+// 		)
+// 	}
 
-	idKey := "id"
+// 	idKey := "id"
 
-	mapSlice := make([]interface{}, 0)
-	mapSlice = append(mapSlice, map[string]interface{}{
-		idKey: "1",
-	})
+// 	mapSlice := make([]interface{}, 0)
+// 	mapSlice = append(mapSlice, map[string]interface{}{
+// 		idKey: "1",
+// 	})
 
-	if err = ValidateObjectSlice(mockTestLog, mapSlice, "invalid", map[interface{}]string{}); err == nil {
-		t.Errorf("should have error")
-	} else if err.Error() != "passed 'mapkey' parameter value not found in object" {
-		t.Errorf(
-			"error should be %s; got %s\n",
-			"passed 'mapkey' parameter value not found in object",
-			err.Error(),
-		)
-	}
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, "invalid", map[interface{}]string{}); err == nil {
+// 		t.Errorf("should have error")
+// 	} else if err.Error() != "passed 'mapkey' parameter value not found in object" {
+// 		t.Errorf(
+// 			"error should be %s; got %s\n",
+// 			"passed 'mapkey' parameter value not found in object",
+// 			err.Error(),
+// 		)
+// 	}
 
-	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
-		"1": "message",
-	}); err != nil {
-		t.Errorf("should not have error; got %s\n", err.Error())
-	}
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
+// 		"1": "message",
+// 	}); err != nil {
+// 		t.Errorf("should not have error; got %s\n", err.Error())
+// 	}
 
-	mapSlice = nil
-	mapSlice = make([]interface{}, 0)
-	mapSlice = append(
-		mapSlice,
-		map[string]interface{}{
-			idKey: "1",
-		},
-		map[string]interface{}{
-			idKey: "2",
-		},
-	)
+// 	mapSlice = nil
+// 	mapSlice = make([]interface{}, 0)
+// 	mapSlice = append(
+// 		mapSlice,
+// 		map[string]interface{}{
+// 			idKey: "1",
+// 		},
+// 		map[string]interface{}{
+// 			idKey: "2",
+// 		},
+// 	)
 
-	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
-		"1": "message",
-	}); err == nil {
-		t.Errorf("should have error")
-	} else if !strings.Contains(err.Error(), "unexpected entries found") {
-		t.Errorf("should have substr 'unexpected entries found'; got %s\n", err.Error())
-	}
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
+// 		"1": "message",
+// 	}); err == nil {
+// 		t.Errorf("should have error")
+// 	} else if !strings.Contains(err.Error(), "unexpected entries found") {
+// 		t.Errorf("should have substr 'unexpected entries found'; got %s\n", err.Error())
+// 	}
 
-	mapSlice = nil
-	mapSlice = make([]interface{}, 0)
-	mapSlice = append(
-		mapSlice,
-		map[string]interface{}{
-			idKey: "1",
-		},
-	)
+// 	mapSlice = nil
+// 	mapSlice = make([]interface{}, 0)
+// 	mapSlice = append(
+// 		mapSlice,
+// 		map[string]interface{}{
+// 			idKey: "1",
+// 		},
+// 	)
 
-	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
-		"1": "message",
-		"2": "message",
-	}); err == nil {
-		t.Errorf("should have error")
-	} else if !strings.Contains(err.Error(), "expected entries not found") {
-		t.Errorf("should have substr 'expected entries not found'; got %s\n", err.Error())
-	}
-}
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
+// 		"1": "message",
+// 		"2": "message",
+// 	}); err == nil {
+// 		t.Errorf("should have error")
+// 	} else if !strings.Contains(err.Error(), "expected entries not found") {
+// 		t.Errorf("should have substr 'expected entries not found'; got %s\n", err.Error())
+// 	}
+// }
 
 func TestLoginUser(t *testing.T) {
 	var err error

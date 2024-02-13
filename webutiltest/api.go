@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	IDParam = "{id:[0-9]+}"
+	ID_PARAM = "{id:[0-9]+}"
 )
 
 type ValidateResponseConfig struct {
@@ -116,16 +116,16 @@ func LoginUser(client HTTPClient, url string, loginForm interface{}) (string, er
 		return "", errors.WithStack(err)
 	}
 
-	token := res.Header.Get(webutil.TokenHeader)
-	csrf := res.Header.Get(webutil.SetCookieHeader)
+	token := res.Header.Get(webutil.TOKEN_HEADER)
+	csrf := res.Header.Get(webutil.SET_COOKIE_HEADER)
 	req, err = http.NewRequest(http.MethodPost, url, &buffer)
 
 	if err != nil {
 		return "", err
 	}
 
-	req.Header.Set(webutil.TokenHeader, token)
-	req.Header.Set(webutil.CookieHeader, csrf)
+	req.Header.Set(webutil.TOKEN_HEADER, token)
+	req.Header.Set(webutil.COOKIE_HEADER, csrf)
 	res, err = client.Do(req)
 
 	if err != nil {

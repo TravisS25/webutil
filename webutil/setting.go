@@ -11,11 +11,11 @@ import (
 // SessionSetting is config struct for setting up session AuthEncryptionSetting
 // for redis server
 type SessionSetting struct {
-	AuthEncryptionSetting `yaml:"auth_encryption_setting" mapstructure:"auth_encryption_setting"`
-	Size                  int    `yaml:"size" mapstructure:"size"`
-	Network               string `yaml:"network" mapstructure:"network"`
-	Address               string `yaml:"address" mapstructure:"address"`
-	Password              string `yaml:"password" mapstructure:"password"`
+	SessionAuth `yaml:"auth_encryption_setting" mapstructure:"auth_encryption_setting"`
+	Size        int    `yaml:"size" mapstructure:"size"`
+	Network     string `yaml:"network" mapstructure:"network"`
+	Address     string `yaml:"address" mapstructure:"address"`
+	Password    string `yaml:"password" mapstructure:"password"`
 }
 
 // CacheSetting is config struct for setting up caching for
@@ -29,8 +29,8 @@ type CacheSetting struct {
 // FileSystemSetting is config struct for storing sessions
 // in the file system
 type FileSystemSetting struct {
-	AuthEncryptionSetting `yaml:"auth_encryption_setting" mapstructure:"auth_encryption_setting"`
-	Dir                   string `yaml:"dir" mapstructure:"dir"`
+	SessionAuth `yaml:"auth_encryption_setting" mapstructure:"auth_encryption_setting"`
+	Dir         string `yaml:"dir" mapstructure:"dir"`
 }
 
 type BaseAuth struct {
@@ -63,11 +63,9 @@ type S3StorageSetting struct {
 	UseSSL          bool   `yaml:"use_ssl" mapstructure:"use_ssl"`
 }
 
-// AuthEncryptionSetting is config struct for other config
-// structs that require encryption
-type AuthEncryptionSetting struct {
-	AuthKey    string `yaml:"auth_key" mapstructure:"auth_key"`
-	EncryptKey string `yaml:"encrypt_key" mapstructure:"encrypt_key"`
+type SessionAuth struct {
+	AuthKey    string `mapstructure:"auth_key"`
+	EncryptKey string `mapstructure:"encrypt_key"`
 }
 
 func GetSettings(envString string, settings interface{}, opts ...viper.DecoderConfigOption) error {

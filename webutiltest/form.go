@@ -200,6 +200,7 @@ func FormRequestBuilder(t TestLog, method, url string, form interface{}, ctxVals
 // and whether it returns the expected errors with the validatorMap parameter
 func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 	t.Helper()
+
 	if err != nil {
 		var valErr validation.Errors
 

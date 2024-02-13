@@ -1,6 +1,7 @@
 package webutil
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -11,108 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
-
-	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
-
+	"github.com/go-jet/jet/v2/qrm"
 	validation "github.com/go-ozzo/ozzo-validation"
-)
-
-//////////////////////////////////////////////////////////////////
-//---------------------- VALIDATOR TYPES -----------------------
-//////////////////////////////////////////////////////////////////
-
-const (
-	validateArgsType = iota + 1
-	validateUniquenessType
-	validateExistsType
-)
-
-//////////////////////////////////////////////////////////////////
-//--------------------------- CONSTS -------------------------
-//////////////////////////////////////////////////////////////////
-
-const (
-	// RequiredTxt is string const error when field is required
-	RequiredTxt = "Required"
-
-	// AlreadyExistsTxt is string const error when field already exists
-	// in database or cache
-	AlreadyExistsTxt = "Already exists"
-
-	// DoesNotExistTxt is string const error when field does not exist
-	// in database or cache
-	DoesNotExistTxt = "Does not exist"
-
-	// InvalidTxt is string const error when field is invalid
-	InvalidTxt = "Invalid"
-
-	// InvalidFormatTxt is string const error when field has invalid format
-	InvalidFormatTxt = "Invalid format"
-
-	// InvalidFutureDateTxt is sring const when field is not allowed
-	// to be in the future
-	InvalidFutureDateTxt = "Date can't be after current date/time"
-
-	// InvalidPastDateTxt is sring const when field is not allowed
-	// to be in the past
-	InvalidPastDateTxt = "Date can't be before current date/time"
-
-	// CantBeNegativeTxt is sring const when field can't be negative
-	CantBeNegativeTxt = "Can't be negative"
-)
-
-//////////////////////////////////////////////////////////////////
-//----------------------- GLOBAL VARS -------------------------
-//////////////////////////////////////////////////////////////////
-
-var (
-	// EmailRegex is regex expression used for forms to validate email
-	EmailRegex = regexp.MustCompile("^.+@[a-zA-Z0-9.]+$")
-
-	// ZipRegex is regex expression used for forms to validate zip code
-	ZipRegex = regexp.MustCompile("^[0-9]{5}$")
-
-	// PhoneNumberRegex is regex expression used for forms to validate phone number
-	PhoneNumberRegex = regexp.MustCompile(`^\([0-9]{3}\)-[0-9]{3}-[0-9]{4}$`)
-
-	// ColorRegex is regex expression used for forms to validate color format is correct
-	ColorRegex = regexp.MustCompile("^#[0-9a-f]{6}$")
-
-	// RequiredStringRegex is regex expression used for forms to validate that a field
-	// has at least one character that is NOT a space
-	RequiredStringRegex = regexp.MustCompile(`[^\s\\]`)
-
-	// FormDateRegex is regex expression used for forms to validate correct format of date
-	FormDateRegex = regexp.MustCompile("^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$")
-
-	// FormDateTimeRegex is regex expression used for forms to validate correct format of
-	// date and time
-	FormDateTimeRegex = regexp.MustCompile("^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4} [0-9]{1,2}:[0-9]{2} (?i)(AM|PM)$")
-
-	// USDCurrencyRegex represents usd currency format to validate for form
-	USDCurrencyRegex = regexp.MustCompile(`^(?:-)?[0-9]+(?:\\.[0-9]{1,2})?$`)
-)
-
-//////////////////////////////////////////////////////////////////
-//----------------------- PRE-BUILT RULES ----------------------
-//////////////////////////////////////////////////////////////////
-
-var (
-	// RequiredRule makes field required and does NOT allow just spaces
-	RequiredRule = &validateRequiredRule{err: errors.New(RequiredTxt)}
-
-	// DefaultPathRegex is the standard setting returned from request
-	DefaultPathRegex = func(r *http.Request) (string, error) {
-		return mux.CurrentRoute(r).GetPathTemplate()
-	}
-
-	// DefaultVars returns mux vars from request
-	DefaultVars = func(r *http.Request) map[string]string {
-		return mux.Vars(r)
-	}
+	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
+	"github.com/shopspring/decimal"
 )
 
 //////////////////////////////////////////////////////////////////
@@ -123,19 +27,6 @@ var (
 	// errFutureAndPastDateInternal returns for form field if
 	// user sets that a date can not be both a future or past date
 	errFutureAndPastDateInternal = errors.New("webutil: both 'canBeFuture and 'canBePast' can not be false")
-
-	// errInvalidStringInternal returns for form field if
-	// data type for date field is not "string" or "*string"
-	errInvalidStringInternal = errors.New("webutil: input must be string or *string")
-
-	// errInvalidValidateValue represents error where a value passed to form validation can't be a struct
-	// only primative types
-	errInvalidValidateValue = errors.New("webutil: validate value is invalid type")
-
-	// errInvalidInstanceValue represents error if instance value passed to validator is not primitive type
-	errInvalidInstanceValue = errors.New("webutil: instance value is invalid type")
-
-	errIncompatableTypes = errors.New("webutil: instance value and passed are different types")
 )
 
 //////////////////////////////////////////////////////////////////
@@ -193,6 +84,12 @@ type FormCurrency struct {
 	MaxError error `json:"-"`
 }
 
+func NewFormCurrency(d decimal.Decimal) *FormCurrency {
+	return &FormCurrency{
+		Decimal: d,
+	}
+}
+
 func (f *FormCurrency) UnmarshalJSON(decimalBytes []byte) error {
 	return f.Decimal.UnmarshalJSON(decimalBytes)
 }
@@ -212,7 +109,7 @@ func (f FormCurrency) Validate() error {
 
 	if !currencyRegexp.MatchString(f.Decimal.String()) {
 		fmt.Printf("format: %s\n", f.Decimal.String())
-		return fmt.Errorf(InvalidFormatTxt)
+		return fmt.Errorf(INVALID_FORMAT_TXT)
 	}
 
 	if f.Min != nil && f.Decimal.LessThan(*f.Min) {
@@ -234,33 +131,6 @@ func (f FormCurrency) Validate() error {
 	}
 
 	return nil
-}
-
-// Boolean is used to be able interpret string bool values
-type Boolean struct {
-	value bool
-}
-
-// UnmarshalJSON takes in value and interprets it as a
-// string and parses it to determine its value
-// This is used so if user sends invalid bool value
-// we don't panic when trying to process
-func (c *Boolean) UnmarshalJSON(data []byte) error {
-	asString := string(data)
-	convertedBool, err := strconv.ParseBool(asString)
-
-	if err != nil {
-		c.value = false
-	} else {
-		c.value = convertedBool
-	}
-
-	return nil
-}
-
-// Value returns given bool value
-func (c Boolean) Value() bool {
-	return c.value
 }
 
 // Int64 is mainly used for slice of id values from forms
@@ -300,11 +170,11 @@ func (i *Int64) UnmarshalJSON(b []byte) error {
 }
 
 // Value returns given int64 value
-func (i Int64) Int64Val() int64 {
+func (i Int64) Raw() int64 {
 	return int64(i)
 }
 
-func (i Int64) Str() string {
+func (i Int64) String() string {
 	return strconv.FormatInt(int64(i), IntBase)
 }
 
@@ -333,170 +203,6 @@ func (i Int64) Value() (driver.Value, error) {
 	}
 
 	return int64(i), nil
-}
-
-// FormSelection is generic struct used for html forms
-type FormSelection struct {
-	Text  interface{} `json:"text"`
-	Value interface{} `json:"value"`
-}
-
-// FormValidationConfig is config struct used in the initialization
-// of *FormValidation
-type FormValidationConfig struct {
-	PathRegex  PathRegex
-	SQLBindVar int
-}
-
-// FormValidation is the main struct that other structs will
-// embed to validate json data
-type FormValidation struct {
-	entity Entity
-	config FormValidationConfig
-}
-
-// NewFormValidation returns *FormValidation instance
-func NewFormValidation(entity Entity, config FormValidationConfig) *FormValidation {
-	return &FormValidation{
-		entity: entity,
-		config: config,
-	}
-}
-
-// IsValid returns *validRule based on isValid parameter
-// Basically IsValid is a wrapper for the passed bool
-// to return valid rule to then apply custom error message
-// for the Error function
-func (f *FormValidation) IsValid(isValid bool) *validRule {
-	return &validRule{isValid: isValid, err: errors.New("Not Valid")}
-}
-
-// ValidateDate verifies whether a date string matches the passed in
-// layout format
-//
-// If a user wishes, they can also verify whether the given date is
-// allowed to be a past or future date of the current time
-//
-// The timezone parameter converts given time to compare to current
-// time if you choose to
-// If no timezone is passed, UTC is used by default
-// If user does not want to compare time, both bool parameters
-// should be true
-//
-// Will raise errFutureAndPastDateInternal error which will be wrapped
-// in validation.InternalError if both bool parameters are false
-func (f *FormValidation) ValidateDate(
-	layout,
-	timezone string,
-	compareTime,
-	canBeFuture,
-	canBePast bool,
-) *validateDateRule {
-	return &validateDateRule{
-		layout:      layout,
-		compareTime: compareTime,
-		timezone:    timezone,
-		canBeFuture: canBeFuture,
-		canBePast:   canBePast,
-	}
-}
-
-// ValidateArgs determines whether validated field(s) exists in
-// database or cache if set
-// The same number of validated fields must be returned from
-// database or cache in order to be true
-//
-// If validated field is single val, then only one value
-// must be returned from database or cache to be true
-//
-// If validated field is slice, then number of results
-// that must come from database or cache should be
-// length of slice
-func (f *FormValidation) ValidateArgs(
-	placeHolderIdx int,
-	query string,
-	args ...interface{},
-) *validateArgsRule {
-	return &validateArgsRule{
-		validator: &validator{
-			querier:        f.entity,
-			placeHolderIdx: placeHolderIdx,
-			bindVar:        f.config.SQLBindVar,
-			query:          query,
-			args:           args,
-			err:            errors.New(InvalidTxt),
-		},
-	}
-}
-
-// ValidateUniqueness determines whether validated field is unique
-// within database or cache if set
-func (f *FormValidation) ValidateUniqueness(
-	instanceValue interface{},
-	placeHolderIdx int,
-	query string,
-	args ...interface{},
-) *validateUniquenessRule {
-	return &validateUniquenessRule{
-		instanceValue: instanceValue,
-		validator: &validator{
-			querier:        f.entity,
-			placeHolderIdx: placeHolderIdx,
-			bindVar:        f.config.SQLBindVar,
-			query:          query,
-			args:           args,
-			err:            errors.New(AlreadyExistsTxt),
-		},
-	}
-}
-
-// ValidateExists determines whether validated field exists
-// within database or cache if set
-// Only has to find one record to be true
-func (f *FormValidation) ValidateExists(
-	placeHolderIdx int,
-	query string,
-	args ...interface{},
-) *validateExistsRule {
-	return &validateExistsRule{
-		validator: &validator{
-			querier:        f.entity,
-			placeHolderIdx: placeHolderIdx,
-			bindVar:        f.config.SQLBindVar,
-			query:          query,
-			args:           args,
-			err:            errors.New(DoesNotExistTxt),
-		},
-	}
-}
-
-// GetEntity returns Entity
-func (f *FormValidation) GetEntity() Entity {
-	return f.entity
-}
-
-// GetConfig return FormValidationConfig
-func (f *FormValidation) GetConfig() FormValidationConfig {
-	return f.config
-}
-
-// SetEntity sets Entity
-func (f *FormValidation) SetEntity(entity Entity) {
-	f.entity = entity
-}
-
-// SetConfig sets FormValidationConfig
-func (f *FormValidation) SetConfig(config FormValidationConfig) {
-	f.config = config
-}
-
-type validator struct {
-	querier        Querier
-	args           []interface{}
-	query          string
-	bindVar        int
-	placeHolderIdx int
-	err            error
 }
 
 type validateRequiredRule struct {
@@ -586,8 +292,163 @@ func (v *validateRequiredRule) Error(message string) *validateRequiredRule {
 	}
 }
 
+// FormValidationConfig is config struct used in the initialization
+// of *FormValidation
+type FormValidationConfig struct {
+	PathRegex  PathRegex
+	SQLBindVar int
+}
+
+// FormValidation is the main struct that other structs will
+// embed to validate json data
+type FormValidation struct {
+	queryable qrm.Queryable
+	config    FormValidationConfig
+}
+
+// NewFormValidation returns *FormValidation instance
+func NewFormValidation(queryable qrm.Queryable, config FormValidationConfig) *FormValidation {
+	return &FormValidation{
+		queryable: queryable,
+		config:    config,
+	}
+}
+
+// IsValid returns *validRule based on isValid parameter
+// Basically IsValid is a wrapper for the passed bool
+// to return valid rule to then apply custom error message
+// for the Error function
+func (f *FormValidation) IsValid(isValid bool) *validRule {
+	return &validRule{isValid: isValid, err: errors.New("Not Valid")}
+}
+
+// ValidateDate verifies whether a date string matches the passed in
+// layout format
+//
+// If a user wishes, they can also verify whether the given date is
+// allowed to be a past or future date of the current time
+//
+// The timezone parameter converts given time to compare to current
+// time if you choose to
+// If no timezone is passed, UTC is used by default
+// If user does not want to compare time, both bool parameters
+// should be true
+//
+// Will raise errFutureAndPastDateInternal error which will be wrapped
+// in validation.InternalError if both bool parameters are false
+func (f *FormValidation) ValidateDate(
+	timezone string,
+	compareTime,
+	canBeFuture,
+	canBePast bool,
+) *validateDateRule {
+	return &validateDateRule{
+		compareTime: compareTime,
+		timezone:    timezone,
+		canBeFuture: canBeFuture,
+		canBePast:   canBePast,
+	}
+}
+
+// ValidateArgs determines whether validated field(s) exists in
+// database or cache if set
+// The same number of validated fields must be returned from
+// database or cache in order to be true
+//
+// If validated field is single val, then only one value
+// must be returned from database or cache to be true
+//
+// If validated field is slice, then number of results
+// that must come from database or cache should be
+// length of slice
+func (f *FormValidation) ValidateArgs(
+	placeHolderIdx int,
+	query string,
+	args ...interface{},
+) *validateArgsRule {
+	return &validateArgsRule{
+		validator: &validator{
+			queryable:      f.queryable,
+			placeHolderIdx: placeHolderIdx,
+			bindVar:        f.config.SQLBindVar,
+			query:          query,
+			args:           args,
+			err:            errors.New(INVALID_TXT),
+		},
+	}
+}
+
+// ValidateUniqueness determines whether validated field is unique
+// within database or cache if set
+func (f *FormValidation) ValidateUniqueness(
+	instanceValue interface{},
+	placeHolderIdx int,
+	query string,
+	args ...interface{},
+) *validateUniquenessRule {
+	return &validateUniquenessRule{
+		instanceValue: instanceValue,
+		validator: &validator{
+			queryable:      f.queryable,
+			placeHolderIdx: placeHolderIdx,
+			bindVar:        f.config.SQLBindVar,
+			query:          query,
+			args:           args,
+			err:            errors.New(ALREADY_EXISTS_TXT),
+		},
+	}
+}
+
+// ValidateExists determines whether validated field exists
+// within database or cache if set
+// Only has to find one record to be true
+func (f *FormValidation) ValidateExists(
+	placeHolderIdx int,
+	query string,
+	args ...interface{},
+) *validateExistsRule {
+	return &validateExistsRule{
+		validator: &validator{
+			queryable:      f.queryable,
+			placeHolderIdx: placeHolderIdx,
+			bindVar:        f.config.SQLBindVar,
+			query:          query,
+			args:           args,
+			err:            errors.New(DOES_NOT_EXIST_TXT),
+		},
+	}
+}
+
+// GetEntity returns Entity
+func (f *FormValidation) GetQueryable() qrm.Queryable {
+	return f.queryable
+}
+
+// GetConfig return FormValidationConfig
+func (f *FormValidation) GetConfig() FormValidationConfig {
+	return f.config
+}
+
+// SetEntity sets Entity
+func (f *FormValidation) SetQueryable(queryable qrm.Queryable) {
+	f.queryable = queryable
+}
+
+// SetConfig sets FormValidationConfig
+func (f *FormValidation) SetConfig(config FormValidationConfig) {
+	f.config = config
+}
+
+type validator struct {
+	queryable      qrm.Queryable
+	args           []interface{}
+	query          string
+	bindVar        int
+	placeHolderIdx int
+	err            error
+}
+
 type validateDateRule struct {
-	layout      string
 	timezone    string
 	compareTime bool
 	canBeFuture bool
@@ -598,14 +459,9 @@ type validateDateRule struct {
 func (v *validateDateRule) Validate(value interface{}) error {
 	var currentTime, dateTime time.Time
 	var err error
-	var dateValue string
 
 	if isNilValue(value) {
 		return nil
-	}
-
-	if dateValue, err = getStringFromValue(value, v.layout); err != nil {
-		return err
 	}
 
 	if v.timezone != "" {
@@ -630,19 +486,24 @@ func (v *validateDateRule) Validate(value interface{}) error {
 		}
 	}
 
-	if dateTime, err = time.Parse(v.layout, dateValue); err != nil {
-		return errors.New(InvalidFormatTxt)
+	switch val := value.(type) {
+	case time.Time:
+		dateTime = val
+	case *time.Time:
+		dateTime = *val
+	default:
+		return errors.New("Must be time.Time or *time.Time type")
 	}
 
 	if v.canBeFuture && v.canBePast {
 		err = nil
 	} else if v.canBeFuture {
 		if dateTime.Before(currentTime) {
-			err = errors.New(InvalidPastDateTxt)
+			err = errors.New(INVALID_PAST_DATE_TXT)
 		}
 	} else if v.canBePast {
 		if dateTime.After(currentTime) {
-			err = errors.New(InvalidFutureDateTxt)
+			err = errors.New(INVALID_FUTURE_DATE_TXT)
 		}
 	} else {
 		err = validation.NewInternalError(errFutureAndPastDateInternal)
@@ -694,99 +555,16 @@ type validateUniquenessRule struct {
 }
 
 func (v *validateUniquenessRule) Validate(value interface{}) error {
-	var validateVal, instanceVal interface{}
-	var err error
-
-	validateValOf := reflect.ValueOf(value)
-	instanceValOf := reflect.ValueOf(v.instanceValue)
-	compareValues := true
-
-	if !validateValOf.IsValid() || !instanceValOf.IsValid() {
-		compareValues = false
-	}
-	if validateValOf.Kind() == reflect.Ptr && validateValOf.IsNil() {
-		compareValues = false
-	}
-	if instanceValOf.Kind() == reflect.Ptr && instanceValOf.IsNil() {
-		compareValues = false
-	}
-
-	if compareValues {
-		findVal := func(kind reflect.Kind, isPointer bool, forValidateVal bool) error {
-			kindList := []reflect.Kind{
-				reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-				reflect.Float32, reflect.Float64, reflect.String,
-			}
-
-			found := false
-
-			for _, v := range kindList {
-				if kind == v {
-					found = true
-				}
-			}
-
-			if found {
-				if forValidateVal {
-					if isPointer {
-						validateVal = validateValOf.Elem().Interface()
-					} else {
-						validateVal = validateValOf.Interface()
-					}
-				} else {
-					if isPointer {
-						instanceVal = instanceValOf.Elem().Interface()
-					} else {
-						instanceVal = instanceValOf.Interface()
-					}
-				}
-			} else {
-				if forValidateVal {
-					return errInvalidValidateValue
-				}
-
-				return errInvalidInstanceValue
-			}
-
-			return nil
+	if v.instanceValue != nil {
+		if reflect.TypeOf(value) != reflect.TypeOf(v.instanceValue) {
+			return fmt.Errorf(
+				"webutil: can't compare form value type of '%s' and instance value type of '%s'",
+				reflect.TypeOf(value),
+				reflect.TypeOf(v.instanceValue),
+			)
 		}
 
-		var validateKind, instanceKind reflect.Kind
-
-		if validateValOf.Kind() == reflect.Ptr {
-			validateKind = validateValOf.Elem().Kind()
-
-			if err = findVal(validateKind, true, true); err != nil {
-				return err
-			}
-		} else {
-			validateKind = validateValOf.Kind()
-
-			if err = findVal(validateKind, false, true); err != nil {
-				return err
-			}
-		}
-
-		if instanceValOf.Kind() == reflect.Ptr {
-			instanceKind = instanceValOf.Elem().Kind()
-
-			if err = findVal(instanceKind, true, false); err != nil {
-				return err
-			}
-		} else {
-			instanceKind = instanceValOf.Kind()
-
-			if err = findVal(instanceKind, false, false); err != nil {
-				return err
-			}
-		}
-
-		if validateKind != instanceKind {
-			return errIncompatableTypes
-		}
-
-		if instanceVal == validateVal {
+		if reflect.DeepEqual(value, v.instanceValue) {
 			return nil
 		}
 	}
@@ -812,49 +590,11 @@ func (v *validateArgsRule) Error(message string) *validateArgsRule {
 	return v
 }
 
-// isNilValue determines if passed value is truley nil
-func isNilValue(value interface{}) bool {
-	_, isNil := validation.Indirect(value)
-	if validation.IsEmpty(value) || isNil {
-		return true
-	}
-
-	return false
-}
-
-// getStringFromValue determines whether passed value is a
-// string or *string type and if not, returns errInvalidStringInternal
-func getStringFromValue(value interface{}, format string) (string, error) {
-	var dateValue string
-	var err error
-
-	switch value := value.(type) {
-	case string:
-		dateValue = value
-	case *string:
-		tmp := value
-
-		if tmp == nil {
-			return "", nil
-		}
-
-		dateValue = *tmp
-	case time.Time:
-		dateValue = value.Format(format)
-	case *time.Time:
-		if value == nil {
-			return "", nil
-		}
-
-		dateValue = value.Format(format)
-	default:
-		err = validation.NewInternalError(errInvalidStringInternal)
-	}
-
-	return dateValue, err
-}
-
 func validatorRules(v *validator, value interface{}, validateType int) error {
+	if isNilValue(value) {
+		return nil
+	}
+
 	var err error
 	var expectedLen int
 	var tmpVal interface{}
@@ -891,8 +631,12 @@ func validatorRules(v *validator, value interface{}, validateType int) error {
 		args = InsertAt(args, tmpVal, v.placeHolderIdx)
 	}
 
-	rows, err := v.querier.QueryxRebind(v.bindVar, v.query, args...)
+	query, args, err := InQueryRebind(v.bindVar, v.query, args...)
+	if err != nil {
+		return errors.WithStack(validation.NewInternalError(err))
+	}
 
+	rows, err := v.queryable.QueryContext(context.Background(), query, args...)
 	if err != nil {
 		msg := fmt.Errorf("err: %s\n query:%s\n args:%v\n", err, v.query, args)
 		return errors.WithStack(validation.NewInternalError(msg))
@@ -922,48 +666,19 @@ func validatorRules(v *validator, value interface{}, validateType int) error {
 	return nil
 }
 
-//////////////////////////////////////////////////////////////////
-//----------------------- FUNCTIONS -------------------------
-//////////////////////////////////////////////////////////////////
-
-func FormHasErrors(
-	w http.ResponseWriter,
-	err error,
-	clientStatus int,
-	serverResp HTTPResponseConfig,
-) bool {
-	if err != nil {
-		SetHTTPResponseDefaults(&serverResp, http.StatusInternalServerError, []byte(serverErrTxt))
-
-		hasFormError := false
-
-		var valErr validation.Errors
-
-		if errors.Is(err, ErrBodyRequired) {
-			hasFormError = true
-			w.WriteHeader(clientStatus)
-			w.Write([]byte(bodyRequiredTxt))
-		} else if errors.Is(err, ErrInvalidJSON) {
-			hasFormError = true
-			w.WriteHeader(clientStatus)
-			w.Write([]byte(invalidJSONTxt))
-		} else if errors.As(err, &valErr) {
-			hasFormError = true
-			jsonString, _ := json.Marshal(errors.Cause(err).(validation.Errors))
-			w.WriteHeader(clientStatus)
-			w.Write(jsonString)
-		}
-
-		if !hasFormError {
-			w.WriteHeader(*serverResp.HTTPStatus)
-			w.Write(serverResp.HTTPResponse)
-		}
-
+// isNilValue determines if passed value is truley nil
+func isNilValue(value interface{}) bool {
+	_, isNil := validation.Indirect(value)
+	if validation.IsEmpty(value) || isNil {
 		return true
 	}
 
 	return false
 }
+
+// //////////////////////////////////////////////////////////////////
+// //----------------------- FUNCTIONS -------------------------
+// //////////////////////////////////////////////////////////////////
 
 func FormHasErrorsL(
 	w http.ResponseWriter,

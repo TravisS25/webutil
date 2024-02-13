@@ -16,12 +16,6 @@ const (
 	invalidJSONTxt  = "Invalid json"
 	serverErrTxt    = "Server error, please try again later"
 
-	IDRegexStr   = "[0-9]+"
-	UUIDRegexStr = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
-
-	IDParam   = "{id:" + IDRegexStr + "}"
-	UUIDParam = "{id:" + UUIDRegexStr + "}"
-
 	// IntBase is default base to use for converting string to int64
 	IntBase = 10
 
@@ -61,13 +55,13 @@ type HTTPResponseConfig struct {
 
 // SetToken is wrapper function for setting csrf token header
 func SetToken(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(TokenHeader, csrf.Token(r))
+	w.Header().Set(TOKEN_HEADER, csrf.Token(r))
 }
 
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
 func SendPayload(w http.ResponseWriter, payload interface{}, errResp HTTPResponseConfig) error {
-	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Header().Set("Content-Type", JSON_CONTENT_HEADER)
 	SetHTTPResponseDefaults(&errResp, http.StatusInternalServerError, []byte(invalidJSONTxt))
 	jsonString, err := json.Marshal(payload)
 

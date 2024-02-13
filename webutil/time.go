@@ -31,7 +31,7 @@ func ConvertTimeToLocalDateTime(dateString, timezone string) (time.Time, error) 
 		return time.Time{}, pkgerrors.Wrap(err, "")
 	}
 
-	parsedTime, err := time.Parse(PostgresDateLayout, dateString)
+	parsedTime, err := time.Parse(POSTGRES_DATE_LAYOUT, dateString)
 
 	if err != nil {
 		return time.Time{}, pkgerrors.Wrap(err, "")
