@@ -13,14 +13,6 @@ import (
 	"github.com/TravisS25/webutil/webutil"
 )
 
-const (
-	ID_PARAM = "{id:[0-9]+}"
-)
-
-type ValidateResponseConfig struct {
-	ErrorResponses []int
-}
-
 // ValidateObjectSlice takes in a slice of maps, with a mapkey to then test against the expectedMap keys
 // which should be the value expected and the value of expectedMap should be unique name of value
 func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedMap map[interface{}]string) error {

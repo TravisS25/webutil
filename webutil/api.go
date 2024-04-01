@@ -8,31 +8,12 @@ import (
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
-	"github.com/pkg/errors"
 )
 
 const (
 	bodyRequiredTxt = "Request must have body"
 	invalidJSONTxt  = "Invalid json"
 	serverErrTxt    = "Server error, please try again later"
-
-	// IntBase is default base to use for converting string to int64
-	IntBase = 10
-
-	// IntBitSize is default bit size to use for converting string to int64
-	IntBitSize = 64
-)
-
-//////////////////////////////////////////////////////////////////
-//---------------------- CUSTOM ERRORS ------------------------
-//////////////////////////////////////////////////////////////////
-
-var (
-	// ErrBodyRequired is used for when a post/put request does not contain a body in request
-	ErrBodyRequired = errors.New("webutil: " + bodyRequiredTxt)
-
-	// ErrInvalidJSON is used when there is an error unmarshalling a struct
-	ErrInvalidJSON = errors.New("webutil: " + invalidJSONTxt)
 )
 
 //////////////////////////////////////////////////////////////////

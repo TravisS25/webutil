@@ -138,7 +138,7 @@ type Int64 int64
 
 // MarshalJSON takes int64 value and returns byte value
 func (i Int64) MarshalJSON() ([]byte, error) {
-	return json.Marshal(strconv.FormatInt(int64(i), IntBase))
+	return json.Marshal(strconv.FormatInt(int64(i), INT_BASE))
 }
 
 // UnmarshalJSON first tries to convert given bytes
@@ -157,7 +157,7 @@ func (i *Int64) UnmarshalJSON(b []byte) error {
 			return nil
 		}
 
-		value, err := strconv.ParseInt(s, IntBase, IntBitSize)
+		value, err := strconv.ParseInt(s, INT_BASE, INT_BIT_SIZE)
 		if err != nil {
 			return err
 		}
@@ -175,7 +175,7 @@ func (i Int64) Raw() int64 {
 }
 
 func (i Int64) String() string {
-	return strconv.FormatInt(int64(i), IntBase)
+	return strconv.FormatInt(int64(i), INT_BASE)
 }
 
 func (i *Int64) Scan(value interface{}) error {

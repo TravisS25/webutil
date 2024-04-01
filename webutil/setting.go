@@ -49,7 +49,6 @@ type DatabaseSetting struct {
 	DBType      string `yaml:"db_type" mapstructure:"db_type"`
 	DBName      string `yaml:"db_name" mapstructure:"db_name"`
 	SSLMode     string `yaml:"ssl_mode" mapstructure:"ssl_mode"`
-	SSL         bool   `yaml:"ssl" mapstructure:"ssl"`
 	SSLRootCert string `yaml:"ssl_root_cert" mapstructure:"ssl_root_cert"`
 	SSLKey      string `yaml:"ssl_key" mapstructure:"ssl_key"`
 	SSLCert     string `yaml:"ssl_cert" mapstructure:"ssl_cert"`

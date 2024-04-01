@@ -124,18 +124,18 @@ const (
 )
 
 //////////////////////////////////////////////////////////////////
-//---------------------- DATABASE TYPES ------------------------
+//---------------------- DRIVERS ------------------------
 //////////////////////////////////////////////////////////////////
 
 const (
-	// POSTGRES_DB_TYPE is protocol string for postgres database
-	POSTGRES_DB_TYPE = "postgres"
+	// POSTGRES_DRIVER is protocol string for postgres database
+	POSTGRES_DRIVER = "postgres"
 
-	// MYSQL_DB_TYPE is protocol string for mysql database
-	MYSQL_DB_TYPE = "mysql"
+	// MYSQL_DRIVER is protocol string for mysql database
+	MYSQL_DRIVER = "mysql"
 
-	// SQLITE_DB_TYPE is protocol string for sqlite database
-	SQLITE_DB_TYPE = "sqlite"
+	// SQLITE_DRIVER is protocol string for sqlite database
+	SQLITE_DRIVER = "sqlite"
 )
 
 //////////////////////////////////////////////////////////////////
@@ -201,5 +201,11 @@ const (
 
 const (
 	// DB_CONN_STR is default format for a connection string to a database
-	DB_CONN_STR = "%s://%s:%s@%s:%d/%s?ssl=%v&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s"
+	DB_CONN_STR = "%s://%s:%s@%s:%d/%s?&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s"
+
+	// INT_BASE is default base to use for converting string to int64
+	INT_BASE = 10
+
+	// INT_BIT_SIZE is default bit size to use for converting string to int64
+	INT_BIT_SIZE = 64
 )
