@@ -8,31 +8,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// SessionSetting is config struct for setting up session AuthEncryptionSetting
-// for redis server
-type SessionSetting struct {
-	SessionAuth `yaml:"auth_encryption_setting" mapstructure:"auth_encryption_setting"`
-	Size        int    `yaml:"size" mapstructure:"size"`
-	Network     string `yaml:"network" mapstructure:"network"`
-	Address     string `yaml:"address" mapstructure:"address"`
-	Password    string `yaml:"password" mapstructure:"password"`
-}
-
-// CacheSetting is config struct for setting up caching for
-// a redis server
-type CacheSetting struct {
-	Address  string `yaml:"address" mapstructure:"address"`
-	Password string `yaml:"password" mapstructure:"password"`
-	DB       int    `yaml:"db" mapstructure:"db"`
-}
-
-// FileSystemSetting is config struct for storing sessions
-// in the file system
-type FileSystemSetting struct {
-	SessionAuth `yaml:"auth_encryption_setting" mapstructure:"auth_encryption_setting"`
-	Dir         string `yaml:"dir" mapstructure:"dir"`
-}
-
 type BaseAuth struct {
 	User     string `yaml:"user" mapstructure:"user"`
 	Password string `yaml:"password" mapstructure:"password"`
@@ -52,6 +27,7 @@ type DatabaseSetting struct {
 	SSLRootCert string `yaml:"ssl_root_cert" mapstructure:"ssl_root_cert"`
 	SSLKey      string `yaml:"ssl_key" mapstructure:"ssl_key"`
 	SSLCert     string `yaml:"ssl_cert" mapstructure:"ssl_cert"`
+	SearchPath  string `yaml:"search_path" mapstructure:"search_path"`
 }
 
 // S3StorageSetting is setting for S3 backend
@@ -67,16 +43,23 @@ type SessionAuth struct {
 	EncryptKey string `mapstructure:"encrypt_key"`
 }
 
-func GetSettings(envString string, settings interface{}, opts ...viper.DecoderConfigOption) error {
+func SetConfigSettings(path string, settings interface{}, opts ...viper.DecoderConfigOption) error {
 	var err error
 
 	if reflect.ValueOf(settings).Type().Kind() != reflect.Ptr {
 		return fmt.Errorf("settings parameter must be pointer")
 	}
 
-	filePath := os.Getenv(envString)
+	var fp string
+
+	if os.Getenv(path) != "" {
+		fp = os.Getenv(path)
+	} else {
+		fp = path
+	}
+
 	v := viper.New()
-	v.SetConfigFile(filePath)
+	v.SetConfigFile(fp)
 
 	if err = v.ReadInConfig(); err != nil {
 		return err

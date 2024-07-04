@@ -201,7 +201,7 @@ const (
 
 const (
 	// DB_CONN_STR is default format for a connection string to a database
-	DB_CONN_STR = "%s://%s:%s@%s:%d/%s?&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s"
+	DB_CONN_STR = "%s://%s:%s@%s:%d/%s?&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s&search_path=%s"
 
 	// INT_BASE is default base to use for converting string to int64
 	INT_BASE = 10

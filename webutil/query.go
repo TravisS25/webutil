@@ -19,6 +19,9 @@ import (
 )
 
 var (
+	// When set, the final query of query builder function being executed will print to stdout
+	// This is to help visualize what the query builder is sending to database to troubleshoot
+	// any queries
 	DebugPrintQueryOutput = false
 )
 
@@ -193,6 +196,7 @@ func GetDSNConnStr(dbCfg DatabaseSetting) string {
 		dbCfg.SSLRootCert,
 		dbCfg.SSLKey,
 		dbCfg.SSLCert,
+		dbCfg.SearchPath,
 	)
 }
 
@@ -757,7 +761,6 @@ func GetQueryBuilder(
 
 		for _, filter := range filters {
 			var dbField FieldConfig
-			//var fieldType string
 			invalidFilterValue := ""
 
 			if dbField, ok = dbFields[filter.Field]; !ok {

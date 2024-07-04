@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-jet/jet/v2/qrm"
 	validation "github.com/go-ozzo/ozzo-validation"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 )
@@ -108,7 +108,6 @@ func (f FormCurrency) Validate() error {
 	}
 
 	if !currencyRegexp.MatchString(f.Decimal.String()) {
-		fmt.Printf("format: %s\n", f.Decimal.String())
 		return fmt.Errorf(INVALID_FORMAT_TXT)
 	}
 
@@ -699,6 +698,7 @@ func FormHasErrorsL(
 			w.WriteHeader(clientStatus)
 			w.Write([]byte(bodyRequiredTxt))
 		} else if errors.Is(err, ErrInvalidJSON) {
+			fmt.Printf("json error: %+v\n", err)
 			hasFormError = true
 			w.WriteHeader(clientStatus)
 			w.Write([]byte(invalidJSONTxt))
@@ -743,8 +743,7 @@ func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...s
 		dec := json.NewDecoder(req.Body)
 
 		if err := dec.Decode(&form); err != nil {
-			fmt.Printf("%s", err.Error())
-			return ErrInvalidJSON
+			return fmt.Errorf("webutil: json decode error: %s: %w", err.Error(), ErrInvalidJSON)
 		}
 	} else {
 		if !canSkip {
