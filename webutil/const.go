@@ -155,6 +155,9 @@ const (
 	// PDF_CONTENT_HEADER is key string for content type header "application/pdf"
 	PDF_CONTENT_HEADER = "application/pdf"
 
+	// ZIP_CONTENT_HEADER is key string for content type header "application/zip"
+	ZIP_CONTENT_HEADER = "application/zip"
+
 	// HTML_CONTENT_HEADER is key string for content type header "text/html; charset=utf-8"
 	HTML_CONTENT_HEADER = "text/html; charset=utf-8"
 

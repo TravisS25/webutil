@@ -198,6 +198,8 @@ func FormRequestBuilder(t TestLog, method, url string, form interface{}, ctxVals
 
 // ValidateFormError determines whether the error passed is a form error
 // and whether it returns the expected errors with the validatorMap parameter
+//
+// If no errors are expected, validatorMap parameter should be nil
 func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 	t.Helper()
 
@@ -235,7 +237,7 @@ func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 			for validatorKey, validatorVal := range validatorMap {
 				if errVal, ok := errFlatMap[validatorKey]; ok {
 					if errVal != validatorVal {
-						valueMisMatchStr += fmt.Sprintf("key: %s - expected: %s; got: %s\n", validatorKey, validatorVal, errVal)
+						valueMisMatchStr += fmt.Sprintf("(key: %s) expected: %s; got: %s\n", validatorKey, validatorVal, errVal)
 					}
 				} else {
 					expectedNotFoundStr += fmt.Sprintf("key: %s; value: %s\n", validatorKey, validatorVal)
@@ -251,13 +253,13 @@ func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 			errStr := ""
 
 			if expectedNotFoundStr != "" {
-				errStr += "\nThe following validator key/values were not found in err map:\n" + expectedNotFoundStr
+				errStr += "\nThe following key/values were given but not found:\n" + expectedNotFoundStr
 			}
 			if valueMisMatchStr != "" {
 				errStr += "\nThe following key/values don't match:\n" + valueMisMatchStr
 			}
 			if errNotFoundStr != "" {
-				errStr += "\nThe following err key/values were not found in validator map:\n" + errNotFoundStr
+				errStr += "\nThe following key/values were found but not expected:\n" + errNotFoundStr
 			}
 
 			if errStr != "" {

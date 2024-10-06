@@ -446,9 +446,9 @@ func Query(
 	args []interface{},
 	destPtr interface{},
 ) error {
-	destType := reflect.TypeOf(destPtr)
+	destVal := reflect.ValueOf(destPtr)
 
-	if destType.Kind() != reflect.Ptr {
+	if destVal.Kind() != reflect.Ptr {
 		return fmt.Errorf("webutil: destPtr parameter must be a pointer")
 	}
 
@@ -466,7 +466,7 @@ func Query(
 		return fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args)
 	}
 
-	switch destType.Elem().Kind() {
+	switch destVal.Elem().Kind() {
 	case reflect.Slice:
 		var data *[]map[string]interface{}
 		var ok bool
