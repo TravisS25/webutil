@@ -474,7 +474,7 @@ func Query(
 		if decoder == nil {
 			data, ok = destPtr.(*[]map[string]interface{})
 			if !ok {
-				return fmt.Errorf("destPtr parameter must be pointer of []map[string]interface{} if decoderFunc parameter is nil")
+				return fmt.Errorf("webutil: destPtr parameter must be pointer of []map[string]interface{} if decoderFunc parameter is nil")
 			}
 		}
 
@@ -510,7 +510,7 @@ func Query(
 		if decoder == nil {
 			data, ok = destPtr.(*map[string]interface{})
 			if !ok {
-				return fmt.Errorf("destPtr parameter must be pointer of map[string]interface{} if decoderFunc parameter is nil")
+				return fmt.Errorf("webutil: destPtr parameter must be pointer of map[string]interface{} if decoderFunc parameter is nil")
 			}
 		}
 
@@ -918,6 +918,8 @@ func GetQueryBuilder(
 		}
 
 		builder = builder.Limit(limit)
+	} else if cfg.Limit > 0 {
+		builder = builder.Limit(cfg.Limit)
 	}
 
 	if offsetParam != "" {

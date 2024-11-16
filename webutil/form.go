@@ -196,12 +196,12 @@ func (i *Int64) Scan(value interface{}) error {
 	return nil
 }
 
-func (i Int64) Value() (driver.Value, error) {
-	if i == 0 {
+func (i *Int64) Value() (driver.Value, error) {
+	if i == nil {
 		return nil, nil
 	}
 
-	return int64(i), nil
+	return int64(*i), nil
 }
 
 type validateRequiredRule struct {
