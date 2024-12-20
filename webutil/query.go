@@ -553,7 +553,7 @@ func QueryRows(ctx context.Context, db qrm.Queryable, bindType int, query string
 	return db.QueryContext(ctx, newQuery, newArgs...)
 }
 
-func QueryCount(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}, dest *int64) error {
+func QueryCount(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}, dest *uint64) error {
 	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
 	if err != nil {
 		return errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))

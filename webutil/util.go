@@ -28,10 +28,3 @@ func SetHTTPResponseDefaults(config *HTTPResponseConfig, defaultStatus int, defa
 		config.HTTPResponse = defaultResponse
 	}
 }
-
-// GetHTTPResponseDefaults is util function to get HTTPResponseConfig instance with values passed
-func GetHTTPResponseDefaults(defaultStatus int, defaultResponse []byte) HTTPResponseConfig {
-	res := HTTPResponseConfig{}
-	SetHTTPResponseDefaults(&res, defaultStatus, defaultResponse)
-	return res
-}

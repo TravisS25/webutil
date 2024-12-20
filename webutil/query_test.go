@@ -19,7 +19,6 @@ func TestGetQueryBuilder(t *testing.T) {
 	var jsonBytes []byte
 	var filters []Filter
 	var sorts []Order
-	//var newBuilder sq.SelectBuilder
 
 	cfg := QueryConfig{
 		FilterParam: "filters",
