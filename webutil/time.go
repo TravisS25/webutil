@@ -3,48 +3,50 @@ package webutil
 import (
 	"time"
 
-	pkgerrors "github.com/pkg/errors"
+	"github.com/pkg/errors"
 )
 
-func convertTimeToLocalDateTime(dateString, dateFormat, timezone string) (time.Time, error) {
-	location, err := time.LoadLocation(timezone)
-
+// ConvertToTimezone takes in date string along with timezone and returns
+// the same time clock but with given timezone, meaning that the time
+// actually changes since we keep the clock the same
+func ConvertToTimezone(dateFormat, dateString, timezone string, includeTime bool) (time.Time, error) {
+	loc, err := time.LoadLocation(timezone)
 	if err != nil {
-		return time.Time{}, pkgerrors.Wrap(err, "")
+		return time.Time{}, errors.Wrap(err, "")
 	}
 
-	parsedTime, err := time.Parse(dateFormat, dateString)
-
+	givenTime, err := time.Parse(dateFormat, dateString)
 	if err != nil {
-		return time.Time{}, pkgerrors.Wrap(err, "")
+		return time.Time{}, errors.Wrap(err, "")
 	}
 
-	return parsedTime.In(location), nil
-}
+	var newTime time.Time
 
-// ConvertTimeToLocalDateTime is used to convert the date string passed
-// to the local time zone passed and returns a time instance
-func ConvertTimeToLocalDateTime(dateString, timezone string) (time.Time, error) {
-	location, err := time.LoadLocation(timezone)
-
-	if err != nil {
-		return time.Time{}, pkgerrors.Wrap(err, "")
+	if includeTime {
+		newTime = time.Date(
+			givenTime.Year(),
+			givenTime.Month(),
+			givenTime.Day(),
+			givenTime.Hour(),
+			givenTime.Minute(),
+			givenTime.Second(),
+			givenTime.Nanosecond(),
+			loc,
+		)
+	} else {
+		newTime = time.Date(
+			givenTime.Year(),
+			givenTime.Month(),
+			givenTime.Day(),
+			0,
+			0,
+			0,
+			0,
+			loc,
+		)
 	}
 
-	parsedTime, err := time.Parse(POSTGRES_DATE_LAYOUT, dateString)
-
-	if err != nil {
-		return time.Time{}, pkgerrors.Wrap(err, "")
-	}
-
-	return parsedTime.In(location), nil
-}
-
-// ConvertTimeToLocalDateTimeF is used to convert the date string passed
-// to the local time zone passed along with date format that will be retrieved
-// from datasource and returns a time instance
-func ConvertTimeToLocalDateTimeF(dateString, dateFormat, timezone string) (time.Time, error) {
-	return convertTimeToLocalDateTime(dateString, dateFormat, timezone)
+	return newTime, nil
 }
 
 // GetCurrentLocalDateTimeInUTC will return the local date and time based on
@@ -64,13 +66,13 @@ func getUTC(timezone string, includeTime bool) (time.Time, error) {
 	location, err := time.LoadLocation(timezone)
 
 	if err != nil {
-		return time.Time{}, pkgerrors.Wrap(err, "")
+		return time.Time{}, errors.Wrap(err, "")
 	}
 
 	utc, err := time.LoadLocation("UTC")
 
 	if err != nil {
-		return time.Time{}, pkgerrors.Wrap(err, "")
+		return time.Time{}, errors.Wrap(err, "")
 	}
 
 	localTime := time.Now().In(location)
