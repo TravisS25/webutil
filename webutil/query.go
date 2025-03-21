@@ -31,7 +31,7 @@ var (
 
 type ColScanner interface {
 	Columns() ([]string, error)
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 	Err() error
 }
 
@@ -72,7 +72,7 @@ type QueryConfig struct {
 
 type DataInputParams struct {
 	QueryCfg   QueryConfig
-	CustomFunc func(map[string]interface{}) error
+	CustomFunc func(map[string]any) error
 }
 
 type CountInputParams struct {
@@ -86,8 +86,8 @@ type SelectItem struct {
 
 // FilteredResults is struct used for dynamically filtered results
 type FilteredResults struct {
-	Data  interface{} `json:"data"`
-	Total int         `json:"total"`
+	Data  any `json:"data"`
+	Total int `json:"total"`
 }
 
 type QueryBuilderError struct {
@@ -145,7 +145,7 @@ type FieldConfig struct {
 	DBField string
 
 	// ValueOverride should be used to override and return a different value for field
-	ValueOverride func(value interface{}) (interface{}, error)
+	ValueOverride func(value any) (any, error)
 
 	// OperationCfg is config to set to determine which sql
 	// operations can be performed on DBField
@@ -154,9 +154,9 @@ type FieldConfig struct {
 
 // Filter is the filter config struct for server side filtering
 type Filter struct {
-	Field    string      `json:"field"`
-	Operator string      `json:"operator"`
-	Value    interface{} `json:"value"`
+	Field    string `json:"field"`
+	Operator string `json:"operator"`
+	Value    any    `json:"value"`
 }
 
 // Sort is the sort config struct for server side sorting
@@ -182,30 +182,12 @@ type LimitOffset struct {
 // --------------------- FUNCTIONS ---------------------
 ////////////////////////////////////////////////////////////
 
-// GetDSNConnStr returns dns connection strings based on settings passed
-func GetDSNConnStr(dbCfg DatabaseSetting) string {
-	return fmt.Sprintf(
-		DB_CONN_STR,
-		dbCfg.DBType,
-		dbCfg.User,
-		dbCfg.Password,
-		dbCfg.Host,
-		dbCfg.Port,
-		dbCfg.DBName,
-		dbCfg.SSLMode,
-		dbCfg.SSLRootCert,
-		dbCfg.SSLKey,
-		dbCfg.SSLCert,
-		dbCfg.SearchPath,
-	)
-}
-
-func In(query string, args ...interface{}) (string, []interface{}, error) {
+func In(query string, args ...any) (string, []any, error) {
 	// argMeta stores reflect.Value and length for slices and
 	// the value itself for non-slice arguments
 	type argMeta struct {
 		v      reflect.Value
-		i      interface{}
+		i      any
 		length int
 	}
 
@@ -252,7 +234,7 @@ func In(query string, args ...interface{}) (string, []interface{}, error) {
 		return query, args, nil
 	}
 
-	newArgs := make([]interface{}, 0, flatArgsCount)
+	newArgs := make([]any, 0, flatArgsCount)
 
 	var buf strings.Builder
 	buf.Grow(len(query) + len(", ?")*flatArgsCount)
@@ -336,7 +318,7 @@ func Rebind(bindType int, query string) string {
 	return string(append(rqb, query...))
 }
 
-func InQueryRebind(bindType int, query string, args ...interface{}) (string, []interface{}, error) {
+func InQueryRebind(bindType int, query string, args ...any) (string, []any, error) {
 	query, args, err := In(query, args...)
 	if err != nil {
 		return query, args, err
@@ -346,7 +328,7 @@ func InQueryRebind(bindType int, query string, args ...interface{}) (string, []i
 	return query, args, nil
 }
 
-func MapScanner(r ColScanner, dest map[string]interface{}) error {
+func MapScanner(r ColScanner, dest map[string]any) error {
 	columns, values, err := scanColVals(r)
 
 	if err != nil {
@@ -354,18 +336,18 @@ func MapScanner(r ColScanner, dest map[string]interface{}) error {
 	}
 
 	// getInnerMap takes in colMap and colWords and gets the inner most map and returns it
-	getInnerMap := func(colMap map[string]interface{}, colWords []string) map[string]interface{} {
+	getInnerMap := func(colMap map[string]any, colWords []string) map[string]any {
 		if len(colWords) == 0 {
 			return nil
 		}
 
-		var innerMap map[string]interface{}
+		var innerMap map[string]any
 
 		for i := 0; i < len(colWords); i++ {
 			if i == 0 {
-				innerMap = colMap[colWords[i]].(map[string]interface{})
+				innerMap = colMap[colWords[i]].(map[string]any)
 			} else {
-				innerMap = innerMap[colWords[i]].(map[string]interface{})
+				innerMap = innerMap[colWords[i]].(map[string]any)
 			}
 		}
 
@@ -380,20 +362,20 @@ func MapScanner(r ColScanner, dest map[string]interface{}) error {
 				innerMap := getInnerMap(dest, colWords[:idx])
 
 				if innerMap == nil {
-					dest[colWords[idx]] = *(values[i].(*interface{}))
+					dest[colWords[idx]] = *(values[i].(*any))
 				} else {
-					innerMap[colWords[idx]] = *(values[i].(*interface{}))
+					innerMap[colWords[idx]] = *(values[i].(*any))
 				}
 			} else {
 				innerMap := getInnerMap(dest, colWords[:idx])
 
 				if innerMap == nil {
 					if _, ok := dest[colWords[idx]]; !ok {
-						dest[colWords[idx]] = make(map[string]interface{})
+						dest[colWords[idx]] = make(map[string]any)
 					}
 				} else {
 					if _, ok := innerMap[colWords[idx]]; !ok {
-						innerMap[colWords[idx]] = make(map[string]interface{})
+						innerMap[colWords[idx]] = make(map[string]any)
 					}
 				}
 			}
@@ -407,10 +389,10 @@ func MapScanner(r ColScanner, dest map[string]interface{}) error {
 // --------------------- QUERY FUNCTIONS ----------------
 ////////////////////////////////////////////////////////////
 
-func QuerySingleColumn(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}, destPtr interface{}) error {
-	data, ok := destPtr.(*[]interface{})
+func QuerySingleColumn(ctx context.Context, db qrm.Queryable, bindType int, query string, args []any, destPtr any) error {
+	data, ok := destPtr.(*[]any)
 	if !ok {
-		return fmt.Errorf("destPtr parameter must be pointer of []interface{}")
+		return fmt.Errorf("destPtr parameter must be pointer of []any")
 	}
 
 	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
@@ -425,7 +407,7 @@ func QuerySingleColumn(ctx context.Context, db qrm.Queryable, bindType int, quer
 	defer rows.Close()
 
 	for rows.Next() {
-		var id interface{}
+		var id any
 
 		if err = rows.Scan(&id); err != nil {
 			return err
@@ -439,12 +421,12 @@ func QuerySingleColumn(ctx context.Context, db qrm.Queryable, bindType int, quer
 
 func Query(
 	ctx context.Context,
-	decoderFunc func(dest interface{}) *mapstructure.DecoderConfig,
+	decoderFunc func(dest any) *mapstructure.DecoderConfig,
 	db qrm.Queryable,
 	bindType int,
 	query string,
-	args []interface{},
-	destPtr interface{},
+	args []any,
+	destPtr any,
 ) error {
 	destVal := reflect.ValueOf(destPtr)
 
@@ -468,13 +450,13 @@ func Query(
 
 	switch destVal.Elem().Kind() {
 	case reflect.Slice:
-		var data *[]map[string]interface{}
+		var data *[]map[string]any
 		var ok bool
 
 		if decoder == nil {
-			data, ok = destPtr.(*[]map[string]interface{})
+			data, ok = destPtr.(*[]map[string]any)
 			if !ok {
-				return fmt.Errorf("webutil: destPtr parameter must be pointer of []map[string]interface{} if decoderFunc parameter is nil")
+				return fmt.Errorf("webutil: destPtr parameter must be *[]map[string]any if decoderFunc parameter is nil")
 			}
 		}
 
@@ -484,10 +466,10 @@ func Query(
 		}
 		defer rows.Close()
 
-		list := []map[string]interface{}{}
+		list := []map[string]any{}
 
 		for rows.Next() {
-			row := map[string]interface{}{}
+			row := map[string]any{}
 
 			if err = MapScanner(rows, row); err != nil {
 				return errors.WithStack(err)
@@ -504,13 +486,13 @@ func Query(
 			*data = list
 		}
 	case reflect.Struct, reflect.Map:
-		var data *map[string]interface{}
+		var data *map[string]any
 		var ok bool
 
 		if decoder == nil {
-			data, ok = destPtr.(*map[string]interface{})
+			data, ok = destPtr.(*map[string]any)
 			if !ok {
-				return fmt.Errorf("webutil: destPtr parameter must be pointer of map[string]interface{} if decoderFunc parameter is nil")
+				return fmt.Errorf("webutil: destPtr parameter must be *map[string]any if decoderFunc parameter is nil")
 			}
 		}
 
@@ -521,7 +503,7 @@ func Query(
 		defer rows.Close()
 
 		if rows.Next() {
-			dest := map[string]interface{}{}
+			dest := map[string]any{}
 
 			if err = MapScanner(rows, dest); err != nil {
 				return fmt.Errorf("webutil: error trying to scan row %s", err)
@@ -544,7 +526,220 @@ func Query(
 	return nil
 }
 
-func QueryRows(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}) (*sql.Rows, error) {
+func QueryF(
+	ctx context.Context,
+	decoderFunc func(dest any) *mapstructure.DecoderConfig,
+	rowUpdate func(row *map[string]any) error,
+	db qrm.Queryable,
+	bindType int,
+	query string,
+	args []any,
+	destPtr any,
+) error {
+	destVal := reflect.ValueOf(destPtr)
+
+	if destVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("webutil: destPtr parameter must be a pointer")
+	}
+
+	var decoder *mapstructure.Decoder
+	var err error
+
+	if decoderFunc != nil {
+		if decoder, err = mapstructure.NewDecoder(decoderFunc(destPtr)); err != nil {
+			return fmt.Errorf("webutil: error trying to create decoder: %s", err)
+		}
+	}
+
+	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
+	if err != nil {
+		return fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args)
+	}
+
+	switch destVal.Elem().Kind() {
+	case reflect.Slice:
+		var data *[]map[string]any
+		var ok bool
+
+		if decoder == nil {
+			data, ok = destPtr.(*[]map[string]any)
+			if !ok {
+				return fmt.Errorf("webutil: destPtr parameter must be *[]map[string]any if decoderFunc parameter is nil")
+			}
+		}
+
+		rows, err := db.QueryContext(ctx, newQuery, newArgs...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		list := []map[string]any{}
+
+		for rows.Next() {
+			row := map[string]any{}
+
+			if err = MapScanner(rows, row); err != nil {
+				return errors.WithStack(err)
+			}
+
+			if rowUpdate != nil {
+				if err = rowUpdate(&row); err != nil {
+					return err
+				}
+			}
+
+			list = append(list, row)
+		}
+
+		if decoder != nil {
+			if err = decoder.Decode(list); err != nil {
+				return fmt.Errorf("webutil: error trying to decode into slice: %s", err)
+			}
+		} else {
+			*data = list
+		}
+	case reflect.Struct, reflect.Map:
+		var data *map[string]any
+		var ok bool
+
+		if decoder == nil {
+			data, ok = destPtr.(*map[string]any)
+			if !ok {
+				return fmt.Errorf("webutil: destPtr parameter must be *map[string]any if decoderFunc parameter is nil")
+			}
+		}
+
+		rows, err := db.QueryContext(ctx, newQuery, newArgs...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		if rows.Next() {
+			dest := map[string]any{}
+
+			if err = MapScanner(rows, dest); err != nil {
+				return fmt.Errorf("webutil: error trying to scan row %s", err)
+			}
+
+			if rowUpdate != nil {
+				if err = rowUpdate(&dest); err != nil {
+					return err
+				}
+			}
+
+			if decoder != nil {
+				if err = decoder.Decode(dest); err != nil {
+					return fmt.Errorf("webutil: error trying to decode into slice: %s", err)
+				}
+			} else {
+				*data = dest
+			}
+		} else {
+			return sql.ErrNoRows
+		}
+	default:
+		return fmt.Errorf("webutil: destination has to be a pointer to slice or pointer to struct")
+	}
+
+	return nil
+}
+
+func QueryDB(
+	ctx context.Context,
+	db qrm.Queryable,
+	bindType int,
+	query string,
+	args []any,
+	rowUpdate func(row any) error,
+	destPtr any,
+) error {
+	var err error
+
+	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
+	if err != nil {
+		return fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args)
+	}
+
+	destVal := reflect.ValueOf(destPtr)
+
+	rows, err := db.QueryContext(ctx, newQuery, newArgs...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return fmt.Errorf("webutil: error getting number of columns: %w", err)
+	}
+
+	var box any
+	isArr := false
+
+	if destVal.Elem().Kind() == reflect.Slice {
+		box = make([]any, 0)
+		isArr = true
+	}
+
+	hasRow := false
+
+	for rows.Next() {
+		var row any
+		hasRow = true
+
+		if len(cols) > 1 {
+			val := make(map[string]any)
+
+			if err = MapScanner(rows, val); err != nil {
+				return errors.WithStack(err)
+			}
+
+			if rowUpdate != nil {
+				if err = rowUpdate(&val); err != nil {
+					return err
+				}
+			}
+
+			row = val
+		} else {
+			if err = rows.Scan(&row); err != nil {
+				return errors.WithStack(err)
+			}
+
+			if rowUpdate != nil {
+				if err = rowUpdate(&row); err != nil {
+					return err
+				}
+			}
+		}
+
+		if isArr {
+			box = append(box.([]any), row)
+		} else {
+			box = row
+			break
+		}
+	}
+
+	if !isArr && !hasRow {
+		return sql.ErrNoRows
+	}
+
+	jsonBytes, err := json.Marshal(box)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err = json.Unmarshal(jsonBytes, destPtr); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
+func QueryRows(ctx context.Context, db qrm.Queryable, bindType int, query string, args []any) (*sql.Rows, error) {
 	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
 	if err != nil {
 		return nil, errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
@@ -553,7 +748,7 @@ func QueryRows(ctx context.Context, db qrm.Queryable, bindType int, query string
 	return db.QueryContext(ctx, newQuery, newArgs...)
 }
 
-func QueryCount(ctx context.Context, db qrm.Queryable, bindType int, query string, args []interface{}, dest *uint64) error {
+func QueryCount(ctx context.Context, db qrm.Queryable, bindType int, query string, args []any, dest *uint64) error {
 	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
 	if err != nil {
 		return errors.WithStack(fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args))
@@ -585,12 +780,12 @@ func QueryDataResult(
 	dbFields DbFields,
 	db qrm.Queryable,
 	bindVar int,
-	dest interface{},
+	dest any,
 	params DataInputParams,
 ) error {
-	data, ok := dest.(*[]map[string]interface{})
+	data, ok := dest.(*[]map[string]any)
 	if !ok {
-		return fmt.Errorf("dest parameter must pointer to []map[string]interface{}; got %s", reflect.TypeOf(dest))
+		return fmt.Errorf("dest parameter must pointer to []map[string]any; got %s", reflect.TypeOf(dest))
 	}
 
 	var err error
@@ -610,7 +805,7 @@ func QueryDataResult(
 	}
 
 	for rows.Next() {
-		row := map[string]interface{}{}
+		row := map[string]any{}
 
 		if err = MapScanner(rows, row); err != nil {
 			return errors.WithStack(err)
@@ -635,7 +830,7 @@ func QueryCountResult(
 	dbFields DbFields,
 	db qrm.Queryable,
 	bindVar int,
-	dest interface{},
+	dest any,
 	params CountInputParams,
 ) error {
 	count, ok := dest.(*uint64)
@@ -676,7 +871,7 @@ func QueryDataAndCountResults(
 	dbFields DbFields,
 	db qrm.Queryable,
 	bindVar int,
-	dataDest interface{},
+	dataDest any,
 	countDest *uint64,
 	dataParams DataInputParams,
 	countParams CountInputParams,
@@ -718,7 +913,7 @@ func GetInnerBuilderResults(
 	dbFields DbFields,
 	defaultOrderBy string,
 	queryCfg QueryConfig,
-) (string, []interface{}, error) {
+) (string, []any, error) {
 	innerDataBuilder, err := GetQueryBuilder(
 		r,
 		builder,
@@ -813,7 +1008,7 @@ func GetQueryBuilder(
 					dbField.DBField: fmt.Sprintf("%%%v%%", fieldValue),
 				})
 			case "doesnotcontain":
-				builder = builder.Where(sq.ILike{
+				builder = builder.Where(sq.NotILike{
 					dbField.DBField: fmt.Sprintf("%%%v%%", fieldValue),
 				})
 			case "isnull":
@@ -945,25 +1140,25 @@ func GetQueryBuilder(
 	return builder, nil
 }
 
-func scanColVals(r ColScanner) ([]string, []interface{}, error) {
+func scanColVals(r ColScanner) ([]string, []any, error) {
 	// ignore r.started, since we needn't use reflect for anything.
 	columns, err := r.Columns()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	values := make([]interface{}, len(columns))
+	values := make([]any, len(columns))
 	for i := range values {
-		values[i] = new(interface{})
+		values[i] = new(any)
 	}
 
 	err = r.Scan(values...)
 	return columns, values, err
 }
 
-func appendReflectSlice(args []interface{}, v reflect.Value, vlen int) []interface{} {
+func appendReflectSlice(args []any, v reflect.Value, vlen int) []any {
 	switch val := v.Interface().(type) {
-	case []interface{}:
+	case []any:
 		args = append(args, val...)
 	case []int:
 		for i := range val {
@@ -982,7 +1177,7 @@ func appendReflectSlice(args []interface{}, v reflect.Value, vlen int) []interfa
 	return args
 }
 
-func asSliceForIn(i interface{}) (v reflect.Value, ok bool) {
+func asSliceForIn(i any) (v reflect.Value, ok bool) {
 	if i == nil {
 		return reflect.Value{}, false
 	}
@@ -1015,7 +1210,7 @@ func deref(t reflect.Type) reflect.Type {
 func getRowsFromBuilder(ctx context.Context, builder sq.SelectBuilder, db qrm.Queryable, bindVar int) (*sql.Rows, error) {
 	var query string
 	var err error
-	var args []interface{}
+	var args []any
 
 	if query, args, err = builder.ToSql(); err != nil {
 		return nil, errors.WithStack(err)

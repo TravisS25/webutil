@@ -9,13 +9,8 @@ import (
 // ConvertToTimezone takes in date string along with timezone and returns
 // the same time clock but with given timezone, meaning that the time
 // actually changes since we keep the clock the same
-func ConvertToTimezone(dateFormat, dateString, timezone string, includeTime bool) (time.Time, error) {
+func ConvertToTimezone(value time.Time, timezone string, includeTime bool) (time.Time, error) {
 	loc, err := time.LoadLocation(timezone)
-	if err != nil {
-		return time.Time{}, errors.Wrap(err, "")
-	}
-
-	givenTime, err := time.Parse(dateFormat, dateString)
 	if err != nil {
 		return time.Time{}, errors.Wrap(err, "")
 	}
@@ -24,20 +19,20 @@ func ConvertToTimezone(dateFormat, dateString, timezone string, includeTime bool
 
 	if includeTime {
 		newTime = time.Date(
-			givenTime.Year(),
-			givenTime.Month(),
-			givenTime.Day(),
-			givenTime.Hour(),
-			givenTime.Minute(),
-			givenTime.Second(),
-			givenTime.Nanosecond(),
+			value.Year(),
+			value.Month(),
+			value.Day(),
+			value.Hour(),
+			value.Minute(),
+			value.Second(),
+			value.Nanosecond(),
 			loc,
 		)
 	} else {
 		newTime = time.Date(
-			givenTime.Year(),
-			givenTime.Month(),
-			givenTime.Day(),
+			value.Year(),
+			value.Month(),
+			value.Day(),
 			0,
 			0,
 			0,

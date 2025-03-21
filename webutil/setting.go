@@ -30,6 +30,23 @@ type DatabaseSetting struct {
 	SearchPath  string `yaml:"search_path" mapstructure:"search_path"`
 }
 
+func (d DatabaseSetting) String() string {
+	return fmt.Sprintf(
+		DB_CONN_STR,
+		d.DBType,
+		d.User,
+		d.Password,
+		d.Host,
+		d.Port,
+		d.DBName,
+		d.SSLMode,
+		d.SSLRootCert,
+		d.SSLKey,
+		d.SSLCert,
+		d.SearchPath,
+	)
+}
+
 // S3StorageSetting is setting for S3 backend
 type S3StorageSetting struct {
 	EndPoint        string `yaml:"end_point" mapstructure:"end_point"`
@@ -43,7 +60,7 @@ type SessionAuth struct {
 	EncryptKey string `mapstructure:"encrypt_key"`
 }
 
-func SetConfigSettings(path string, settings interface{}, opts ...viper.DecoderConfigOption) error {
+func SetConfigSettings(path string, settings any, opts ...viper.DecoderConfigOption) error {
 	var err error
 
 	if reflect.ValueOf(settings).Type().Kind() != reflect.Ptr {

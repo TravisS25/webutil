@@ -25,31 +25,31 @@ import (
 // 	} else if err.Error() != "'expectedMap' or 'data' parameters can not be nil" {
 // 		t.Errorf(
 // 			"error should be %s; got %s\n",
-// 			"values are not type 'map[string]interface{}' within 'data' parameter",
+// 			"values are not type 'map[string]any' within 'data' parameter",
 // 			err.Error(),
 // 		)
 // 	}
 
-// 	invalidSlice := []interface{}{"1"}
+// 	invalidSlice := []any{"1"}
 
-// 	if err = ValidateObjectSlice(mockTestLog, invalidSlice, "invalid", map[interface{}]string{}); err == nil {
+// 	if err = ValidateObjectSlice(mockTestLog, invalidSlice, "invalid", map[any]string{}); err == nil {
 // 		t.Errorf("should have error")
-// 	} else if err.Error() != "values are not type 'map[string]interface{}' within 'data' parameter" {
+// 	} else if err.Error() != "values are not type 'map[string]any' within 'data' parameter" {
 // 		t.Errorf(
 // 			"error should be %s; got %s\n",
-// 			"values are not type 'map[string]interface{}' within 'data' parameter",
+// 			"values are not type 'map[string]any' within 'data' parameter",
 // 			err.Error(),
 // 		)
 // 	}
 
 // 	idKey := "id"
 
-// 	mapSlice := make([]interface{}, 0)
-// 	mapSlice = append(mapSlice, map[string]interface{}{
+// 	mapSlice := make([]any, 0)
+// 	mapSlice = append(mapSlice, map[string]any{
 // 		idKey: "1",
 // 	})
 
-// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, "invalid", map[interface{}]string{}); err == nil {
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, "invalid", map[any]string{}); err == nil {
 // 		t.Errorf("should have error")
 // 	} else if err.Error() != "passed 'mapkey' parameter value not found in object" {
 // 		t.Errorf(
@@ -59,25 +59,25 @@ import (
 // 		)
 // 	}
 
-// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[any]string{
 // 		"1": "message",
 // 	}); err != nil {
 // 		t.Errorf("should not have error; got %s\n", err.Error())
 // 	}
 
 // 	mapSlice = nil
-// 	mapSlice = make([]interface{}, 0)
+// 	mapSlice = make([]any, 0)
 // 	mapSlice = append(
 // 		mapSlice,
-// 		map[string]interface{}{
+// 		map[string]any{
 // 			idKey: "1",
 // 		},
-// 		map[string]interface{}{
+// 		map[string]any{
 // 			idKey: "2",
 // 		},
 // 	)
 
-// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[any]string{
 // 		"1": "message",
 // 	}); err == nil {
 // 		t.Errorf("should have error")
@@ -86,15 +86,15 @@ import (
 // 	}
 
 // 	mapSlice = nil
-// 	mapSlice = make([]interface{}, 0)
+// 	mapSlice = make([]any, 0)
 // 	mapSlice = append(
 // 		mapSlice,
-// 		map[string]interface{}{
+// 		map[string]any{
 // 			idKey: "1",
 // 		},
 // 	)
 
-// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[interface{}]string{
+// 	if err = ValidateObjectSlice(mockTestLog, mapSlice, idKey, map[any]string{
 // 		"1": "message",
 // 		"2": "message",
 // 	}); err == nil {
@@ -133,7 +133,7 @@ func TestLoginUser(t *testing.T) {
 
 	// ---------------------------------------------------------------------
 
-	if _, err = LoginUser(mockClient, loginURL, map[string]interface{}{}); err == nil {
+	if _, err = LoginUser(mockClient, loginURL, map[string]any{}); err == nil {
 		t.Errorf("should have error")
 	} else if !errors.Is(err, resErr) {
 		t.Errorf("should have err: %s; got %s\n", resErr.Error(), err.Error())
@@ -149,7 +149,7 @@ func TestLoginUser(t *testing.T) {
 		nil,
 	).Once()
 
-	if _, err = LoginUser(mockClient, loginURL, map[string]interface{}{}); err == nil {
+	if _, err = LoginUser(mockClient, loginURL, map[string]any{}); err == nil {
 		t.Errorf("should have error")
 	} else if !strings.Contains(err.Error(), "status code") {
 		t.Errorf("should have substr err: 'status code'; got %s\n", err.Error())
@@ -171,7 +171,7 @@ func TestLoginUser(t *testing.T) {
 		nil,
 	).Once()
 
-	if _, err = LoginUser(mockClient, loginURL, map[string]interface{}{}); err == nil {
+	if _, err = LoginUser(mockClient, loginURL, map[string]any{}); err == nil {
 		t.Errorf("should have error")
 	} else if !strings.Contains(err.Error(), "status code") {
 		t.Errorf("should have substr err: 'status code'; got %s\n", err.Error())
@@ -179,7 +179,7 @@ func TestLoginUser(t *testing.T) {
 
 	// ---------------------------------------------------------------------
 
-	if _, err = LoginUser(http.DefaultClient, ts.URL+loginURL, map[string]interface{}{}); err != nil {
+	if _, err = LoginUser(http.DefaultClient, ts.URL+loginURL, map[string]any{}); err != nil {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
@@ -198,7 +198,7 @@ func TestLoginUser(t *testing.T) {
 		nil,
 	).Once()
 
-	if _, err = LoginUser(mockClient, loginURL, map[string]interface{}{}); err == nil {
+	if _, err = LoginUser(mockClient, loginURL, map[string]any{}); err == nil {
 		t.Errorf("should have error")
 	} else if !strings.Contains(err.Error(), "webutiltest") {
 		t.Errorf("should have no cookie error; got %s\n", err.Error())

@@ -6,7 +6,7 @@ package webutil
 
 // InsertAt is util function to insert passed value into passed slice
 // at passed index
-func InsertAt(slice []interface{}, val interface{}, idx int) []interface{} {
+func InsertAt(slice []any, val any, idx int) []any {
 	if len(slice) == 0 {
 		slice = append(slice, val)
 	} else {

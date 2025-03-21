@@ -15,7 +15,7 @@ import (
 
 // ValidateObjectSlice takes in a slice of maps, with a mapkey to then test against the expectedMap keys
 // which should be the value expected and the value of expectedMap should be unique name of value
-func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedMap map[interface{}]string) error {
+func ValidateObjectSlice(t TestLog, data []any, mapKey string, expectedMap map[any]string) error {
 	t.Helper()
 
 	var errStr string
@@ -26,18 +26,18 @@ func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedM
 		return errors.New(errStr)
 	}
 
-	unexpectedVals := make([]interface{}, 0)
-	newExpectedMap := make(map[interface{}]string)
+	unexpectedVals := make([]any, 0)
+	newExpectedMap := make(map[any]string)
 
 	for k, v := range expectedMap {
 		newExpectedMap[k] = v
 	}
 
 	for _, val := range data {
-		entry, ok := val.(map[string]interface{})
+		entry, ok := val.(map[string]any)
 
 		if !ok {
-			errStr = "values are not type 'map[string]interface{}' within 'data' parameter"
+			errStr = "values are not type 'map[string]any' within 'data' parameter"
 			t.Errorf(errStr)
 			return errors.New(errStr)
 		}
@@ -81,7 +81,7 @@ func ValidateObjectSlice(t TestLog, data []interface{}, mapKey string, expectedM
 
 // LoginUser takes email and password along with login url and form information
 // to use to make a POST request to login url and if successful, returns user cookie
-func LoginUser(client HTTPClient, url string, loginForm interface{}) (string, error) {
+func LoginUser(client HTTPClient, url string, loginForm any) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 
 	if err != nil {

@@ -10,8 +10,8 @@ type MockTestLog struct {
 }
 
 // Errorf provides a mock function with given fields: format, args
-func (_m *MockTestLog) Errorf(format string, args ...interface{}) {
-	var _ca []interface{}
+func (_m *MockTestLog) Errorf(format string, args ...any) {
+	var _ca []any
 	_ca = append(_ca, format)
 	_ca = append(_ca, args...)
 	_m.Called(_ca...)

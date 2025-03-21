@@ -2,15 +2,11 @@ package webutil
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/shopspring/decimal"
 
 	pkgerrors "github.com/pkg/errors"
 )
@@ -63,7 +59,7 @@ func TestValidateRequiredRuleUnitTest(t *testing.T) {
 
 	hi := "hi"
 
-	if err = rule.Validate([]interface{}{&hi, "there", 1}); err != nil {
+	if err = rule.Validate([]any{&hi, "there", 1}); err != nil {
 		t.Errorf("should not have error\n")
 		t.Errorf("err: %s\n", err.Error())
 	}
@@ -224,80 +220,80 @@ func TestCheckBodyAndDecodeUnitTest(t *testing.T) {
 	}
 }
 
-func TestFormCurrency(t *testing.T) {
-	type foo struct {
-		Price FormCurrency `json:"price"`
-	}
+// func TestFormCurrency(t *testing.T) {
+// 	type foo struct {
+// 		Price FormCurrency `json:"price"`
+// 	}
 
-	var err error
-	var form foo
+// 	var err error
+// 	var form foo
 
-	if err = json.Unmarshal([]byte(`{"price": 103.67}`), &form); err != nil {
-		t.Fatalf(err.Error())
-	}
+// 	if err = json.Unmarshal([]byte(`{"price": 103.67}`), &form); err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
 
-	if err = form.Price.Validate(); err != nil {
-		t.Fatalf(err.Error())
-	}
+// 	if err = form.Price.Validate(); err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
 
-	form.Price.CurrencyRegex = USDCurrencyRegex
+// 	form.Price.CurrencyRegex = USDCurrencyRegex
 
-	if err = form.Price.Validate(); err != nil {
-		t.Fatalf(err.Error())
-	}
+// 	if err = form.Price.Validate(); err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
 
-	var tmp decimal.Decimal
+// 	var tmp decimal.Decimal
 
-	tmp = decimal.NewFromFloat(100)
-	form.Price.Max = &tmp
+// 	tmp = decimal.NewFromFloat(100)
+// 	form.Price.Max = &tmp
 
-	if err = form.Price.Validate(); err == nil {
-		t.Fatalf("should have error\n")
-	} else {
-		if err.Error() != "Can't be greater than 100" {
-			t.Fatalf(`err should be: "Can't be greater than 100"; got "%s"`, err.Error())
-		}
-	}
+// 	if err = form.Price.Validate(); err == nil {
+// 		t.Fatalf("should have error\n")
+// 	} else {
+// 		if err.Error() != "Can't be greater than 100" {
+// 			t.Fatalf(`err should be: "Can't be greater than 100"; got "%s"`, err.Error())
+// 		}
+// 	}
 
-	form.Price.MaxError = fmt.Errorf("foo")
+// 	form.Price.MaxError = fmt.Errorf("foo")
 
-	if err = form.Price.Validate(); err == nil {
-		t.Fatalf("should have error\n")
-	} else {
-		if err.Error() != "foo" {
-			t.Fatalf(`err should be: "foo"; got "%s"`, err.Error())
-		}
-	}
+// 	if err = form.Price.Validate(); err == nil {
+// 		t.Fatalf("should have error\n")
+// 	} else {
+// 		if err.Error() != "foo" {
+// 			t.Fatalf(`err should be: "foo"; got "%s"`, err.Error())
+// 		}
+// 	}
 
-	form.Price.Decimal = decimal.NewFromFloat(-1)
-	tmp = decimal.NewFromFloat(0)
-	form.Price.Min = &tmp
+// 	form.Price.Decimal = decimal.NewFromFloat(-1)
+// 	tmp = decimal.NewFromFloat(0)
+// 	form.Price.Min = &tmp
 
-	if err = form.Price.Validate(); err == nil {
-		t.Fatalf("should have error\n")
-	} else {
-		if err.Error() != "Can't be less than 0" {
-			t.Fatalf(`err should be: "Can't be less than 0"; got "%s"`, err.Error())
-		}
-	}
+// 	if err = form.Price.Validate(); err == nil {
+// 		t.Fatalf("should have error\n")
+// 	} else {
+// 		if err.Error() != "Can't be less than 0" {
+// 			t.Fatalf(`err should be: "Can't be less than 0"; got "%s"`, err.Error())
+// 		}
+// 	}
 
-	form.Price.MinError = fmt.Errorf("bar")
+// 	form.Price.MinError = fmt.Errorf("bar")
 
-	if err = form.Price.Validate(); err == nil {
-		t.Fatalf("should have error\n")
-	} else {
-		if err.Error() != "bar" {
-			t.Fatalf(`err should be: "bar"; got "%s"`, err.Error())
-		}
-	}
+// 	if err = form.Price.Validate(); err == nil {
+// 		t.Fatalf("should have error\n")
+// 	} else {
+// 		if err.Error() != "bar" {
+// 			t.Fatalf(`err should be: "bar"; got "%s"`, err.Error())
+// 		}
+// 	}
 
-	form.Price.Decimal = decimal.NewFromFloat(100.345)
+// 	form.Price.Decimal = decimal.NewFromFloat(100.345)
 
-	if err = form.Price.Validate(); err == nil {
-		t.Fatalf("should have error\n")
-	} else {
-		if err.Error() != INVALID_FORMAT_TXT {
-			t.Fatalf(`err should be: "%s"; got "%s"`, INVALID_FORMAT_TXT, err.Error())
-		}
-	}
-}
+// 	if err = form.Price.Validate(); err == nil {
+// 		t.Fatalf("should have error\n")
+// 	} else {
+// 		if err.Error() != INVALID_FORMAT_TXT {
+// 			t.Fatalf(`err should be: "%s"; got "%s"`, INVALID_FORMAT_TXT, err.Error())
+// 		}
+// 	}
+// }

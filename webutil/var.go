@@ -74,7 +74,7 @@ var (
 	FormDateTimeRegex = regexp.MustCompile("^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4} [0-9]{1,2}:[0-9]{2} (?i)(AM|PM)$")
 
 	// USDCurrencyRegex represents usd currency format to validate for form
-	USDCurrencyRegex = regexp.MustCompile(`^(?:-)?[0-9]+(?:\\.[0-9]{1,2})?$`)
+	USDCurrencyRegex = regexp.MustCompile(`^[0-9]+.[0-9]{2}$`)
 )
 
 //////////////////////////////////////////////////////////////////

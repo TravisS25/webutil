@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -57,13 +56,7 @@ type FormCurrency struct {
 	// This will be used in FormCurrency#Validate function
 	//
 	// Default: USDCurrencyRegex
-	CurrencyRegex *regexp.Regexp `json:"-"`
-
-	// AllowNegative allows decimal number to be negative
-	// This will be used in FormCurrency#Validate function
-	//
-	// Default: false
-	// AllowNegative bool `json:"-"`
+	//CurrencyRegex *regexp.Regexp `json:"-"`
 
 	// Min is the lowest number decimal allowed
 	//
@@ -99,18 +92,6 @@ func (f FormCurrency) MarshalJSON() ([]byte, error) {
 }
 
 func (f FormCurrency) Validate() error {
-	var currencyRegexp *regexp.Regexp
-
-	if f.CurrencyRegex == nil {
-		currencyRegexp = USDCurrencyRegex
-	} else {
-		currencyRegexp = f.CurrencyRegex
-	}
-
-	if !currencyRegexp.MatchString(f.Decimal.String()) {
-		return fmt.Errorf(INVALID_FORMAT_TXT)
-	}
-
 	if f.Min != nil && f.Decimal.LessThan(*f.Min) {
 		if f.MinError != nil {
 			return f.MinError
@@ -177,7 +158,7 @@ func (i Int64) String() string {
 	return strconv.FormatInt(int64(i), INT_BASE)
 }
 
-func (i *Int64) Scan(value interface{}) error {
+func (i *Int64) Scan(value any) error {
 	switch val := value.(type) {
 	case string:
 		num, err := strconv.ParseInt(val, 10, 64)
@@ -204,11 +185,20 @@ func (i *Int64) Value() (driver.Value, error) {
 	return int64(*i), nil
 }
 
+func (i *Int64) UnmarshalText(text []byte) error {
+	val, err := strconv.ParseInt(string(text), INT_BASE, INT_BIT_SIZE)
+	if err != nil {
+		return fmt.Errorf("failed to parse Int64: %w", err)
+	}
+	*i = Int64(val)
+	return nil
+}
+
 type validateRequiredRule struct {
 	err error
 }
 
-func (v *validateRequiredRule) Validate(value interface{}) error {
+func (v *validateRequiredRule) Validate(value any) error {
 	var err error
 
 	checkStrValue := func(val string) error {
@@ -349,6 +339,24 @@ func (f *FormValidation) ValidateDate(
 	}
 }
 
+// func (f *FormValidation) ValidateDateV2(
+// 	dateFormat,
+// 	timezone string,
+// 	compareTime,
+// 	canBeFuture,
+// 	canBePast bool,
+// ) *validateDateRuleV2 {
+// 	return &validateDateRuleV2{
+// 		validateDateRule: validateDateRule{
+// 			dateFormat:  dateFormat,
+// 			timezone:    timezone,
+// 			compareTime: compareTime,
+// 			canBeFuture: canBeFuture,
+// 			canBePast:   canBePast,
+// 		},
+// 	}
+// }
+
 // ValidateArgs determines whether validated field(s) exists in
 // database or cache if set
 // The same number of validated fields must be returned from
@@ -363,7 +371,7 @@ func (f *FormValidation) ValidateDate(
 func (f *FormValidation) ValidateArgs(
 	placeHolderIdx int,
 	query string,
-	args ...interface{},
+	args ...any,
 ) *validateArgsRule {
 	return &validateArgsRule{
 		validator: &validator{
@@ -380,10 +388,10 @@ func (f *FormValidation) ValidateArgs(
 // ValidateUniqueness determines whether validated field is unique
 // within database or cache if set
 func (f *FormValidation) ValidateUniqueness(
-	instanceValue interface{},
+	instanceValue any,
 	placeHolderIdx int,
 	query string,
-	args ...interface{},
+	args ...any,
 ) *validateUniquenessRule {
 	return &validateUniquenessRule{
 		instanceValue: instanceValue,
@@ -404,7 +412,7 @@ func (f *FormValidation) ValidateUniqueness(
 func (f *FormValidation) ValidateExists(
 	placeHolderIdx int,
 	query string,
-	args ...interface{},
+	args ...any,
 ) *validateExistsRule {
 	return &validateExistsRule{
 		validator: &validator{
@@ -440,7 +448,7 @@ func (f *FormValidation) SetConfig(config FormValidationConfig) {
 
 type validator struct {
 	queryable      qrm.Queryable
-	args           []interface{}
+	args           []any
 	query          string
 	bindVar        int
 	placeHolderIdx int
@@ -455,7 +463,65 @@ type validateDateRule struct {
 	err         error
 }
 
-func (v *validateDateRule) Validate(value interface{}) error {
+// func (v *validateDateRule) Validate(value any) error {
+// 	var currentTime, dateTime time.Time
+// 	var err error
+
+// 	if isNilValue(value) {
+// 		return nil
+// 	}
+
+// 	if v.timezone != "" {
+// 		if v.compareTime {
+// 			currentTime, err = GetCurrentLocalDateTimeInUTC(v.timezone)
+// 		} else {
+// 			currentTime, err = GetCurrentLocalDateInUTC(v.timezone)
+// 		}
+
+// 		if err != nil {
+// 			return validation.NewInternalError(err)
+// 		}
+// 	} else {
+// 		if v.compareTime {
+// 			currentTime, err = GetCurrentLocalDateTimeInUTC("UTC")
+// 		} else {
+// 			currentTime, err = GetCurrentLocalDateInUTC("UTC")
+// 		}
+
+// 		litter.Dump(currentTime.String())
+
+// 		if err != nil {
+// 			return validation.NewInternalError(err)
+// 		}
+// 	}
+
+// 	switch val := value.(type) {
+// 	case time.Time:
+// 		dateTime = val
+// 	case *time.Time:
+// 		dateTime = *val
+// 	default:
+// 		return errors.New("Must be time.Time or *time.Time type")
+// 	}
+
+// 	if v.canBeFuture && v.canBePast {
+// 		err = nil
+// 	} else if v.canBeFuture {
+// 		if dateTime.Before(currentTime) {
+// 			err = errors.New(INVALID_PAST_DATE_TXT)
+// 		}
+// 	} else if v.canBePast {
+// 		if dateTime.After(currentTime) {
+// 			err = errors.New(INVALID_FUTURE_DATE_TXT)
+// 		}
+// 	} else {
+// 		err = validation.NewInternalError(errFutureAndPastDateInternal)
+// 	}
+
+// 	return err
+// }
+
+func (v *validateDateRule) Validate(value any) error {
 	var currentTime, dateTime time.Time
 	var err error
 
@@ -463,26 +529,13 @@ func (v *validateDateRule) Validate(value interface{}) error {
 		return nil
 	}
 
-	if v.timezone != "" {
-		if v.compareTime {
-			currentTime, err = GetCurrentLocalDateTimeInUTC(v.timezone)
-		} else {
-			currentTime, err = GetCurrentLocalDateInUTC(v.timezone)
-		}
+	tz := v.timezone
+	if tz == "" {
+		tz = "UTC"
+	}
 
-		if err != nil {
-			return validation.NewInternalError(err)
-		}
-	} else {
-		if v.compareTime {
-			currentTime, err = GetCurrentLocalDateTimeInUTC("UTC")
-		} else {
-			currentTime, err = GetCurrentLocalDateInUTC("UTC")
-		}
-
-		if err != nil {
-			return validation.NewInternalError(err)
-		}
+	if currentTime, err = ConvertToTimezone(time.Now(), tz, v.compareTime); err != nil {
+		return err
 	}
 
 	switch val := value.(type) {
@@ -492,6 +545,10 @@ func (v *validateDateRule) Validate(value interface{}) error {
 		dateTime = *val
 	default:
 		return errors.New("Must be time.Time or *time.Time type")
+	}
+
+	if dateTime, err = ConvertToTimezone(dateTime, tz, v.compareTime); err != nil {
+		return err
 	}
 
 	if v.canBeFuture && v.canBePast {
@@ -521,7 +578,7 @@ type validRule struct {
 	err     error
 }
 
-func (v *validRule) Validate(value interface{}) error {
+func (v *validRule) Validate(value any) error {
 	if !v.isValid {
 		return v.err
 	}
@@ -539,7 +596,7 @@ type validateExistsRule struct {
 	*validator
 }
 
-func (v *validateExistsRule) Validate(value interface{}) error {
+func (v *validateExistsRule) Validate(value any) error {
 	return validatorRules(v.validator, value, validateExistsType)
 }
 
@@ -550,10 +607,10 @@ func (v *validateExistsRule) Error(message string) *validateExistsRule {
 
 type validateUniquenessRule struct {
 	*validator
-	instanceValue interface{}
+	instanceValue any
 }
 
-func (v *validateUniquenessRule) Validate(value interface{}) error {
+func (v *validateUniquenessRule) Validate(value any) error {
 	if v.instanceValue != nil {
 		if reflect.TypeOf(value) != reflect.TypeOf(v.instanceValue) {
 			return fmt.Errorf(
@@ -580,7 +637,7 @@ type validateArgsRule struct {
 	*validator
 }
 
-func (v *validateArgsRule) Validate(value interface{}) error {
+func (v *validateArgsRule) Validate(value any) error {
 	return validatorRules(v.validator, value, validateArgsType)
 }
 
@@ -589,22 +646,22 @@ func (v *validateArgsRule) Error(message string) *validateArgsRule {
 	return v
 }
 
-func validatorRules(v *validator, value interface{}, validateType int) error {
+func validatorRules(v *validator, value any, validateType int) error {
 	if isNilValue(value) {
 		return nil
 	}
 
 	var err error
 	var expectedLen int
-	var tmpVal interface{}
-	var args []interface{}
+	var tmpVal any
+	var args []any
 
 	switch reflect.TypeOf(value).Kind() {
 	case reflect.Slice:
 		s := reflect.ValueOf(value)
 		expectedLen = s.Len()
 
-		var searchVals []interface{}
+		var searchVals []any
 
 		for k := 0; k < s.Len(); k++ {
 			i := s.Index(k).Interface()
@@ -623,7 +680,7 @@ func validatorRules(v *validator, value interface{}, validateType int) error {
 		expectedLen = 1
 	}
 
-	args = make([]interface{}, 0, len(v.args)+1)
+	args = make([]any, 0, len(v.args)+1)
 	args = append(args, v.args...)
 
 	if v.placeHolderIdx > -1 {
@@ -666,7 +723,7 @@ func validatorRules(v *validator, value interface{}, validateType int) error {
 }
 
 // isNilValue determines if passed value is truley nil
-func isNilValue(value interface{}) bool {
+func isNilValue(value any) bool {
 	_, isNil := validation.Indirect(value)
 	if validation.IsEmpty(value) || isNil {
 		return true
@@ -729,7 +786,7 @@ func FormHasErrorsL(
 //
 // The excludeMethods parameter allows user to pass certain http methods
 // that skip decoding the request body if nil else will throw ErrBodyRequired error
-func CheckBodyAndDecode(req *http.Request, form interface{}, excludeMethods ...string) error {
+func CheckBodyAndDecode(req *http.Request, form any, excludeMethods ...string) error {
 	canSkip := false
 
 	for _, v := range excludeMethods {
