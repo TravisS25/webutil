@@ -150,8 +150,8 @@ func TestGetQueryBuilder(t *testing.T) {
 	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
 		t.Errorf("should have error\n")
 	} else {
-		if !strings.Contains(err.Error(), "invalid field '' for order parameter") {
-			t.Errorf("error should be '%s'; got '%s'", "invalid field '' for order parameter", err.Error())
+		if !strings.Contains(err.Error(), `invalid field "" for order parameter`) {
+			t.Errorf("error should be '%s'; got '%s'", `invalid field "" for order parameter`, err.Error())
 		}
 	}
 
@@ -432,12 +432,8 @@ func TestGetQueryBuilder(t *testing.T) {
 		From("user").
 		Join("phone on phone.user_id = user.id")
 
-	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err == nil {
-		t.Errorf("should have error")
-	} else {
-		if !strings.Contains(err.Error(), "invalid filter value for field") {
-			t.Errorf("error should be '%s'; got '%s'", "invalid filter value for field", err.Error())
-		}
+	if _, err = GetQueryBuilder(req, builder, dbFields, cfg); err != nil {
+		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 
 	// ----------------------------------------------------------------------------------

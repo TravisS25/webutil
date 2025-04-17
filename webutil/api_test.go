@@ -5,17 +5,17 @@ import (
 	"testing"
 )
 
-const (
-	cookieName   = "user"
-	statusErrTxt = "Status should be %d; got %d"
-)
+// const (
+// 	cookieName   = "user"
+// 	statusErrTxt = "Status should be %d; got %d"
+// )
 
-var (
-	keyPairs = [][]byte{
-		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
-		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
-	}
-)
+// var (
+// 	keyPairs = [][]byte{
+// 		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
+// 		[]byte("fF832S1flhmd6fdl5BgmbkskghmawQP3"),
+// 	}
+// )
 
 // func getMockSession(cookieName string) *sessions.Session {
 // 	mockSession := &MockSessionStore{}

@@ -463,64 +463,6 @@ type validateDateRule struct {
 	err         error
 }
 
-// func (v *validateDateRule) Validate(value any) error {
-// 	var currentTime, dateTime time.Time
-// 	var err error
-
-// 	if isNilValue(value) {
-// 		return nil
-// 	}
-
-// 	if v.timezone != "" {
-// 		if v.compareTime {
-// 			currentTime, err = GetCurrentLocalDateTimeInUTC(v.timezone)
-// 		} else {
-// 			currentTime, err = GetCurrentLocalDateInUTC(v.timezone)
-// 		}
-
-// 		if err != nil {
-// 			return validation.NewInternalError(err)
-// 		}
-// 	} else {
-// 		if v.compareTime {
-// 			currentTime, err = GetCurrentLocalDateTimeInUTC("UTC")
-// 		} else {
-// 			currentTime, err = GetCurrentLocalDateInUTC("UTC")
-// 		}
-
-// 		litter.Dump(currentTime.String())
-
-// 		if err != nil {
-// 			return validation.NewInternalError(err)
-// 		}
-// 	}
-
-// 	switch val := value.(type) {
-// 	case time.Time:
-// 		dateTime = val
-// 	case *time.Time:
-// 		dateTime = *val
-// 	default:
-// 		return errors.New("Must be time.Time or *time.Time type")
-// 	}
-
-// 	if v.canBeFuture && v.canBePast {
-// 		err = nil
-// 	} else if v.canBeFuture {
-// 		if dateTime.Before(currentTime) {
-// 			err = errors.New(INVALID_PAST_DATE_TXT)
-// 		}
-// 	} else if v.canBePast {
-// 		if dateTime.After(currentTime) {
-// 			err = errors.New(INVALID_FUTURE_DATE_TXT)
-// 		}
-// 	} else {
-// 		err = validation.NewInternalError(errFutureAndPastDateInternal)
-// 	}
-
-// 	return err
-// }
-
 func (v *validateDateRule) Validate(value any) error {
 	var currentTime, dateTime time.Time
 	var err error
@@ -736,51 +678,6 @@ func isNilValue(value any) bool {
 // //----------------------- FUNCTIONS -------------------------
 // //////////////////////////////////////////////////////////////////
 
-func FormHasErrorsL(
-	w http.ResponseWriter,
-	err error,
-	logFunc func(err error),
-	clientStatus int,
-	serverResp HTTPResponseConfig,
-) bool {
-	if err != nil {
-		SetHTTPResponseDefaults(&serverResp, http.StatusInternalServerError, []byte(serverErrTxt))
-
-		hasFormError := false
-
-		var valErr validation.Errors
-
-		if errors.Is(err, ErrBodyRequired) {
-			hasFormError = true
-			w.WriteHeader(clientStatus)
-			w.Write([]byte(bodyRequiredTxt))
-		} else if errors.Is(err, ErrInvalidJSON) {
-			fmt.Printf("json error: %+v\n", err)
-			hasFormError = true
-			w.WriteHeader(clientStatus)
-			w.Write([]byte(invalidJSONTxt))
-		} else if errors.As(err, &valErr) {
-			hasFormError = true
-			jsonString, _ := json.Marshal(errors.Cause(err).(validation.Errors))
-			w.WriteHeader(clientStatus)
-			w.Write(jsonString)
-		}
-
-		if !hasFormError {
-			w.WriteHeader(*serverResp.HTTPStatus)
-			w.Write(serverResp.HTTPResponse)
-		}
-
-		if logFunc != nil {
-			logFunc(err)
-		}
-
-		return true
-	}
-
-	return false
-}
-
 // CheckBodyAndDecode takes request and decodes the json body from the request
 // to the passed struct
 //
@@ -800,7 +697,7 @@ func CheckBodyAndDecode(req *http.Request, form any, excludeMethods ...string) e
 		dec := json.NewDecoder(req.Body)
 
 		if err := dec.Decode(&form); err != nil {
-			return fmt.Errorf("webutil: json decode error: %s: %w", err.Error(), ErrInvalidJSON)
+			return fmt.Errorf("%w: %s", err, ErrInvalidJSON)
 		}
 	} else {
 		if !canSkip {

@@ -13,31 +13,6 @@ import (
 //////////////////////////////////////////////////////////////////
 
 var (
-	// ErrEmptyConfigList is error returned when trying to recover
-	// from database error and there is no backup configs set up
-	ErrEmptyConfigList = errors.New("webutil: empty config list")
-
-	// ErrNoConnection is error returned when there is no
-	// connection to database available
-	ErrNoConnection = errors.New("webutil: connection could not be established")
-
-	// ErrInvalidDBType is error returned when trying to pass an invalid
-	// database type string to function
-	ErrInvalidDBType = errors.New("webutil: invalid database type")
-
-	// ErrInvalidSort is error returned if client tries
-	// to pass filter parameter that is not sortable
-	ErrInvalidSort = errors.New("webutil: invalid sort")
-
-	// ErrInvalidArray is error returned if client tries
-	// to pass array parameter that is invalid array type
-	ErrInvalidArray = errors.New("webutil: invalid array for field")
-
-	// ErrInvalidValue is error returned if client tries
-	// to pass filter parameter that had invalid field
-	// value for certain field
-	ErrInvalidValue = errors.New("webutil: invalid field value")
-
 	// ErrBodyRequired is used for when a post/put request does not contain a body in request
 	ErrBodyRequired = errors.New("webutil: " + bodyRequiredTxt)
 
