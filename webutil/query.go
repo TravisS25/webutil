@@ -404,8 +404,6 @@ func QueryDB(
 		return fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args)
 	}
 
-	destVal := reflect.ValueOf(destPtr)
-
 	rows, err := db.QueryContext(ctx, newQuery, newArgs...)
 	if err != nil {
 		return err
@@ -420,7 +418,9 @@ func QueryDB(
 	var box any
 	isArr := false
 
-	if destVal.Elem().Kind() == reflect.Slice {
+	destVal := reflect.ValueOf(destPtr)
+
+	if destVal.IsValid() && destVal.Elem().Kind() == reflect.Slice {
 		box = make([]any, 0)
 		isArr = true
 	}
@@ -465,7 +465,7 @@ func QueryDB(
 		}
 	}
 
-	if !isArr && !hasRow {
+	if !isArr && !hasRow && destVal.IsValid() {
 		return sql.ErrNoRows
 	}
 
@@ -474,8 +474,10 @@ func QueryDB(
 		return errors.WithStack(err)
 	}
 
-	if err = json.Unmarshal(jsonBytes, destPtr); err != nil {
-		return errors.WithStack(err)
+	if destVal.IsValid() {
+		if err = json.Unmarshal(jsonBytes, destPtr); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	return nil
@@ -641,6 +643,32 @@ func GetInnerBuilderResults(
 	}
 
 	return innerDataBuilder.ToSql()
+}
+
+func GetOrderByResults(
+	r *http.Request,
+	builder sq.SelectBuilder,
+	dbFields DbFields,
+	orderByParam,
+	defaultOrderBy string,
+) (string, []any, error) {
+	orderDataBuilder, err := GetQueryBuilder(
+		r,
+		builder,
+		dbFields,
+		QueryConfig{
+			OrderParam: orderByParam,
+		},
+	)
+	if err != nil {
+		return "", nil, errors.WithStack(err)
+	}
+
+	if defaultOrderBy != "" && r.FormValue(orderByParam) == "" {
+		orderDataBuilder = orderDataBuilder.OrderBy(defaultOrderBy)
+	}
+
+	return orderDataBuilder.ToSql()
 }
 
 func GetQueryBuilder(
