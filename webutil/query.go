@@ -410,105 +410,31 @@ func QueryDB(
 	}
 	defer rows.Close()
 
-	cols, err := rows.Columns()
-	if err != nil {
-		return fmt.Errorf("webutil: error getting number of columns: %w", err)
-	}
-
-	var box any
-	isArr := false
-
-	destVal := reflect.ValueOf(destPtr)
-
-	if destVal.IsValid() && destVal.Elem().Kind() == reflect.Slice {
-		box = make([]any, 0)
-		isArr = true
-	}
-
-	hasRow := false
-
-	for rows.Next() {
-		var row any
-		hasRow = true
-
-		if len(cols) > 1 {
-			val := make(map[string]any)
-
-			if err = MapScanner(rows, val); err != nil {
-				return errors.WithStack(err)
-			}
-
-			if rowUpdate != nil {
-				if err = rowUpdate(&val); err != nil {
-					return err
-				}
-			}
-
-			row = val
-		} else {
-			if err = rows.Scan(&row); err != nil {
-				return errors.WithStack(err)
-			}
-
-			if rowUpdate != nil {
-				if err = rowUpdate(&row); err != nil {
-					return err
-				}
-			}
-		}
-
-		if isArr {
-			box = append(box.([]any), row)
-		} else {
-			box = row
-			break
-		}
-	}
-
-	if !isArr && !hasRow && destVal.IsValid() {
-		return sql.ErrNoRows
-	}
-
-	jsonBytes, err := json.Marshal(box)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	if destVal.IsValid() {
-		if err = json.Unmarshal(jsonBytes, destPtr); err != nil {
-			return errors.WithStack(err)
-		}
-	}
-
-	return nil
+	return setRowResults(rows, rowUpdate, destPtr)
 }
 
 ////////////////////////////////////////////////////////////
 // --------------------- BUILDER FUNCTIONS ---------------
 ////////////////////////////////////////////////////////////
 
-func QueryDataResult(
+func QuerySelectBuilder(
 	ctx context.Context,
 	req *http.Request,
 	builder sq.SelectBuilder,
 	dbFields DbFields,
 	db qrm.Queryable,
 	bindVar int,
-	dest any,
-	params DataInputParams,
+	queryCfg QueryConfig,
+	rowUpdate func(row any) error,
+	destPtr any,
 ) error {
-	data, ok := dest.(*[]map[string]any)
-	if !ok {
-		return fmt.Errorf("dest parameter must pointer to []map[string]any; got %s", reflect.TypeOf(dest))
-	}
-
 	var err error
 
 	if builder, err = GetQueryBuilder(
 		req,
 		builder,
 		dbFields,
-		params.QueryCfg,
+		queryCfg,
 	); err != nil {
 		return errors.WithStack(err)
 	}
@@ -518,63 +444,7 @@ func QueryDataResult(
 		return err
 	}
 
-	for rows.Next() {
-		row := map[string]any{}
-
-		if err = MapScanner(rows, row); err != nil {
-			return errors.WithStack(err)
-		}
-
-		if params.CustomFunc != nil {
-			if err = params.CustomFunc(row); err != nil {
-				return errors.WithStack(err)
-			}
-		}
-
-		*data = append(*data, row)
-	}
-
-	return nil
-}
-
-func QueryCountResult(
-	ctx context.Context,
-	req *http.Request,
-	builder sq.SelectBuilder,
-	dbFields DbFields,
-	db qrm.Queryable,
-	bindVar int,
-	dest any,
-	params CountInputParams,
-) error {
-	count, ok := dest.(*uint64)
-	if !ok {
-		return fmt.Errorf("dest parameter must pointer to uint64; got %s", reflect.TypeOf(dest))
-	}
-
-	var err error
-
-	if builder, err = GetQueryBuilder(
-		req,
-		builder,
-		dbFields,
-		params.QueryCfg,
-	); err != nil {
-		return errors.WithStack(err)
-	}
-
-	rows, err := getRowsFromBuilder(ctx, builder, db, bindVar)
-	if err != nil {
-		return err
-	}
-
-	for rows.Next() {
-		if err = rows.Scan(count); err != nil {
-			return errors.WithStack(err)
-		}
-	}
-
-	return nil
+	return setRowResults(rows, rowUpdate, destPtr)
 }
 
 func QueryDataAndCountResults(
@@ -585,64 +455,43 @@ func QueryDataAndCountResults(
 	dbFields DbFields,
 	db qrm.Queryable,
 	bindVar int,
+	dataQueryCfg QueryConfig,
+	countQueryCfg QueryConfig,
+	rowUpdate func(row any) error,
 	dataDest any,
 	countDest *uint64,
-	dataParams DataInputParams,
-	countParams CountInputParams,
 ) error {
-	err := QueryDataResult(
+	err := QuerySelectBuilder(
 		ctx,
 		req,
 		dataBuilder,
 		dbFields,
 		db,
 		bindVar,
+		dataQueryCfg,
+		rowUpdate,
 		dataDest,
-		dataParams,
 	)
 	if err != nil {
 		return err
 	}
 
-	err = QueryCountResult(
+	err = QuerySelectBuilder(
 		ctx,
 		req,
 		countBuilder,
 		dbFields,
 		db,
 		bindVar,
+		countQueryCfg,
+		nil,
 		countDest,
-		countParams,
 	)
 	if err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func GetInnerBuilderResults(
-	r *http.Request,
-	builder sq.SelectBuilder,
-	dbFields DbFields,
-	defaultOrderBy string,
-	queryCfg QueryConfig,
-) (string, []any, error) {
-	innerDataBuilder, err := GetQueryBuilder(
-		r,
-		builder,
-		dbFields,
-		queryCfg,
-	)
-	if err != nil {
-		return "", nil, errors.WithStack(err)
-	}
-
-	if defaultOrderBy != "" && r.FormValue(queryCfg.OrderParam) == "" {
-		innerDataBuilder = innerDataBuilder.OrderBy(defaultOrderBy)
-	}
-
-	return innerDataBuilder.ToSql()
 }
 
 func GetOrderByResults(
@@ -974,4 +823,78 @@ func getRowsFromBuilder(ctx context.Context, builder sq.SelectBuilder, db qrm.Qu
 	}
 
 	return rows, nil
+}
+
+func setRowResults(rows *sql.Rows, rowUpdate func(row any) error, destPtr any) error {
+	var box any
+	isArr := false
+
+	destVal := reflect.ValueOf(destPtr)
+
+	if destVal.IsValid() && destVal.Elem().Kind() == reflect.Slice {
+		box = make([]any, 0)
+		isArr = true
+	}
+
+	hasRow := false
+	cols, err := rows.Columns()
+	if err != nil {
+		return fmt.Errorf("webutil: error getting number of columns: %w", err)
+	}
+
+	for rows.Next() {
+		var row any
+		var err error
+		hasRow = true
+
+		if len(cols) > 1 {
+			val := make(map[string]any)
+
+			if err = MapScanner(rows, val); err != nil {
+				return errors.WithStack(err)
+			}
+
+			if rowUpdate != nil {
+				if err = rowUpdate(&val); err != nil {
+					return errors.WithStack(err)
+				}
+			}
+
+			row = val
+		} else {
+			if err = rows.Scan(&row); err != nil {
+				return errors.WithStack(err)
+			}
+
+			if rowUpdate != nil {
+				if err = rowUpdate(&row); err != nil {
+					return errors.WithStack(err)
+				}
+			}
+		}
+
+		if isArr {
+			box = append(box.([]any), row)
+		} else {
+			box = row
+			break
+		}
+	}
+
+	if !isArr && !hasRow && destVal.IsValid() {
+		return errors.WithStack(sql.ErrNoRows)
+	}
+
+	jsonBytes, err := json.Marshal(box)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if destVal.IsValid() {
+		if err = json.Unmarshal(jsonBytes, destPtr); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return nil
 }

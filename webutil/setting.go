@@ -2,8 +2,11 @@ package webutil
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -45,6 +48,41 @@ func (d DatabaseSetting) String() string {
 		d.SSLCert,
 		d.SearchPath,
 	)
+}
+
+func (d *DatabaseSetting) ParseConnStr(connStr string) error {
+	dbURL, err := url.Parse(connStr)
+	if err != nil {
+		return err
+	}
+
+	var port int
+
+	if dbURL.Port() != "" {
+		port, _ = strconv.Atoi(dbURL.Port())
+	}
+
+	var dbName string
+
+	paths := strings.Split(dbURL.Path, "/")
+
+	if len(paths) > 0 {
+		dbName = paths[0]
+	}
+
+	d.User = dbURL.User.Username()
+	d.Password, _ = dbURL.User.Password()
+	d.Host = dbURL.Host
+	d.Port = port
+	d.DBType = dbURL.Scheme
+	d.DBName = dbName
+	d.SSLMode = dbURL.Query().Get("ssl_mode")
+	d.SSLRootCert = dbURL.Query().Get("ssl_root_cert")
+	d.SSLKey = dbURL.Query().Get("ssl_key")
+	d.SSLCert = dbURL.Query().Get("ssl_cert")
+	d.SearchPath = dbURL.Query().Get("search_path")
+
+	return nil
 }
 
 // S3StorageSetting is setting for S3 backend

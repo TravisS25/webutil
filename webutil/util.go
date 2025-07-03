@@ -1,5 +1,7 @@
 package webutil
 
+import "github.com/google/uuid"
+
 //////////////////////////////////////////////////////////////////
 //------------------------ FUNCTIONS --------------------------
 //////////////////////////////////////////////////////////////////
@@ -27,4 +29,13 @@ func SetHTTPResponseDefaults(config *HTTPResponseConfig, defaultStatus int, defa
 	if config.HTTPResponse == nil {
 		config.HTTPResponse = defaultResponse
 	}
+}
+
+// NewV7UUID is wrapper for uuid.NewV7()
+func NewV7UUID() uuid.UUID {
+	return uuid.Must(uuid.NewV7())
+}
+
+func NewV7UUIDString() string {
+	return uuid.Must(uuid.NewV7()).String()
 }

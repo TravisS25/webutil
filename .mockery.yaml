@@ -1,0 +1,11 @@
+quiet: False
+keeptree: True
+disable-version-string: True
+with-expecter: True
+recursive: True
+outpkg: mocks
+dir: mocks
+packages:
+  github.com/TravisS25/webutil/webutil:
+    config:
+      all: True
