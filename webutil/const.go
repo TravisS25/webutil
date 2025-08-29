@@ -51,32 +51,32 @@ const (
 
 const (
 	// REQUIRED_TXT is string const error when field is required
-	REQUIRED_TXT = "Required"
+	REQUIRED_TXT = "required"
 
 	// ALREADY_EXISTS_TXT is string const error when field already exists
 	// in database or cache
-	ALREADY_EXISTS_TXT = "Already exists"
+	ALREADY_EXISTS_TXT = "already exists"
 
 	// DOES_NOT_EXIST_TXT is string const error when field does not exist
 	// in database or cache
-	DOES_NOT_EXIST_TXT = "Does not exist"
+	DOES_NOT_EXIST_TXT = "does not exist"
 
 	// INVALID_TXT is string const error when field is invalid
-	INVALID_TXT = "Invalid"
+	INVALID_TXT = "invalid"
 
 	// INVALID_FORMAT_TXT is string const error when field has invalid format
-	INVALID_FORMAT_TXT = "Invalid format"
+	INVALID_FORMAT_TXT = "invalid format"
 
 	// INVALID_FUTURE_DATE_TXT is sring const when field is not allowed
 	// to be in the future
-	INVALID_FUTURE_DATE_TXT = "Date can't be after current date/time"
+	INVALID_FUTURE_DATE_TXT = "date can't be after current date/time"
 
 	// INVALID_PAST_DATE_TXT is sring const when field is not allowed
 	// to be in the past
-	INVALID_PAST_DATE_TXT = "Date can't be before current date/time"
+	INVALID_PAST_DATE_TXT = "date can't be before current date/time"
 
 	// CANT_BE_NEGATIVE_TXT is sring const when field can't be negative
-	CANT_BE_NEGATIVE_TXT = "Can't be negative"
+	CANT_BE_NEGATIVE_TXT = "can't be negative"
 )
 
 //////////////////////////////////////////////////////////////////

@@ -339,24 +339,6 @@ func (f *FormValidation) ValidateDate(
 	}
 }
 
-// func (f *FormValidation) ValidateDateV2(
-// 	dateFormat,
-// 	timezone string,
-// 	compareTime,
-// 	canBeFuture,
-// 	canBePast bool,
-// ) *validateDateRuleV2 {
-// 	return &validateDateRuleV2{
-// 		validateDateRule: validateDateRule{
-// 			dateFormat:  dateFormat,
-// 			timezone:    timezone,
-// 			compareTime: compareTime,
-// 			canBeFuture: canBeFuture,
-// 			canBePast:   canBePast,
-// 		},
-// 	}
-// }
-
 // ValidateArgs determines whether validated field(s) exists in
 // database or cache if set
 // The same number of validated fields must be returned from

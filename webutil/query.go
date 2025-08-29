@@ -881,7 +881,7 @@ func setRowResults(rows *sql.Rows, rowUpdate func(row any) error, destPtr any) e
 		}
 	}
 
-	if !isArr && !hasRow && destVal.IsValid() {
+	if !isArr && !hasRow {
 		return errors.WithStack(sql.ErrNoRows)
 	}
 

@@ -158,7 +158,7 @@ func ValidateFormError(t TestLog, err error, validatorMap map[string]string) {
 		//
 		// Else simply return err
 		if errors.As(err, &valErr) {
-			errBytes, err := err.(validation.Errors).MarshalJSON()
+			errBytes, err := valErr.MarshalJSON()
 			if err != nil {
 				t.Errorf("%+v", err)
 				return
@@ -230,4 +230,46 @@ func RandomString(len int) string {
 	b := make([]byte, len)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)[:len]
+}
+
+// ValidateMapDiff compares two maps and errors if any differences are found
+// First map should be a map of errors and second should be a map of what
+// user expects to be in the map of errors
+func ValidateMapDiff(t TestLog, a, b map[string]string) {
+	t.Helper()
+	if len(a) == 0 && len(b) == 0 {
+		return
+	}
+
+	added := make(map[string]string)
+	removed := make(map[string]string)
+	changed := make(map[string][2]string)
+
+	// Check for removed or changed keys
+	for k, vA := range a {
+		if vB, ok := b[k]; !ok {
+			removed[k] = vA
+		} else if vA != vB {
+			changed[k] = [2]string{vA, vB}
+		}
+	}
+
+	// Check for added keys
+	for k, vB := range b {
+		if _, ok := a[k]; !ok {
+			added[k] = vB
+		}
+	}
+
+	if len(removed) > 0 {
+		t.Errorf("Errors found that were not expected: %+v", removed)
+	}
+	if len(added) > 0 {
+		t.Errorf("Errors expected that were not found: %+v", added)
+	}
+	if len(changed) > 0 {
+		for k, v := range changed {
+			t.Errorf("Key %q - Expected %q; Got %q\n", k, v[1], v[0])
+		}
+	}
 }
