@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/TravisS25/webutil/webutil"
 	"github.com/nqd/flat"
 	"github.com/pkg/errors"
 
@@ -129,6 +130,8 @@ func FormRequestBuilder(t TestLog, method, url string, form any, ctxVals map[any
 	if err != nil {
 		t.Errorf("%v", err)
 	}
+
+	req.Header.Set("Content-Type", webutil.JSON_CONTENT_HEADER)
 
 	if ctxVals != nil {
 		ctx := req.Context()

@@ -27,6 +27,9 @@ const (
 	// DATE_LAYOUT is global format for date
 	DATE_LAYOUT = "2006-01-02"
 
+	// DATE_COMPRESS_LAYOUT is global format for date
+	DATE_COMPRESS_LAYOUT = "20060102"
+
 	// POSTGRES_DATE_LAYOUT is date format used when receiving time from database
 	POSTGRES_DATE_LAYOUT = "2006-01-02T15:04:05Z"
 

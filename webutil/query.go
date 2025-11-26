@@ -78,10 +78,10 @@ type CountInputParams struct {
 	QueryCfg QueryConfig
 }
 
-type SelectItem struct {
-	Value string `json:"value" mapstructure:"value" db:"value" alias:"select.value"`
-	Text  string `json:"text" mapstructure:"text" db:"text" alias:"select.text"`
-}
+// type SelectItem struct {
+// 	Value string `json:"value" mapstructure:"value" db:"value" alias:"select.value"`
+// 	Text  string `json:"text" mapstructure:"text" db:"text" alias:"select.text"`
+// }
 
 // FilteredResults is struct used for dynamically filtered results
 type FilteredResults struct {
@@ -388,6 +388,56 @@ func MapScanner(r ColScanner, dest map[string]any) error {
 // --------------------- QUERY FUNCTIONS ----------------
 ////////////////////////////////////////////////////////////
 
+func ExecInsert(
+	ctx context.Context,
+	db qrm.Executable,
+	bindVar int,
+	table string,
+	columns []string,
+	values ...any,
+) error {
+	if len(columns) != len(values) {
+		return fmt.Errorf("columns (%d) and values (%d) count mismatch", len(columns), len(values))
+	}
+
+	placeholders := make([]string, len(values))
+	for i := range values {
+		switch bindVar {
+		case DOLLAR_SQL_BIND_VAR:
+			placeholders[i] = "?"
+		case QUESTION_SQL_BIND_VAR:
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+		}
+	}
+
+	query := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		table,
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "),
+	)
+
+	_, err := db.ExecContext(ctx, query, values...)
+	return err
+}
+
+func ExecDB(
+	ctx context.Context,
+	db qrm.Executable,
+	bindType int,
+	query string,
+	args []any,
+) (sql.Result, error) {
+	var err error
+
+	newQuery, newArgs, err := InQueryRebind(bindType, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), query, args)
+	}
+
+	return db.ExecContext(ctx, newQuery, newArgs...)
+}
+
 func QueryDB(
 	ctx context.Context,
 	db qrm.Queryable,
@@ -406,6 +456,9 @@ func QueryDB(
 
 	rows, err := db.QueryContext(ctx, newQuery, newArgs...)
 	if err != nil {
+		if DebugPrintQueryOutput {
+			return fmt.Errorf("\n err: %s\n\n query: %s\n\n args: %v\n", err.Error(), newQuery, args)
+		}
 		return err
 	}
 	defer rows.Close()
@@ -417,7 +470,7 @@ func QueryDB(
 // --------------------- BUILDER FUNCTIONS ---------------
 ////////////////////////////////////////////////////////////
 
-func QuerySelectBuilder(
+func ExecQueryBuilder(
 	ctx context.Context,
 	req *http.Request,
 	builder sq.SelectBuilder,
@@ -461,7 +514,7 @@ func QueryDataAndCountResults(
 	dataDest any,
 	countDest *uint64,
 ) error {
-	err := QuerySelectBuilder(
+	err := ExecQueryBuilder(
 		ctx,
 		req,
 		dataBuilder,
@@ -476,7 +529,7 @@ func QueryDataAndCountResults(
 		return err
 	}
 
-	err = QuerySelectBuilder(
+	err = ExecQueryBuilder(
 		ctx,
 		req,
 		countBuilder,

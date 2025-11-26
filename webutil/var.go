@@ -35,7 +35,7 @@ var (
 	PhoneNumberRegex = regexp.MustCompile(`^\([0-9]{3}\)-[0-9]{3}-[0-9]{4}$`)
 
 	// ColorRegex is regex expression used for forms to validate color format is correct
-	ColorRegex = regexp.MustCompile("^#[0-9a-f]{6}$")
+	ColorRegex = regexp.MustCompile("^#[0-9a-fA-F]{6}$")
 
 	// RequiredStringRegex is regex expression used for forms to validate that a field
 	// has at least one character that is NOT a space
