@@ -26,8 +26,9 @@ const (
 // to allow user of middleware more control on what gets
 // send back to the user
 type HTTPResponseConfig struct {
-	HTTPStatus   *int
-	HTTPResponse []byte
+	CustomStatus  int
+	ErrorStatus   int
+	ErrorResponse []byte
 }
 
 //////////////////////////////////////////////////////////////////
@@ -41,18 +42,31 @@ func SetToken(w http.ResponseWriter, r *http.Request) {
 
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
-func SendPayload(w http.ResponseWriter, payload any, errResp HTTPResponseConfig) error {
+func SendPayload(w http.ResponseWriter, payload any, res HTTPResponseConfig) error {
 	w.Header().Set("Content-Type", JSON_CONTENT_HEADER)
-	SetHTTPResponseDefaults(&errResp, http.StatusInternalServerError, []byte(invalidJSONTxt))
-	jsonString, err := json.Marshal(payload)
+
+	if res.CustomStatus != 0 {
+		w.WriteHeader(res.CustomStatus)
+	}
+
+	err := json.NewEncoder(w).Encode(payload)
 
 	if err != nil {
-		w.WriteHeader(*errResp.HTTPStatus)
-		w.Write(errResp.HTTPResponse)
+		errStatus := 500
+		if res.ErrorStatus != 0 {
+			errStatus = res.ErrorStatus
+		}
+
+		var errRes []byte
+		if res.ErrorResponse == nil {
+			errRes = []byte("Server Error")
+		}
+
+		w.WriteHeader(errStatus)
+		w.Write(errRes)
 		return err
 	}
 
-	w.Write(jsonString)
 	return nil
 }
 

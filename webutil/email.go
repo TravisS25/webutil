@@ -47,12 +47,14 @@ func (s *SendGrid) SendEmail(msgs ...EmailMessage) error {
 			return fmt.Errorf("error sending email via SendGrid: %w", err)
 		}
 
+		if response.StatusCode >= 400 {
+			return fmt.Errorf("send grid api error: status %d, body %s", response.StatusCode, response.Body)
+		}
+
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
 			log.Printf("Email sent successfully! Status: %d", response.StatusCode)
 			return nil
 		}
-
-		return fmt.Errorf("SendGrid API error: status %d, body %s", response.StatusCode, response.Body)
 	}
 
 	return nil

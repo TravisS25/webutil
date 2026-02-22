@@ -40,6 +40,18 @@ type Database interface {
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
+type DatabaseTx interface {
+	qrm.DB
+	Begin() (Txer, error)
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (Txer, error)
+}
+
+type Txer interface {
+	qrm.DB
+	Commit() error
+	Rollback() error
+}
+
 //////////////////////////////////////////////////////////////////
 //-------------------------- TYPES --------------------------
 //////////////////////////////////////////////////////////////////
@@ -55,6 +67,22 @@ type DbFields map[string]FieldConfig
 //////////////////////////////////////////////////////////////////
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
+
+type DB struct {
+	*sql.DB
+}
+
+func NewDB(db *sql.DB) *DB {
+	return &DB{DB: db}
+}
+
+func (db *DB) Begin() (Txer, error) {
+	return db.DB.Begin()
+}
+
+func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (Txer, error) {
+	return db.DB.BeginTx(ctx, opts)
+}
 
 type QueryConfig struct {
 	FilterParam string
@@ -879,6 +907,8 @@ func getRowsFromBuilder(ctx context.Context, builder sq.SelectBuilder, db qrm.Qu
 }
 
 func setRowResults(rows *sql.Rows, rowUpdate func(row any) error, destPtr any) error {
+	defer rows.Close()
+
 	var box any
 	isArr := false
 

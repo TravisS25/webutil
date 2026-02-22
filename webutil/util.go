@@ -23,11 +23,11 @@ func InsertAt(slice []any, val any, idx int) []any {
 // SetHTTPResponseDefaults is util function to set default values for passed
 // config if values for nil
 func SetHTTPResponseDefaults(config *HTTPResponseConfig, defaultStatus int, defaultResponse []byte) {
-	if config.HTTPStatus == nil {
-		config.HTTPStatus = &defaultStatus
+	if config.ErrorStatus == 0 {
+		config.ErrorStatus = defaultStatus
 	}
-	if config.HTTPResponse == nil {
-		config.HTTPResponse = defaultResponse
+	if config.ErrorResponse == nil {
+		config.ErrorResponse = defaultResponse
 	}
 }
 

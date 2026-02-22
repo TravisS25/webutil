@@ -10,6 +10,10 @@ import (
 // the same time clock but with given timezone, meaning that the time
 // actually changes since we keep the clock the same
 func ConvertToTimezone(value time.Time, timezone string, includeTime bool) (time.Time, error) {
+	if timezone == "" {
+		timezone = "UTC"
+	}
+
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
 		return time.Time{}, errors.Wrap(err, "")
