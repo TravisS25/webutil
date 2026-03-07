@@ -26,7 +26,6 @@ const (
 // to allow user of middleware more control on what gets
 // send back to the user
 type HTTPResponseConfig struct {
-	CustomStatus  int
 	ErrorStatus   int
 	ErrorResponse []byte
 }
@@ -40,17 +39,40 @@ func SetToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(TOKEN_HEADER, csrf.Token(r))
 }
 
+func SendJSONPayload(w http.ResponseWriter, statusCode int, payload any, resCfg HTTPResponseConfig) error {
+	w.Header().Set("Content-Type", JSON_CONTENT_HEADER)
+
+	jsonString, err := json.Marshal(payload)
+	if err != nil {
+		errStatus := 500
+		if resCfg.ErrorStatus != 0 {
+			errStatus = resCfg.ErrorStatus
+		}
+
+		var errRes []byte
+		if resCfg.ErrorResponse == nil {
+			errRes = []byte("Server Error")
+		}
+
+		w.WriteHeader(errStatus)
+		w.Write(errRes)
+		return err
+	}
+
+	if statusCode != 0 {
+		w.WriteHeader(statusCode)
+	}
+
+	w.Write(jsonString)
+	return nil
+}
+
 // SendPayload is a wrapper for converting the payload map parameter into json and
 // sending to the client
 func SendPayload(w http.ResponseWriter, payload any, res HTTPResponseConfig) error {
 	w.Header().Set("Content-Type", JSON_CONTENT_HEADER)
 
-	if res.CustomStatus != 0 {
-		w.WriteHeader(res.CustomStatus)
-	}
-
-	err := json.NewEncoder(w).Encode(payload)
-
+	jsonString, err := json.Marshal(payload)
 	if err != nil {
 		errStatus := 500
 		if res.ErrorStatus != 0 {
@@ -67,6 +89,7 @@ func SendPayload(w http.ResponseWriter, payload any, res HTTPResponseConfig) err
 		return err
 	}
 
+	w.Write(jsonString)
 	return nil
 }
 
