@@ -49,9 +49,12 @@ func SendJSONPayload(w http.ResponseWriter, statusCode int, payload any, resCfg 
 			errStatus = resCfg.ErrorStatus
 		}
 
-		var errRes []byte
+		errRes, _ := json.Marshal(map[string]any{
+			"error": "server error",
+		})
+
 		if resCfg.ErrorResponse == nil {
-			errRes = []byte("Server Error")
+			errRes = resCfg.ErrorResponse
 		}
 
 		w.WriteHeader(errStatus)
