@@ -3,7 +3,6 @@ package webutil
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -231,13 +230,13 @@ func In(query string, args ...any) (string, []any, error) {
 	}
 
 	for i, arg := range args {
-		if a, ok := arg.(driver.Valuer); ok {
-			var err error
-			arg, err = a.Value()
-			if err != nil {
-				return "", nil, err
-			}
-		}
+		// if a, ok := arg.(driver.Valuer); ok {
+		// 	var err error
+		// 	arg, err = a.Value()
+		// 	if err != nil {
+		// 		return "", nil, err
+		// 	}
+		// }
 
 		if v, ok := asSliceForIn(arg); ok {
 			meta[i].length = v.Len()
