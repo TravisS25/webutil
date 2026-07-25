@@ -240,6 +240,7 @@ func RandomString(len int) string {
 // user expects to be in the map of errors
 func ValidateMapDiff(t TestLog, a, b map[string]string) {
 	t.Helper()
+
 	if len(a) == 0 && len(b) == 0 {
 		return
 	}

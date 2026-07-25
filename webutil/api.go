@@ -70,32 +70,6 @@ func SendJSONPayload(w http.ResponseWriter, statusCode int, payload any, resCfg 
 	return nil
 }
 
-// SendPayload is a wrapper for converting the payload map parameter into json and
-// sending to the client
-func SendPayload(w http.ResponseWriter, payload any, res HTTPResponseConfig) error {
-	w.Header().Set("Content-Type", JSON_CONTENT_HEADER)
-
-	jsonString, err := json.Marshal(payload)
-	if err != nil {
-		errStatus := 500
-		if res.ErrorStatus != 0 {
-			errStatus = res.ErrorStatus
-		}
-
-		var errRes []byte
-		if res.ErrorResponse == nil {
-			errRes = []byte("Server Error")
-		}
-
-		w.WriteHeader(errStatus)
-		w.Write(errRes)
-		return err
-	}
-
-	w.Write(jsonString)
-	return nil
-}
-
 // DecodeCookie takes in a cookie name which value should be encoded and then takes the
 // authKey and encryptKey variables passed to decode the value of the cookie
 func DecodeCookie(r *http.Request, cookieName string, authKey, encryptKey []byte) (string, error) {
