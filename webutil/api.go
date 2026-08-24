@@ -13,7 +13,6 @@ import (
 const (
 	bodyRequiredTxt = "Request must have body"
 	invalidJSONTxt  = "Invalid json"
-	serverErrTxt    = "Server error, please try again later"
 )
 
 //////////////////////////////////////////////////////////////////
