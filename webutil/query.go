@@ -157,6 +157,53 @@ type Filter struct {
 	Value    any    `json:"value"`
 }
 
+// FilterGroup combines a list of filters and/or nested filter groups
+// using a boolean logic operator ("and" or "or"). An empty Logic
+// defaults to "and", allowing callers to nest groups to build
+// arbitrary AND/OR expressions.
+type FilterGroup struct {
+	Logic string       `json:"logic"`
+	Items []FilterItem `json:"items"`
+}
+
+// FilterItem represents a single entry within a FilterGroup. It is
+// either a leaf Filter (when a "field" key is present) or a nested
+// FilterGroup (when no "field" key is present).
+type FilterItem struct {
+	*Filter
+	*FilterGroup
+}
+
+func (item *FilterItem) UnmarshalJSON(data []byte) error {
+	var probe map[string]json.RawMessage
+
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+
+	if _, ok := probe["field"]; ok {
+		var filter Filter
+
+		if err := json.Unmarshal(data, &filter); err != nil {
+			return err
+		}
+
+		item.Filter = &filter
+		item.FilterGroup = nil
+		return nil
+	}
+
+	var group FilterGroup
+
+	if err := json.Unmarshal(data, &group); err != nil {
+		return err
+	}
+
+	item.FilterGroup = &group
+	item.Filter = nil
+	return nil
+}
+
 // Sort is the sort config struct for server side sorting
 type Sort struct {
 	Dir   string `json:"dir"`
@@ -572,6 +619,149 @@ func GetOrderByResults(
 	return orderDataBuilder.ToSql()
 }
 
+func parseFilterParam(filterParam string) (FilterGroup, error) {
+	// A bare array is the legacy format and is treated as a top level
+	// group whose items are combined with "and".
+	if strings.HasPrefix(strings.TrimSpace(filterParam), "[") {
+		var items []FilterItem
+
+		if err := json.Unmarshal([]byte(filterParam), &items); err != nil {
+			return FilterGroup{}, err
+		}
+
+		return FilterGroup{Logic: "and", Items: items}, nil
+	}
+
+	var group FilterGroup
+
+	if err := json.Unmarshal([]byte(filterParam), &group); err != nil {
+		return FilterGroup{}, err
+	}
+
+	return group, nil
+}
+
+func buildFilterGroupSqlizer(group FilterGroup, dbFields DbFields) (sq.Sqlizer, error) {
+	logic := strings.ToLower(group.Logic)
+
+	if logic != "" && logic != "and" && logic != "or" {
+		return nil, errors.WithStack(
+			QueryBuilderError{errorMsg: fmt.Sprintf("invalid logic %q for filter group", group.Logic)},
+		)
+	}
+
+	parts := make([]sq.Sqlizer, 0, len(group.Items))
+
+	for i := range group.Items {
+		item := group.Items[i]
+
+		var (
+			part sq.Sqlizer
+			err  error
+		)
+
+		switch {
+		case item.Filter != nil:
+			part, err = buildFilterSqlizer(*item.Filter, dbFields)
+		case item.FilterGroup != nil:
+			part, err = buildFilterGroupSqlizer(*item.FilterGroup, dbFields)
+		default:
+			continue
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		if part != nil {
+			parts = append(parts, part)
+		}
+	}
+
+	switch len(parts) {
+	case 0:
+		return nil, nil
+	case 1:
+		return parts[0], nil
+	}
+
+	if logic == "or" {
+		return sq.Or(parts), nil
+	}
+
+	return sq.And(parts), nil
+}
+
+func buildFilterSqlizer(filter Filter, dbFields DbFields) (sq.Sqlizer, error) {
+	dbField, ok := dbFields[filter.Field]
+	if !ok {
+		return nil, errors.WithStack(
+			QueryBuilderError{errorMsg: fmt.Sprintf("invalid field %q for filter parameter", filter.Field)},
+		)
+	}
+
+	if !dbField.OperationCfg.CanFilterBy {
+		return nil, errors.WithStack(
+			QueryBuilderError{fmt.Sprintf("field %q can not be filtered", filter.Field)},
+		)
+	}
+
+	if filter.Value == nil {
+		if filter.Operator != "isnull" && filter.Operator != "isnotnull" {
+			return nil, errors.WithStack(
+				QueryBuilderError{errorMsg: fmt.Sprintf("field %q does not contain value", filter.Field)},
+			)
+		}
+	}
+
+	fieldValue := filter.Value
+
+	if dbField.ValueOverride != nil {
+		var err error
+
+		if fieldValue, err = dbField.ValueOverride(fieldValue); err != nil {
+			return nil, errors.WithStack(
+				QueryBuilderError{errorMsg: fmt.Sprintf("invalid value %q for field %q", fieldValue, filter.Field)},
+			)
+		}
+	}
+
+	switch filter.Operator {
+	case "eq":
+		return sq.Eq{dbField.DBField: fieldValue}, nil
+	case "neq":
+		return sq.NotEq{dbField.DBField: fieldValue}, nil
+	case "startswith":
+		return sq.ILike{dbField.DBField: fmt.Sprintf("%v%%", fieldValue)}, nil
+	case "endswith":
+		return sq.ILike{dbField.DBField: fmt.Sprintf("%%%v", fieldValue)}, nil
+	case "contains":
+		return sq.ILike{dbField.DBField: fmt.Sprintf("%%%v%%", fieldValue)}, nil
+	case "doesnotcontain":
+		return sq.NotILike{dbField.DBField: fmt.Sprintf("%%%v%%", fieldValue)}, nil
+	case "isnull":
+		return sq.Eq{dbField.DBField: nil}, nil
+	case "isnotnull":
+		return sq.NotEq{dbField.DBField: nil}, nil
+	case "isempty":
+		return sq.Eq{dbField.DBField: ""}, nil
+	case "isnotempty":
+		return sq.NotEq{dbField.DBField: ""}, nil
+	case "lt":
+		return sq.Lt{dbField.DBField: fmt.Sprintf("%v", fieldValue)}, nil
+	case "lte":
+		return sq.LtOrEq{dbField.DBField: fmt.Sprintf("%v", fieldValue)}, nil
+	case "gt":
+		return sq.Gt{dbField.DBField: fmt.Sprintf("%v", fieldValue)}, nil
+	case "gte":
+		return sq.GtOrEq{dbField.DBField: fmt.Sprintf("%v", fieldValue)}, nil
+	default:
+		return nil, errors.WithStack(
+			QueryBuilderError{errorMsg: fmt.Sprintf("invalid operator for field %q", filter.Field)},
+		)
+	}
+}
+
 func GetQueryBuilder(
 	r *http.Request,
 	builder sq.SelectBuilder,
@@ -587,114 +777,20 @@ func GetQueryBuilder(
 	offsetParam := r.FormValue(cfg.OffsetParam)
 
 	if filterParam != "" {
-		var filters []Filter
-
-		if err = json.Unmarshal([]byte(filterParam), &filters); err != nil {
+		filterGroup, err := parseFilterParam(filterParam)
+		if err != nil {
 			return sq.SelectBuilder{}, errors.WithStack(QueryBuilderError{
 				errorMsg: "invalid filter parameter"},
 			)
 		}
 
-		for _, filter := range filters {
-			var dbField FieldConfig
-			invalidFilterValue := ""
+		filterSqlizer, err := buildFilterGroupSqlizer(filterGroup, dbFields)
+		if err != nil {
+			return sq.SelectBuilder{}, errors.WithStack(err)
+		}
 
-			if dbField, ok = dbFields[filter.Field]; !ok {
-				return sq.SelectBuilder{}, errors.WithStack(
-					QueryBuilderError{errorMsg: fmt.Sprintf("invalid field %q for filter parameter", filter.Field)},
-				)
-			}
-
-			if !dbField.OperationCfg.CanFilterBy {
-				return sq.SelectBuilder{}, errors.WithStack(
-					QueryBuilderError{fmt.Sprintf("field %q can not be filtered", filter.Field)},
-				)
-			}
-
-			if filter.Value == nil {
-				if filter.Operator != "isnull" && filter.Operator != "isnotnull" {
-					return sq.SelectBuilder{}, QueryBuilderError{
-						errorMsg: fmt.Sprintf("field %q does not contain value", filter.Field),
-					}
-				}
-			}
-
-			fieldValue := filter.Value
-
-			if dbField.ValueOverride != nil {
-				if fieldValue, err = dbField.ValueOverride(fieldValue); err != nil {
-					return sq.SelectBuilder{}, errors.WithStack(QueryBuilderError{errorMsg: fmt.Sprintf("invalid value %q for field %q", fieldValue, filter.Field)})
-				}
-			}
-
-			switch filter.Operator {
-			case "eq":
-				builder = builder.Where(sq.Eq{
-					dbField.DBField: fieldValue,
-				})
-			case "neq":
-				builder = builder.Where(sq.NotEq{
-					dbField.DBField: fieldValue,
-				})
-			case "startswith":
-				builder = builder.Where(sq.ILike{
-					dbField.DBField: fmt.Sprintf("%v%%", fieldValue),
-				})
-			case "endswith":
-				builder = builder.Where(sq.ILike{
-					dbField.DBField: fmt.Sprintf("%%%v", fieldValue),
-				})
-			case "contains":
-				builder = builder.Where(sq.ILike{
-					dbField.DBField: fmt.Sprintf("%%%v%%", fieldValue),
-				})
-			case "doesnotcontain":
-				builder = builder.Where(sq.NotILike{
-					dbField.DBField: fmt.Sprintf("%%%v%%", fieldValue),
-				})
-			case "isnull":
-				builder = builder.Where(sq.Eq{
-					dbField.DBField: nil,
-				})
-			case "isnotnull":
-				builder = builder.Where(sq.NotEq{
-					dbField.DBField: nil,
-				})
-			case "isempty":
-				builder = builder.Where(sq.Eq{
-					dbField.DBField: "",
-				})
-			case "isnotempty":
-				builder = builder.Where(sq.NotEq{
-					dbField.DBField: "",
-				})
-			case "lt":
-				builder = builder.Where(sq.Lt{
-					dbField.DBField: fmt.Sprintf("%v", fieldValue),
-				})
-			case "lte":
-				builder = builder.Where(sq.LtOrEq{
-					dbField.DBField: fmt.Sprintf("%v", fieldValue),
-				})
-			case "gt":
-				builder = builder.Where(sq.Gt{
-					dbField.DBField: fmt.Sprintf("%v", fieldValue),
-				})
-			case "gte":
-				builder = builder.Where(sq.GtOrEq{
-					dbField.DBField: fmt.Sprintf("%v", fieldValue),
-				})
-			default:
-				return sq.SelectBuilder{}, errors.WithStack(
-					QueryBuilderError{errorMsg: fmt.Sprintf("invalid operator for field %q", filter.Field)},
-				)
-			}
-
-			if invalidFilterValue != "" {
-				return sq.SelectBuilder{}, errors.WithStack(
-					QueryBuilderError{errorMsg: fmt.Sprintf("invalid filter value for field %q", invalidFilterValue)},
-				)
-			}
+		if filterSqlizer != nil {
+			builder = builder.Where(filterSqlizer)
 		}
 	}
 

@@ -784,3 +784,170 @@ func TestGetQueryBuilder(t *testing.T) {
 		t.Errorf("should not have error; got %s\n", err.Error())
 	}
 }
+
+func TestGetQueryBuilderFilterGroups(t *testing.T) {
+	cfg := QueryConfig{
+		FilterParam: "filters",
+	}
+	dbFields := DbFields{
+		"user.name": FieldConfig{
+			DBField: "user.name",
+			OperationCfg: OperationConfig{
+				CanFilterBy: true,
+			},
+		},
+		"phone.number": FieldConfig{
+			DBField: "user.number",
+			OperationCfg: OperationConfig{
+				CanFilterBy: true,
+			},
+		},
+		"user.id": FieldConfig{
+			DBField:      "user.id",
+			OperationCfg: OperationConfig{},
+		},
+	}
+
+	newBuilder := func() sq.SelectBuilder {
+		return sq.Select(
+			"user.id",
+			"user.name",
+			"phone.number",
+		).
+			From("user").
+			Join("phone on phone.user_id = user.id")
+	}
+
+	newReq := func(filterJSON string) *http.Request {
+		urlVals := url.Values{}
+		urlVals.Add(cfg.FilterParam, filterJSON)
+		return httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
+	}
+
+	buildSQL := func(t *testing.T, filterJSON string) (string, []any, error) {
+		t.Helper()
+
+		builder, err := GetQueryBuilder(newReq(filterJSON), newBuilder(), dbFields, cfg)
+		if err != nil {
+			return "", nil, err
+		}
+
+		return builder.ToSql()
+	}
+
+	t.Run("top level or", func(t *testing.T) {
+		sqlStr, args, err := buildSQL(t, `{"logic":"or","items":[`+
+			`{"field":"user.name","operator":"eq","value":"foo"},`+
+			`{"field":"phone.number","operator":"contains","value":"5"}]}`)
+		if err != nil {
+			t.Fatalf("should not have error; got %s\n", err.Error())
+		}
+
+		if !strings.Contains(sqlStr, " OR ") {
+			t.Errorf("sql should contain an OR clause; got %q", sqlStr)
+		}
+
+		if !strings.Contains(sqlStr, "user.name = ?") || !strings.Contains(sqlStr, "user.number ILIKE ?") {
+			t.Errorf("sql should contain both conditions; got %q", sqlStr)
+		}
+
+		if len(args) != 2 || args[0] != "foo" || args[1] != "%5%" {
+			t.Errorf("unexpected args; got %v", args)
+		}
+	})
+
+	t.Run("nested and within or", func(t *testing.T) {
+		sqlStr, args, err := buildSQL(t, `{"logic":"or","items":[`+
+			`{"field":"user.name","operator":"eq","value":"foo"},`+
+			`{"logic":"and","items":[`+
+			`{"field":"phone.number","operator":"contains","value":"5"},`+
+			`{"field":"user.name","operator":"isnotempty","value":""}]}]}`)
+		if err != nil {
+			t.Fatalf("should not have error; got %s\n", err.Error())
+		}
+
+		if !strings.Contains(sqlStr, " OR ") || !strings.Contains(sqlStr, " AND ") {
+			t.Errorf("sql should contain both OR and AND clauses; got %q", sqlStr)
+		}
+
+		if !strings.Contains(sqlStr, "user.number ILIKE ?") || !strings.Contains(sqlStr, "user.name <> ?") {
+			t.Errorf("sql should contain nested conditions; got %q", sqlStr)
+		}
+
+		if len(args) != 3 || args[0] != "foo" || args[1] != "%5%" || args[2] != "" {
+			t.Errorf("unexpected args; got %v", args)
+		}
+	})
+
+	t.Run("legacy flat array still ands", func(t *testing.T) {
+		sqlStr, args, err := buildSQL(t, `[`+
+			`{"field":"user.name","operator":"eq","value":"foo"},`+
+			`{"field":"phone.number","operator":"contains","value":"5"}]`)
+		if err != nil {
+			t.Fatalf("should not have error; got %s\n", err.Error())
+		}
+
+		if strings.Contains(sqlStr, " OR ") {
+			t.Errorf("sql should not contain an OR clause; got %q", sqlStr)
+		}
+
+		if !strings.Contains(sqlStr, " AND ") {
+			t.Errorf("sql should contain an AND clause; got %q", sqlStr)
+		}
+
+		if len(args) != 2 || args[0] != "foo" || args[1] != "%5%" {
+			t.Errorf("unexpected args; got %v", args)
+		}
+	})
+
+	t.Run("invalid logic", func(t *testing.T) {
+		_, _, err := buildSQL(t, `{"logic":"xor","items":[`+
+			`{"field":"user.name","operator":"eq","value":"foo"},`+
+			`{"field":"user.name","operator":"eq","value":"bar"}]}`)
+		if err == nil {
+			t.Fatal("should have error")
+		}
+
+		if !strings.Contains(err.Error(), "invalid logic") {
+			t.Errorf("error should be '%s'; got '%s'", "invalid logic", err.Error())
+		}
+	})
+
+	t.Run("invalid field within nested group", func(t *testing.T) {
+		_, _, err := buildSQL(t, `{"logic":"or","items":[`+
+			`{"logic":"and","items":[`+
+			`{"field":"invalid","operator":"eq","value":"x"}]}]}`)
+		if err == nil {
+			t.Fatal("should have error")
+		}
+
+		if !strings.Contains(err.Error(), "invalid field") {
+			t.Errorf("error should be '%s'; got '%s'", "invalid field", err.Error())
+		}
+	})
+
+	t.Run("invalid operator within nested group", func(t *testing.T) {
+		_, _, err := buildSQL(t, `{"logic":"or","items":[`+
+			`{"logic":"and","items":[`+
+			`{"field":"user.name","operator":"bad","value":"x"}]}]}`)
+		if err == nil {
+			t.Fatal("should have error")
+		}
+
+		if !strings.Contains(err.Error(), "invalid operator") {
+			t.Errorf("error should be '%s'; got '%s'", "invalid operator", err.Error())
+		}
+	})
+
+	t.Run("not filterable within group", func(t *testing.T) {
+		_, _, err := buildSQL(t, `{"logic":"or","items":[`+
+			`{"field":"user.id","operator":"eq","value":"x"}]}`)
+		if err == nil {
+			t.Fatal("should have error")
+		}
+
+		if !strings.Contains(err.Error(), "can not be filtered") {
+			t.Errorf("error should be '%s'; got '%s'", "can not be filtered", err.Error())
+		}
+	})
+}
