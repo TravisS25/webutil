@@ -55,8 +55,8 @@ package webutil
 // type dbResetConfig struct {
 // 	DBType          string            `yaml:"db_type" mapstructure:"db_type"`
 // 	MaxPortAttempts int               `yaml:"max_port_attempts" mapstructure:"max_port_attempts"`
-// 	BaseConnection  DatabaseSetting   `yaml:"base_connection" mapstructure:"base_connection"`
-// 	DBConnections   []DatabaseSetting `yaml:"db_connections" mapstructure:"db_connections"`
+// 	BaseConnection  DatabaseSettings   `yaml:"base_connection" mapstructure:"base_connection"`
+// 	DBConnections   []DatabaseSettings `yaml:"db_connections" mapstructure:"db_connections"`
 // 	DBRemoveCommand dbCommand         `yaml:"db_remove_command" mapstructure:"db_remove_command"`
 // 	DBStartCommand  dbCommand         `yaml:"db_start_command" mapstructure:"db_start_command"`
 // 	ValidateQuery   string            `yaml:"validate_query" mapstructure:"validate_query"`

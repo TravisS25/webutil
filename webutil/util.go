@@ -1,6 +1,13 @@
 package webutil
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+	"os"
+	"reflect"
+
+	"github.com/google/uuid"
+	"github.com/spf13/viper"
+)
 
 //////////////////////////////////////////////////////////////////
 //------------------------ FUNCTIONS --------------------------
@@ -38,4 +45,32 @@ func NewV7UUID() uuid.UUID {
 
 func NewV7UUIDString() string {
 	return uuid.Must(uuid.NewV7()).String()
+}
+
+func SetConfigSettings(path string, settings any, opts ...viper.DecoderConfigOption) error {
+	var err error
+
+	if reflect.ValueOf(settings).Type().Kind() != reflect.Pointer {
+		return fmt.Errorf("settings parameter must be pointer")
+	}
+
+	var fp string
+
+	if os.Getenv(path) != "" {
+		fp = os.Getenv(path)
+	} else {
+		fp = path
+	}
+
+	v := viper.New()
+	v.SetConfigFile(fp)
+
+	if err = v.ReadInConfig(); err != nil {
+		return err
+	}
+	if err = v.Unmarshal(settings, opts...); err != nil {
+		return err
+	}
+
+	return nil
 }
