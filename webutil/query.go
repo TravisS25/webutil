@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -51,6 +53,29 @@ type Database interface {
 // appropriate error if settings don't match
 type DbFields map[string]FieldConfig
 
+// DbTable describes the query surface of one database table: the request-facing
+// field configs plus the table-level full-text search settings shared by every
+// builder that queries the table (data, count, distinct).
+type DbTable struct {
+	// Fields are the filterable/sortable/searchable field configs, keyed by
+	// the name a request sends in the filter/sort params.
+	Fields DbFields
+
+	// SearchIndex is the table's bm25 expression index (e.g.
+	// "worker_idx_bm25"). Required whenever QueryConfig.SearchParam is
+	// configured, the request carries search tokens and Fields hold
+	// CanSearchBy fields: the relevance ordering resolves the index
+	// explicitly because the driver prepares these statements. The index
+	// must be built over the concatenation of the CanSearchBy fields sorted
+	// by DBField.
+	SearchIndex string
+
+	// SearchTextConfig is the PostgreSQL text search configuration parsed by
+	// to_tsquery (e.g. "english"); empty means SearchDefaultTextConfig. It
+	// must match the text_config SearchIndex was created with.
+	SearchTextConfig string
+}
+
 //////////////////////////////////////////////////////////////////
 //-------------------------- STRUCTS --------------------------
 //////////////////////////////////////////////////////////////////
@@ -60,6 +85,22 @@ type QueryConfig struct {
 	OrderParam  string
 	LimitParam  string
 	OffsetParam string
+
+	// SearchParam is the request parameter carrying the global text search
+	// (e.g. "q"). Empty disables search handling entirely for this config.
+	// The predicate is applied whenever the param has tokens and the
+	// DbTable's Fields hold CanSearchBy fields, so data, count and distinct
+	// builders of an endpoint all see the same rows; set it on each config
+	// those builders use.
+	SearchParam string
+
+	// DefaultOrder is applied to the ORDER BY clause when OrderParam is
+	// configured (i.e. this config owns ordering) and the request carried no
+	// explicit sort. With an active search the relevance score is ordered
+	// first and DefaultOrder breaks ties; without a search it is the whole
+	// ordering. Configs that must not order (count queries, grouped
+	// subqueries) leave both OrderParam and DefaultOrder empty.
+	DefaultOrder string
 
 	Limit  uint64
 	OffSet uint64
@@ -108,6 +149,13 @@ type OperationConfig struct {
 
 	// CanGroupBy determines whether field can be grouped
 	CanGroupBy bool
+
+	// CanSearchBy determines whether the field participates in the global
+	// text search (QueryConfig.SearchParam): GetQueryBuilder concatenates
+	// every CanSearchBy field into one BM25 expression predicate over the
+	// caller's text search index. A field can be searchable without being
+	// filterable or sortable (and vice versa).
+	CanSearchBy bool
 }
 
 // ParamConfig is for extracting expected query params from url
@@ -520,7 +568,7 @@ func ExecQueryBuilder(
 	ctx context.Context,
 	req *http.Request,
 	builder sq.SelectBuilder,
-	dbFields DbFields,
+	table DbTable,
 	db qrm.Queryable,
 	bindVar int,
 	queryCfg QueryConfig,
@@ -532,7 +580,7 @@ func ExecQueryBuilder(
 	if builder, err = GetQueryBuilder(
 		req,
 		builder,
-		dbFields,
+		table,
 		queryCfg,
 	); err != nil {
 		return errors.WithStack(err)
@@ -551,7 +599,7 @@ func QueryDataAndCountResults(
 	req *http.Request,
 	dataBuilder sq.SelectBuilder,
 	countBuilder sq.SelectBuilder,
-	dbFields DbFields,
+	table DbTable,
 	db qrm.Queryable,
 	bindVar int,
 	dataQueryCfg QueryConfig,
@@ -564,7 +612,7 @@ func QueryDataAndCountResults(
 		ctx,
 		req,
 		dataBuilder,
-		dbFields,
+		table,
 		db,
 		bindVar,
 		dataQueryCfg,
@@ -579,7 +627,7 @@ func QueryDataAndCountResults(
 		ctx,
 		req,
 		countBuilder,
-		dbFields,
+		table,
 		db,
 		bindVar,
 		countQueryCfg,
@@ -596,14 +644,14 @@ func QueryDataAndCountResults(
 func GetOrderByResults(
 	r *http.Request,
 	builder sq.SelectBuilder,
-	dbFields DbFields,
+	table DbTable,
 	orderByParam,
 	defaultOrderBy string,
 ) (string, []any, error) {
 	orderDataBuilder, err := GetQueryBuilder(
 		r,
 		builder,
-		dbFields,
+		table,
 		QueryConfig{
 			OrderParam: orderByParam,
 		},
@@ -641,7 +689,7 @@ func parseFilterParam(filterParam string) (FilterGroup, error) {
 	return group, nil
 }
 
-func buildFilterGroupSqlizer(group FilterGroup, dbFields DbFields) (sq.Sqlizer, error) {
+func buildFilterGroupSqlizer(group FilterGroup, table DbTable) (sq.Sqlizer, error) {
 	logic := strings.ToLower(group.Logic)
 
 	if logic != "" && logic != "and" && logic != "or" {
@@ -662,9 +710,9 @@ func buildFilterGroupSqlizer(group FilterGroup, dbFields DbFields) (sq.Sqlizer, 
 
 		switch {
 		case item.Filter != nil:
-			part, err = buildFilterSqlizer(*item.Filter, dbFields)
+			part, err = buildFilterSqlizer(*item.Filter, table)
 		case item.FilterGroup != nil:
-			part, err = buildFilterGroupSqlizer(*item.FilterGroup, dbFields)
+			part, err = buildFilterGroupSqlizer(*item.FilterGroup, table)
 		default:
 			continue
 		}
@@ -692,8 +740,8 @@ func buildFilterGroupSqlizer(group FilterGroup, dbFields DbFields) (sq.Sqlizer, 
 	return sq.And(parts), nil
 }
 
-func buildFilterSqlizer(filter Filter, dbFields DbFields) (sq.Sqlizer, error) {
-	dbField, ok := dbFields[filter.Field]
+func buildFilterSqlizer(filter Filter, table DbTable) (sq.Sqlizer, error) {
+	dbField, ok := table.Fields[filter.Field]
 	if !ok {
 		return nil, errors.WithStack(
 			QueryBuilderError{errorMsg: fmt.Sprintf("invalid field %q for filter parameter", filter.Field)},
@@ -762,10 +810,101 @@ func buildFilterSqlizer(filter Filter, dbFields DbFields) (sq.Sqlizer, error) {
 	}
 }
 
+// SearchDefaultTextConfig is the PostgreSQL text search configuration used to
+// parse the global search query when DbTable.SearchTextConfig is empty.
+// It must match the text_config of the BM25 index being searched.
+const SearchDefaultTextConfig = "english"
+
+// Caps that keep one search request from building an unbounded query: at most
+// maxSearchTokens tokens, each at most maxSearchTokenLen runes.
+const (
+	maxSearchTokens   = 10
+	maxSearchTokenLen = 64
+)
+
+// searchTokenPattern extracts the alphanumeric runs a search query is made of.
+// PostgreSQL's text search parser tokenizes the indexed documents by splitting
+// on punctuation and lowercasing, so dropping punctuation here keeps the query
+// aligned with what the index can match and simultaneously removes every
+// query-parser metacharacter before the value reaches SQL as a bind parameter.
+var searchTokenPattern = regexp.MustCompile(`[\p{L}\p{N}]+`)
+
+// searchableFields returns the CanSearchBy fields of table.Fields sorted by
+// DBField. The sort makes the concatenated expression deterministic — a map
+// has no order of its own — and the order must match the column order the
+// table's BM25 expression index was built with.
+func searchableFields(table DbTable) []FieldConfig {
+	fields := make([]FieldConfig, 0, len(table.Fields))
+
+	for _, field := range table.Fields {
+		if field.OperationCfg.CanSearchBy {
+			fields = append(fields, field)
+		}
+	}
+
+	sort.Slice(fields, func(i, j int) bool {
+		return fields[i].DBField < fields[j].DBField
+	})
+
+	return fields
+}
+
+// searchExpr renders the sorted searchable fields as one concatenated text
+// expression — the exact shape the BM25 expression index is built on, so both
+// the predicate and the relevance ordering resolve that index.
+func searchExpr(fields []FieldConfig) string {
+	parts := make([]string, 0, len(fields))
+
+	for _, field := range fields {
+		parts = append(parts, fmt.Sprintf("coalesce(%s::text, '')", field.DBField))
+	}
+
+	return "(" + strings.Join(parts, " || ' ' || ") + ")"
+}
+
+// searchTokens splits a raw search value into at most maxSearchTokens
+// alphanumeric tokens of at most maxSearchTokenLen runes each. Tokens are
+// lowercased because to_tsquery matches the lowercased lexemes the index was
+// built with.
+func searchTokens(q string) []string {
+	tokens := searchTokenPattern.FindAllString(q, maxSearchTokens)
+
+	for i, token := range tokens {
+		runes := []rune(token)
+
+		if len(runes) > maxSearchTokenLen {
+			token = string(runes[:maxSearchTokenLen])
+		}
+
+		tokens[i] = strings.ToLower(token)
+	}
+
+	return tokens
+}
+
+// bm25Query renders tokens as the query text both full-text operators
+// receive: every token gets a prefix wildcard and the tokens are OR-joined
+// ("tok1:* | tok2:*"). Tokens are alphanumeric (searchTokens), so the string
+// carries no query syntax beyond the wildcards added here, and both call
+// sites pass it as a bind parameter.
+func bm25Query(tokens []string) string {
+	return strings.Join(tokens, ":* | ") + ":*"
+}
+
+// searchTextConfig returns the text search configuration to parse queries
+// with: the table's own value or SearchDefaultTextConfig.
+func searchTextConfig(table DbTable) string {
+	if table.SearchTextConfig != "" {
+		return table.SearchTextConfig
+	}
+
+	return SearchDefaultTextConfig
+}
+
 func GetQueryBuilder(
 	r *http.Request,
 	builder sq.SelectBuilder,
-	dbFields DbFields,
+	table DbTable,
 	cfg QueryConfig,
 ) (sq.SelectBuilder, error) {
 	var err error
@@ -784,13 +923,45 @@ func GetQueryBuilder(
 			)
 		}
 
-		filterSqlizer, err := buildFilterGroupSqlizer(filterGroup, dbFields)
+		filterSqlizer, err := buildFilterGroupSqlizer(filterGroup, table)
 		if err != nil {
 			return sq.SelectBuilder{}, errors.WithStack(err)
 		}
 
 		if filterSqlizer != nil {
 			builder = builder.Where(filterSqlizer)
+		}
+	}
+
+	// Global text search over the fields marked CanSearchBy: one BM25
+	// predicate over the concatenated expression, bound as a single
+	// parameter. It applies to every builder this config is used for — data,
+	// count and distinct subqueries agree on the matched rows — while the
+	// relevance ordering further below only runs for configs that own
+	// ordering (OrderParam set).
+	searchActive := false
+	var searchExprSql, searchQuery string
+
+	if cfg.SearchParam != "" {
+		tokens := searchTokens(r.FormValue(cfg.SearchParam))
+		fields := searchableFields(table)
+
+		if len(tokens) > 0 && len(fields) > 0 {
+			if table.SearchIndex == "" {
+				return sq.SelectBuilder{}, errors.WithStack(QueryBuilderError{
+					errorMsg: "searchable fields require DbTable.SearchIndex",
+				})
+			}
+
+			searchExprSql = searchExpr(fields)
+			searchQuery = bm25Query(tokens)
+			searchActive = true
+
+			builder = builder.Where(sq.Expr(
+				searchExprSql+" @@ to_tsquery(?, ?)",
+				searchTextConfig(table),
+				searchQuery,
+			))
 		}
 	}
 
@@ -812,7 +983,7 @@ func GetQueryBuilder(
 				)
 			}
 
-			if dbField, ok = dbFields[sort.Field]; !ok {
+			if dbField, ok = table.Fields[sort.Field]; !ok {
 				return sq.SelectBuilder{}, errors.WithStack(
 					QueryBuilderError{errorMsg: fmt.Sprintf("invalid field %q for order parameter", sort.Field)},
 				)
@@ -829,6 +1000,22 @@ func GetQueryBuilder(
 			if !cfg.CanMultiColumnOrder {
 				break
 			}
+		}
+	} else if cfg.OrderParam != "" {
+		// This config owns ordering and the request sent no explicit sort:
+		// BM25 relevance first while the search is active (scores are
+		// negative, so ascending order ranks the best match first), then
+		// DefaultOrder as tiebreak; without a search, just DefaultOrder.
+		if searchActive {
+			builder = builder.OrderByClause(
+				searchExprSql+" <@> to_bm25query(?, ?)",
+				searchQuery,
+				table.SearchIndex,
+			)
+		}
+
+		if cfg.DefaultOrder != "" {
+			builder = builder.OrderBy(cfg.DefaultOrder)
 		}
 	}
 
