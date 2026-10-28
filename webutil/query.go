@@ -75,6 +75,15 @@ type DbTable struct {
 	// must match the text_config SearchIndex was created with.
 	SearchTextConfig string
 
+	// DefaultOrder is the table's default ORDER BY expression (e.g.
+	// "worker.id"). It is applied only by configs that own ordering (their
+	// OrderParam is set) when the request carries no explicit sort: the
+	// whole ordering without a search, and the bm25 relevance's tiebreak
+	// while a search is active. Configs that must not order (count queries,
+	// grouped subqueries) leave their OrderParam empty, so they never see
+	// this value even when querying a table that sets it.
+	DefaultOrder string
+
 	// SearchLookups are lookup tables joined by a foreign key on the searched
 	// table whose text should also match the global text search (e.g. a
 	// dropdown's name column). A row matches when either its own expression
@@ -121,14 +130,6 @@ type QueryConfig struct {
 	// builders of an endpoint all see the same rows; set it on each config
 	// those builders use.
 	SearchParam string
-
-	// DefaultOrder is applied to the ORDER BY clause when OrderParam is
-	// configured (i.e. this config owns ordering) and the request carried no
-	// explicit sort. With an active search the relevance score is ordered
-	// first and DefaultOrder breaks ties; without a search it is the whole
-	// ordering. Configs that must not order (count queries, grouped
-	// subqueries) leave both OrderParam and DefaultOrder empty.
-	DefaultOrder string
 
 	Limit  uint64
 	OffSet uint64
@@ -1076,13 +1077,14 @@ func GetQueryBuilder(
 		// This config owns ordering and the request sent no explicit sort:
 		// BM25 relevance first while the search is active (scores are
 		// negative, so ascending order ranks the best match first), then
-		// DefaultOrder as tiebreak; without a search, just DefaultOrder.
-		// Relevance requires the ordered BM25 index scan, which enumerates
-		// only the documents the bm25 posting lists contain — rows matched
-		// solely through a lookup subquery would be dropped by its
-		// post-filter before scoring. Tables with SearchLookups therefore
-		// take DefaultOrder only: the search buys findability, not
-		// relevance, and every match rows up by the table's own ordering.
+		// the table's DefaultOrder as tiebreak; without a search, just
+		// DefaultOrder. Relevance requires the ordered BM25 index scan,
+		// which enumerates only the documents the bm25 posting lists
+		// contain — rows matched solely through a lookup subquery would be
+		// dropped by its post-filter before scoring. Tables with
+		// SearchLookups therefore take DefaultOrder only: the search buys
+		// findability, not relevance, and every match rows up by the
+		// table's own ordering.
 		if searchActive && len(table.SearchLookups) == 0 {
 			builder = builder.OrderByClause(
 				searchExprSql+" <@> to_bm25query(?, ?)",
@@ -1091,8 +1093,8 @@ func GetQueryBuilder(
 			)
 		}
 
-		if cfg.DefaultOrder != "" {
-			builder = builder.OrderBy(cfg.DefaultOrder)
+		if table.DefaultOrder != "" {
+			builder = builder.OrderBy(table.DefaultOrder)
 		}
 	}
 

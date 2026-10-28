@@ -970,8 +970,7 @@ func TestGetQueryBuilderSearch(t *testing.T) {
 		LimitParam:  "take",
 		OffsetParam: "skip",
 
-		SearchParam:  "q",
-		DefaultOrder: "worker.id",
+		SearchParam: "q",
 
 		Limit:  100,
 		OffSet: 10000,
@@ -980,6 +979,7 @@ func TestGetQueryBuilderSearch(t *testing.T) {
 	// Deliberately declared out of alphabetical order: the built expression
 	// must come out sorted by DBField so it matches the expression index.
 	table := DbTable{
+		DefaultOrder: "worker.id",
 		Fields: DbFields{
 			"worker.zip": FieldConfig{
 				DBField:      "worker.zip",
@@ -1241,8 +1241,7 @@ func TestGetQueryBuilderSearchLookups(t *testing.T) {
 		LimitParam:  "take",
 		OffsetParam: "skip",
 
-		SearchParam:  "q",
-		DefaultOrder: "bid_option.id",
+		SearchParam: "q",
 
 		Limit:  100,
 		OffSet: 10000,
@@ -1252,6 +1251,7 @@ func TestGetQueryBuilderSearchLookups(t *testing.T) {
 	// reached through foreign keys (deliberately unordered map literal: the
 	// built expression must come out sorted by DBField).
 	table := DbTable{
+		DefaultOrder: "bid_option.id",
 		Fields: DbFields{
 			"bidOption.warranty": FieldConfig{
 				DBField:      "bid_option.warranty",
