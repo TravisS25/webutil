@@ -1226,3 +1226,182 @@ func TestGetQueryBuilderSearch(t *testing.T) {
 		t.Errorf("expected %d-rune token; got %v", maxSearchTokenLen, args[1])
 	}
 }
+
+func TestGetQueryBuilderSearchLookups(t *testing.T) {
+	var req *http.Request
+	var err error
+	var urlVals url.Values
+	var builder sq.SelectBuilder
+	var query string
+	var args []any
+
+	cfg := QueryConfig{
+		FilterParam: "filters",
+		OrderParam:  "sorts",
+		LimitParam:  "take",
+		OffsetParam: "skip",
+
+		SearchParam:  "q",
+		DefaultOrder: "bid_option.id",
+
+		Limit:  100,
+		OffSet: 10000,
+	}
+
+	// bid_option searches its own text plus the area and bid_status lookups
+	// reached through foreign keys (deliberately unordered map literal: the
+	// built expression must come out sorted by DBField).
+	table := DbTable{
+		Fields: DbFields{
+			"bidOption.warranty": FieldConfig{
+				DBField:      "bid_option.warranty",
+				OperationCfg: OperationConfig{CanSearchBy: true},
+			},
+			"bidOption.description": FieldConfig{
+				DBField:      "bid_option.description",
+				OperationCfg: OperationConfig{CanSearchBy: true},
+			},
+		},
+		SearchIndex: "bid_option_idx_bm25",
+		SearchLookups: []SearchLookup{
+			{
+				FKField: "bid_option.area_id",
+				Table:   "area",
+				Fields:  []string{"area.name"},
+			},
+			{
+				FKField: "bid_option.bid_id",
+				Table:   "bid",
+				Fields:  []string{"bid.number"},
+			},
+		},
+	}
+
+	wantExpr := "(coalesce(bid_option.description::text, '')" +
+		" || ' ' || coalesce(bid_option.warranty::text, ''))"
+
+	newBuilder := func() sq.SelectBuilder {
+		return sq.Select("bid_option.id").From("bid_option")
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Active search: the table predicate ORs one id-resolution subquery per
+	// lookup, all wrapped in parens, with the text config and query bound per
+	// disjunct and the bm25 relevance ordering untouched.
+
+	urlVals = url.Values{}
+	urlVals.Add("q", `Kitchen "Sink"`)
+
+	req = httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
+	builder, err = GetQueryBuilder(req, newBuilder(), table, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if query, args, err = builder.ToSql(); err != nil {
+		t.Fatal(err)
+	}
+
+	wantWhere := "(" + wantExpr + " @@ to_tsquery(?, ?)" +
+		" or bid_option.area_id = any(select area.id from area" +
+		" where (coalesce(area.name::text, '')) @@ to_tsquery(?, ?))" +
+		" or bid_option.bid_id = any(select bid.id from bid" +
+		" where (coalesce(bid.number::text, '')) @@ to_tsquery(?, ?)))"
+
+	if !strings.Contains(query, wantWhere) {
+		t.Errorf("missing lookup-aware predicate; got: %s", query)
+	}
+
+	// Relevance ordering would need the ordered BM25 index scan, whose
+	// posting lists never contain rows matched only through the lookup
+	// subquery — its post-filter would silently drop them. Lookups therefore
+	// order by the table's own ordering alone.
+	if strings.Contains(query, "to_bm25query") {
+		t.Errorf("lookup tables must not use the relevance ordering; got: %s", query)
+	}
+
+	if !strings.Contains(query, "ORDER BY bid_option.id") {
+		t.Errorf("missing default ordering; got: %s", query)
+	}
+
+	wantQuery := `kitchen:* | sink:*`
+	wantArgs := []any{
+		"english", wantQuery,
+		"english", wantQuery,
+		"english", wantQuery,
+	}
+	if len(args) != len(wantArgs) {
+		t.Fatalf("expected args %v; got %v", wantArgs, args)
+	}
+
+	for i, want := range wantArgs {
+		if args[i] != want {
+			t.Errorf("arg %d: expected %q; got %v", i, want, args[i])
+		}
+	}
+
+	if strings.Contains(query, "kitchen") {
+		t.Errorf("search tokens must not be inlined into SQL; got: %s", query)
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Count-style config (no OrderParam): lookup predicate present, no ordering.
+
+	urlVals = url.Values{}
+	urlVals.Add("q", "anything")
+
+	req = httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
+	builder, err = GetQueryBuilder(req, newBuilder(), table, QueryConfig{SearchParam: "q"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if query, _, err = builder.ToSql(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(query, "bid_option.area_id = any(") {
+		t.Errorf("count-style config must still get the lookup predicate; got: %s", query)
+	}
+
+	if strings.Contains(query, "ORDER BY") {
+		t.Errorf("count-style config must not order; got: %s", query)
+	}
+
+	// ----------------------------------------------------------------------------------
+	// A lookup missing configuration is a fast-fail error.
+
+	badTable := table
+	badTable.SearchLookups = []SearchLookup{{FKField: "bid_option.area_id"}}
+
+	urlVals = url.Values{}
+	urlVals.Add("q", "anything")
+
+	req = httptest.NewRequest(http.MethodGet, "/url?"+urlVals.Encode(), nil)
+	if _, err = GetQueryBuilder(req, newBuilder(), badTable, cfg); err == nil {
+		t.Error("expected error for incomplete lookup")
+	} else if !strings.Contains(err.Error(), "FKField") {
+		t.Errorf("error should mention the lookup requirement; got '%s'", err.Error())
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Without a q the lookups never render SQL or bind args.
+
+	req = httptest.NewRequest(http.MethodGet, "/url", nil)
+	builder, err = GetQueryBuilder(req, newBuilder(), table, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if query, args, err = builder.ToSql(); err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(query, "to_tsquery") || strings.Contains(query, "= any(") {
+		t.Errorf("expected no search SQL without a q; got: %s", query)
+	}
+
+	if len(args) != 0 {
+		t.Errorf("expected no args; got %v", args)
+	}
+}

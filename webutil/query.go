@@ -74,6 +74,34 @@ type DbTable struct {
 	// to_tsquery (e.g. "english"); empty means SearchDefaultTextConfig. It
 	// must match the text_config SearchIndex was created with.
 	SearchTextConfig string
+
+	// SearchLookups are lookup tables joined by a foreign key on the searched
+	// table whose text should also match the global text search (e.g. a
+	// dropdown's name column). A row matches when either its own expression
+	// matches or its FK points at a lookup row matching the query: the
+	// lookup side resolves to ids with an inline subquery, so the searched
+	// table's own bm25 index still drives the scan. Only honored while the
+	// search is active, which requires CanSearchBy fields and SearchIndex as
+	// above; the lookup tables themselves need no bm25 index (they are small
+	// and evaluated by the subquery).
+	SearchLookups []SearchLookup
+}
+
+// SearchLookup describes one lookup table searchable through the foreign key
+// on the searched table. All identifiers are server-side configuration (the
+// same trust level as FieldConfig.DBField), never request input.
+type SearchLookup struct {
+	// FKField is the foreign key column on the searched table (e.g.
+	// "bid_option.area_id").
+	FKField string
+
+	// Table is the lookup table the FK references (e.g. "area"); its
+	// "id" column is what FKField is matched against.
+	Table string
+
+	// Fields are the lookup table's text columns matched by the query (e.g.
+	// ["area.name"]). Concatenated in the given order, each coalesced to ''.
+	Fields []string
 }
 
 //////////////////////////////////////////////////////////////////
@@ -862,6 +890,20 @@ func searchExpr(fields []FieldConfig) string {
 	return "(" + strings.Join(parts, " || ' ' || ") + ")"
 }
 
+// lookupSearchExpr renders a lookup's Fields as one concatenated text
+// expression over the lookup table (each field coalesced to ”). Unlike the
+// searched table's own expression this one is evaluated by the inline
+// subquery, so it needs no matching expression index.
+func lookupSearchExpr(lookup SearchLookup) string {
+	parts := make([]string, 0, len(lookup.Fields))
+
+	for _, field := range lookup.Fields {
+		parts = append(parts, fmt.Sprintf("coalesce(%s::text, '')", field))
+	}
+
+	return "(" + strings.Join(parts, " || ' ' || ") + ")"
+}
+
 // searchTokens splits a raw search value into at most maxSearchTokens
 // alphanumeric tokens of at most maxSearchTokenLen runes each. Tokens are
 // lowercased because to_tsquery matches the lowercased lexemes the index was
@@ -957,11 +999,40 @@ func GetQueryBuilder(
 			searchQuery = bm25Query(tokens)
 			searchActive = true
 
-			builder = builder.Where(sq.Expr(
-				searchExprSql+" @@ to_tsquery(?, ?)",
-				searchTextConfig(table),
-				searchQuery,
-			))
+			// The predicate ORs the table's own BM25 match with one inline
+			// id-resolution subquery per lookup: a row whose FK points at a
+			// lookup row matching the same tokens also matches. The table's
+			// expression stays the first disjunct so the bm25 index scan
+			// remains reachable; the lookup subqueries are tiny lookups over
+			// the small lookup tables.
+			predParts := []string{searchExprSql + " @@ to_tsquery(?, ?)"}
+			predArgs := []any{searchTextConfig(table), searchQuery}
+
+			for _, lookup := range table.SearchLookups {
+				if lookup.FKField == "" || lookup.Table == "" || len(lookup.Fields) == 0 {
+					return sq.SelectBuilder{}, errors.WithStack(QueryBuilderError{
+						errorMsg: "search lookups require FKField, Table and Fields",
+					})
+				}
+
+				predParts = append(predParts, fmt.Sprintf(
+					"%s = any(select %s.id from %s where %s @@ to_tsquery(?, ?))",
+					lookup.FKField,
+					lookup.Table,
+					lookup.Table,
+					lookupSearchExpr(lookup),
+				))
+				predArgs = append(predArgs, searchTextConfig(table), searchQuery)
+			}
+
+			if len(predParts) == 1 {
+				builder = builder.Where(sq.Expr(predParts[0], predArgs...))
+			} else {
+				builder = builder.Where(sq.Expr(
+					"("+strings.Join(predParts, " or ")+")",
+					predArgs...,
+				))
+			}
 		}
 	}
 
@@ -1006,7 +1077,13 @@ func GetQueryBuilder(
 		// BM25 relevance first while the search is active (scores are
 		// negative, so ascending order ranks the best match first), then
 		// DefaultOrder as tiebreak; without a search, just DefaultOrder.
-		if searchActive {
+		// Relevance requires the ordered BM25 index scan, which enumerates
+		// only the documents the bm25 posting lists contain — rows matched
+		// solely through a lookup subquery would be dropped by its
+		// post-filter before scoring. Tables with SearchLookups therefore
+		// take DefaultOrder only: the search buys findability, not
+		// relevance, and every match rows up by the table's own ordering.
+		if searchActive && len(table.SearchLookups) == 0 {
 			builder = builder.OrderByClause(
 				searchExprSql+" <@> to_bm25query(?, ?)",
 				searchQuery,
